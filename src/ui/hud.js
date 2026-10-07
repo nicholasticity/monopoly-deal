@@ -54,6 +54,10 @@ export class Hud {
     this.newBtn.addEventListener('click', () => this.onNewGame());
     this.stopBtn.addEventListener('click', () => this.onStopGame());
     $('#btn-rules').addEventListener('click', () => this.showRules());
+    this.voiceBtn = $('#btn-voice');
+    this.voiceBtn.addEventListener('click', () => this.onVoice(this.voiceBtn));
+    this.onVoice = () => {};
+    this.onMuteKey = () => {};
     this.soundBtn = $('#btn-sound');
     this.soundBtn.addEventListener('click', () => this.setMuted(!sound.muted));
     this.setMuted(sound.muted);
@@ -64,6 +68,7 @@ export class Hud {
       if (e.target.closest?.('input, textarea')) return;
       if (e.key === 'Escape' && this.cancelTop) this.cancelTop();
       else if ((e.key === 'e' || e.key === 'E') && !this.cancelTop && this.controlsEl.classList.contains('show')) this.onEndTurn();
+      else if ((e.key === 'm' || e.key === 'M') && this.online) this.onMuteKey();
       else if (e.key === 'Enter' && this.online && !this.chatBtn.classList.contains('hidden') && e.target === document.body) {
         e.preventDefault();
         this.setChatDock(true);
@@ -91,6 +96,7 @@ export class Hud {
     this.newBtn.querySelector('.ico').textContent = on ? '🚪' : '🔄';
     this.newBtn.querySelector('.txt').textContent = this.newBtn.title;
     this.chatBtn.classList.toggle('hidden', !on);
+    this.voiceBtn.classList.toggle('hidden', !on);
     if (!on) {
       this.setChatDock(false);
       this.chatPops.innerHTML = '';
@@ -108,6 +114,16 @@ export class Hud {
     this.soundBtn.querySelector('.ico').textContent = muted ? '🔇' : '🔊';
     this.soundBtn.querySelector('.txt').textContent = muted ? 'Muted' : 'Sound';
     this.soundBtn.title = muted ? 'Sound off' : 'Sound on';
+  }
+
+  // Voice chat button: 'off', 'on' or 'muted', lit while you're talking.
+  setVoice(state, talking = false) {
+    const b = this.voiceBtn;
+    b.classList.toggle('on', state === 'on');
+    b.classList.toggle('mic-off', state === 'muted');
+    b.classList.toggle('talking', talking);
+    b.querySelector('.txt').textContent = state === 'off' ? 'Voice' : state === 'muted' ? 'Mic off' : 'Mic on';
+    b.title = state === 'off' ? 'Join voice chat' : state === 'muted' ? 'Voice chat · your mic is off (M)' : 'Voice chat · your mic is on (M)';
   }
 
   setChatDock(open) {
@@ -238,7 +254,8 @@ export class Hud {
     this.cancelTop = null;
   }
 
-  menu(x, y, title, options) {
+  // A popup above (x, y), or below it with { below: true }.
+  menu(x, y, title, options, { below = false } = {}) {
     return new Promise((resolve) => {
       this.popupLayer.innerHTML = '';
       const backdrop = el('div', 'popup-backdrop');
@@ -265,7 +282,8 @@ export class Hud {
       const handH = parseFloat(document.documentElement.style.getPropertyValue('--hand-h')) || 0;
       if (PORTRAIT.matches) y = Math.min(y, window.innerHeight - handH - 56);
       box.style.left = `${Math.max(8, Math.min(x - r.width / 2, window.innerWidth - r.width - 8))}px`;
-      box.style.top = `${Math.max(8, Math.min(y - r.height - 18, window.innerHeight - r.height - 8))}px`;
+      const top = below ? y + 8 : y - r.height - 18;
+      box.style.top = `${Math.max(8, Math.min(top, window.innerHeight - r.height - 8))}px`;
       this.cancelTop = () => done(null);
     });
   }

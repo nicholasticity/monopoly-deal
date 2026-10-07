@@ -375,6 +375,7 @@ kbd {
   padding: 8px;
   border-radius: 14px;
   background: var(--panel);
+  backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 215, 94, 0.4);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   animation: pop 0.14s ease-out;
@@ -505,6 +506,42 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   font-weight: 800;
   line-height: 1.2;
 }
+/* Voice chat: a mic badge by the name of everyone in it, green while they talk. */
+.mic {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Crect x='8.5' y='2.5' width='7' height='12' rx='3.5' fill='black'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3.5'/%3E%3C/svg%3E");
+  display: none;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  background: currentColor;
+  color: var(--muted);
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+.voice .mic { display: inline-block; }
+.mic-off .mic {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Crect x='8.5' y='2.5' width='7' height='12' rx='3.5'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3.5M3.5 3.5l17 17'/%3E%3C/svg%3E");
+  color: #ff8c75;
+}
+.talking .mic { color: #5fd68a; }
+.seat-panel.talking .avatar { box-shadow: 0 0 0 2px #5fd68a, 0 0 12px rgba(95, 214, 138, 0.85); }
+.seat.talking { border-color: rgba(95, 214, 138, 0.8); box-shadow: 0 0 10px rgba(95, 214, 138, 0.3); }
+#btn-voice, .voice-btn { position: relative; transition: box-shadow 0.15s, border-color 0.15s; }
+#btn-voice.on, .voice-btn.on { background: rgba(255, 215, 94, 0.18); border-color: rgba(255, 215, 94, 0.5); }
+#btn-voice.talking { border-color: #5fd68a; box-shadow: 0 0 10px rgba(95, 214, 138, 0.55); }
+/* Muted: the mic icon gets a red stroke through it. */
+#btn-voice.mic-off .ico { position: relative; }
+#btn-voice.mic-off .ico::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 3px; height: 130%;
+  border-radius: 2px;
+  background: #ff5a4f;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+.note.info { color: #fff1c4; background: rgba(255, 215, 94, 0.1); border: 1px solid rgba(255, 215, 94, 0.3); padding: 7px 10px; border-radius: 8px; }
+
 .clock { margin-left: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .clock.low { color: #ff8c75; font-weight: 700; }
 
@@ -740,14 +777,14 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   }
 }
 
-/* Narrow phones: a smaller logo so six top-bar buttons (an online host's) still fit. */
-@media (max-width: 420px) {
+/* Narrow phones: a smaller logo and slimmer buttons so seven top-bar buttons (an online host's) still fit. */
+@media (max-width: 480px) {
   #topbar { gap: 6px; }
   .brand { gap: 4px; }
   .logo { font-size: 0.62rem; padding: 2px 5px; }
   .deal { font-size: 0.78rem; }
-  .top-actions { gap: 4px; }
-  .top-actions button { padding: 6px 6px; }
+  .top-actions { gap: 3px; }
+  .top-actions button { padding: 6px 4px; }
 }
 @media (max-width: 370px) {
   .deal { display: none; }
@@ -776,4 +813,6 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   button.big { padding: 11px 22px; font-size: 1.05rem; }
   .room-code { font-size: 1.6rem; }
   .lobby-head { flex-wrap: wrap; gap: 8px; }
+  .lobby-head-btns { flex-wrap: wrap; }
+  .lobby-head-btns button { padding: 7px 10px; font-size: 0.88rem; white-space: nowrap; }
 }

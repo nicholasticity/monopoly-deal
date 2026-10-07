@@ -29,6 +29,8 @@ view.on('click', (card, zone, x, y) => activeHuman()?.onCardClick(card, zone, x,
 hud.onEndTurn = () => activeHuman()?.endTurn();
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
 hud.onStopGame = () => online?.confirmStop();
+hud.onVoice = (button) => online?.voiceButton(button);
+hud.onMuteKey = () => online?.toggleMute();
 
 function updateStatus() {
   if (!game) return;

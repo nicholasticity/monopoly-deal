@@ -37,6 +37,9 @@ While you play:
   else's hidden cards to your browser.
 - **Chat** with the button in the top bar (or press Enter). Messages that arrive while it's
   closed pop up briefly.
+- **Talk** with 🎙️ (in the lobby or the top bar): everyone who has joined voice chat hears
+  each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
+  **M** to mute. See [Voice chat](#voice-chat).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. The clock shows in the status bar for the last 30 s. If you miss a
   turn (or two prompts in a row) a bot plays for you until you press **I'm back**.
@@ -53,7 +56,8 @@ reach it. Pick whichever suits you:
 
 **Same Wi-Fi / LAN** — run `npm run dev -- --host` (or `npm run build && npm start`) and send
 the *Network* address it prints, e.g. `http://192.168.1.20:5173`. You may need to allow Node
-through your firewall.
+through your firewall. Voice chat doesn't work over a plain http address like this one (see
+[Voice chat](#voice-chat)).
 
 **Over the internet from your computer** — build and start the server, then open a tunnel:
 
@@ -92,6 +96,25 @@ The server listens on `PORT` (default 3000) and `HOST` (default `0.0.0.0`), and 
 WebSockets on `/ws` of the same port. Rooms live in memory, so run a single instance;
 a restart closes open rooms.
 
+### Voice chat
+
+Voice goes straight from browser to browser (WebRTC); the server only passes along the
+connection details and never carries any audio.
+
+- Browsers only allow the microphone on **https** pages and on `localhost`. A plain
+  `http://192.168.…` LAN address is fine for the game but not for voice, so to talk use a
+  tunnel or a host such as Render (both are https).
+- Headphones help: echo cancellation is on, but speakers can still feed back.
+- Some networks (strict office or mobile ones) block direct connections, and voice then says
+  it couldn't connect to someone. A TURN server can relay the audio for them: set
+  `ICE_SERVERS` on the server to a JSON list of servers, for example
+
+  ```bash
+  ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com:3478","username":"me","credential":"secret"}]' npm start
+  ```
+
+  Without it, public STUN servers from Google and Cloudflare are used.
+
 ### Safety on a public server
 
 - The server runs the game and checks every move; browsers never receive other players'
@@ -102,6 +125,8 @@ a restart closes open rooms.
 - Names and chat are cleaned and shown as plain text. Chat is rate-limited, messages are
   capped in size, and each address is limited in open connections (16), messages and how
   many rooms it can create or try to join per minute (30), which stops room-code guessing.
+- Voice chat connects browsers directly, so the players you talk to can see your IP address.
+  Only players who have joined voice in the same room are connected.
 - An unexpected error is logged instead of taking down every room.
 
 ## How to play
@@ -142,8 +167,9 @@ src/
     chat.js      room chat panel
   net/       online client
     connection.js  WebSocket with automatic reconnect
-    online.js      one online session: lobby, game, prompts, chat
+    online.js      one online session: lobby, game, prompts, chat, voice
     mirror.js      read-only copy of the server's game for the view and HUD
+    voice.js       voice chat: microphone, browser-to-browser calls, who's talking
   main.js    wires it all together
 server/
   index.js     production server (static files + rooms)

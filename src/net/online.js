@@ -6,11 +6,14 @@ import { HumanController } from '../ui/human.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { sound, cueLog } from '../ui/sound.js';
+import { VoiceChat, voiceSupported } from './voice.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'deciding whether to Just Say No', discard: 'discarding' };
 // The countdown only shows once a decision is running short.
 const CLOCK_FROM_S = 30;
+// Set while this tab is in voice chat, so a reload rejoins it.
+const VOICE_KEY = 'md-voice';
 
 // Identifies this tab to the server so a refresh or dropped connection gets the
 // same seat back. Per tab, so two tabs are two players.
@@ -63,7 +66,11 @@ export class OnlineSession {
       start: () => this.send('start'),
       leave: () => this.confirmLeave(),
       rules: () => this.hud.showRules(),
+      voice: (anchor) => this.voiceButton(anchor),
     });
+    this.voice = new VoiceChat((type, data) => this.send(type, data));
+    this.voice.onChange = () => this.showVoice();
+    this.voice.onNotice = (text) => this.notice(text);
 
     this.conn = new Connection();
     this.conn.onOpen = () => this.join();
@@ -106,8 +113,13 @@ export class OnlineSession {
   onMessage(msg) {
     if (this.closed) return;
     switch (msg.type) {
+      case 'hello':
+        this.voice.iceServers = msg.iceServers;
+        break;
       case 'joined':
         this.memberId = msg.you;
+        this.voice.joined(msg.you);
+        this.resumeVoice();
         this.code = msg.code;
         this.chat.selfId = msg.you;
         this.justJoined = true;
@@ -161,6 +173,9 @@ export class OnlineSession {
       case 'chat':
         this.chat.add(msg);
         break;
+      case 'rtc':
+        this.voice.signal(msg.from, msg.data);
+        break;
       case 'kicked':
         this.exit('The host removed you from the room.');
         break;
@@ -179,6 +194,7 @@ export class OnlineSession {
     // The game may have ended while we were disconnected.
     if (room.status === 'lobby' && this.inGame) this.endGame();
     this.lobby.update(room, this.memberId);
+    this.voice.update(room.members);
     if (room.status === 'lobby' && !this.gameoverOpen) this.showLobby();
     if (room.status === 'playing' && !this.inGame) this.showLobby();
     this.hud.setHost(this.inGame && this.isHost);
@@ -246,6 +262,7 @@ export class OnlineSession {
     if (this.needsAttach) {
       this.needsAttach = false;
       this.view.attach(this.mirror);
+      this.showVoice();
     } else {
       this.view.layout();
     }
@@ -315,6 +332,100 @@ export class OnlineSession {
     // If the host already started the next game, the modal was closed for us.
     this.gameoverOpen = false;
     if (!this.closed && this.room?.status === 'lobby') this.showLobby();
+  }
+
+  // ---------- voice chat ----------
+
+  // The 🎙️ button: join voice chat, or once in it, mute or leave.
+  async voiceButton(anchor) {
+    if (!voiceSupported()) {
+      return this.notice(
+        window.isSecureContext
+          ? 'This browser can’t do voice chat.'
+          : 'Voice chat needs a secure address: browsers only allow the microphone on https pages or localhost. See the README for ways to host the game.',
+      );
+    }
+    if (!this.voice.active) return this.joinVoice();
+    const others = (this.room?.members ?? []).filter((m) => m.voice && m.id !== this.memberId).map((m) => m.name);
+    const r = anchor.getBoundingClientRect();
+    const pick = await this.hud.menu(
+      r.left + r.width / 2,
+      r.bottom,
+      'Voice chat',
+      [
+        { label: others.length ? `With ${others.join(', ')}` : 'Nobody else is in voice yet', value: null, disabled: true },
+        { label: this.voice.muted ? 'Unmute my mic' : 'Mute my mic', value: 'mute' },
+        { label: 'Leave voice chat', value: 'leave' },
+      ],
+      { below: true },
+    );
+    if (pick === 'mute') this.voice.setMuted(!this.voice.muted);
+    else if (pick === 'leave') {
+      this.voice.leave();
+      sessionStorage.removeItem(VOICE_KEY);
+    }
+  }
+
+  // The M key.
+  toggleMute() {
+    if (!this.voice.active) return;
+    this.voice.setMuted(!this.voice.muted);
+    this.hud.toast(this.voice.muted ? 'Mic muted' : 'Mic on', 'info', 1200);
+  }
+
+  // auto: rejoining after a reload, so stay quiet if it doesn't work.
+  async joinVoice(auto = false) {
+    try {
+      await this.voice.join();
+    } catch (e) {
+      sessionStorage.removeItem(VOICE_KEY);
+      if (auto) return;
+      const why = {
+        NotAllowedError: 'Microphone access is blocked. Allow it for this site (see the address bar), then try again.',
+        NotFoundError: 'No microphone was found.',
+        NotReadableError: 'The microphone is busy in another app.',
+      }[e.name];
+      this.notice(why ?? `Couldn’t start voice chat (${e.message}).`);
+      return;
+    }
+    if (!this.voice.active) return;
+    sessionStorage.setItem(VOICE_KEY, '1');
+    if (!auto) this.notice('You’re in voice chat. Use the 🎙️ button to mute or leave.', 'info');
+  }
+
+  // After a reload, back into voice chat if this tab was in it and the browser
+  // still allows the microphone without asking.
+  async resumeVoice() {
+    if (this.voice.active || sessionStorage.getItem(VOICE_KEY) !== '1' || !voiceSupported()) return;
+    sessionStorage.removeItem(VOICE_KEY);
+    try {
+      const mic = await navigator.permissions.query({ name: 'microphone' });
+      if (mic.state === 'granted' && !this.closed) this.joinVoice(true);
+    } catch {
+      // This browser can't say without asking; the player can tap the button.
+    }
+  }
+
+  // Mic badges and talking lights in the top bar, the lobby and on the table.
+  showVoice() {
+    if (this.closed) return;
+    const { state, talking } = this.voice;
+    const members = this.room?.members ?? [];
+    this.hud.setVoice(state, talking.has(this.memberId));
+    this.lobby.setVoice(state, talking);
+    if (!this.mirror || this.needsAttach) return;
+    this.view.setVoice(
+      this.mirror.state.players.map((p) => {
+        const m = members.find((x) => x.id === p.memberId);
+        return !m?.voice ? '' : talking.has(m.id) ? 'talking' : m.voice;
+      }),
+    );
+  }
+
+  // Lobby notes and in-game toasts: the lobby covers the toasts.
+  notice(text, kind = 'warn') {
+    if (this.lobby.shown) this.lobby.notice(text, kind);
+    else this.hud.toast(text, kind, 5000);
   }
 
   // ---------- status line & banners ----------
@@ -390,6 +501,8 @@ export class OnlineSession {
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.tick);
+    this.voice.close();
+    sessionStorage.removeItem(VOICE_KEY);
     this.conn.close();
     this.lobby.hide();
     this.chat.el.remove();
@@ -398,6 +511,7 @@ export class OnlineSession {
     this.hud.setBanner(null);
     this.hud.setHost(false);
     this.hud.setOnline(false);
+    this.hud.setVoice('off');
     sessionStorage.removeItem('md-room');
     setRoomInURL(null);
   }

@@ -30,13 +30,14 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), speed(s), start, leave, rules }
+  // actions: { addBot, kick(id), speed(s), start, leave, rules, voice(button) }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
     this.layer = document.getElementById('lobby-layer');
     this.room = null;
     this.you = null;
+    this.rows = new Map(); // member id -> seat row
     this.build();
   }
 
@@ -52,8 +53,10 @@ export class Lobby {
     leave.addEventListener('click', () => this.actions.leave());
     const rules = el('button', 'ghost', 'How to play');
     rules.addEventListener('click', () => this.actions.rules());
+    this.voiceBtn = el('button', 'ghost voice-btn');
+    this.voiceBtn.addEventListener('click', () => this.actions.voice(this.voiceBtn));
     const headBtns = el('div', 'lobby-head-btns');
-    headBtns.append(rules, leave);
+    headBtns.append(this.voiceBtn, rules, leave);
     head.append(title, headBtns);
 
     const invite = el('div', 'invite');
@@ -95,7 +98,9 @@ export class Lobby {
     right.appendChild(this.chatSlot);
     cols.append(left, right);
 
-    box.append(head, invite, this.localNote, cols);
+    this.noteEl = el('p', 'note');
+    box.append(head, invite, this.localNote, this.noteEl, cols);
+    this.setVoice('off', new Set());
     this.root = backdrop;
   }
 
@@ -128,12 +133,20 @@ export class Lobby {
     const players = seated.length;
     this.countEl.textContent = `Players ${Math.min(players, room.max)}/${room.max}`;
     this.listEl.innerHTML = '';
+    this.rows.clear();
     seated.forEach((m, i) => {
       const row = el('div', `seat${m.id === you ? ' me' : ''}${i >= room.max ? ' bench' : ''}`);
       const icon = m.kind === 'bot' ? '🤖' : m.id === room.hostId ? '👑' : '🙂';
       row.appendChild(el('span', 'seat-icon', icon));
       const name = el('span', 'seat-name', m.name);
       row.appendChild(name);
+      if (m.voice) {
+        row.classList.add('voice');
+        row.classList.toggle('mic-off', m.voice === 'muted');
+        const mic = row.appendChild(el('span', 'mic'));
+        mic.title = m.voice === 'muted' ? 'In voice chat (muted)' : 'In voice chat';
+      }
+      this.rows.set(m.id, row);
       const tags = [];
       if (m.id === you) tags.push('you');
       if (m.id === room.hostId) tags.push('host');
@@ -162,5 +175,20 @@ export class Lobby {
     this.waitEl.textContent = host
       ? players < 2 ? 'You need at least one more player — invite a friend or add a bot.' : ''
       : room.status === 'playing' ? 'A game is in progress…' : `Waiting for ${hostName} to start the game…`;
+  }
+
+  // The voice chat button, and who in the list is talking right now.
+  setVoice(state, talking) {
+    this.voiceBtn.textContent = state === 'off' ? '🎙️ Join voice' : state === 'muted' ? '🎙️ Mic off' : '🎙️ Mic on';
+    this.voiceBtn.classList.toggle('on', state === 'on');
+    this.voiceBtn.classList.toggle('mic-off', state === 'muted');
+    for (const [id, row] of this.rows) row.classList.toggle('talking', talking.has(id));
+  }
+
+  notice(text, kind = 'warn') {
+    this.noteEl.textContent = text;
+    this.noteEl.className = `note ${kind === 'warn' ? 'warn' : 'info'}`;
+    clearTimeout(this.noteTimer);
+    this.noteTimer = setTimeout(() => (this.noteEl.textContent = ''), 8000);
   }
 }

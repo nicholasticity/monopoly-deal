@@ -16,6 +16,18 @@ const LIMITS = {
   roomEntries: 30, // creates + joins from one address per minute
 };
 
+// Voice chat connects players directly; these servers help them find a route. Set
+// ICE_SERVERS to a JSON list (e.g. adding a TURN server) for networks that block it.
+function iceServers() {
+  try {
+    const list = JSON.parse(process.env.ICE_SERVERS || 'null');
+    if (Array.isArray(list)) return list;
+  } catch {
+    console.warn('[rooms] ICE_SERVERS is not valid JSON; using the default STUN servers');
+  }
+  return [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+}
+
 // Behind a hosting proxy (Render, Fly…) the client's address is in X-Forwarded-For.
 function clientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
@@ -25,6 +37,7 @@ function clientIp(req) {
 
 export function attachGameServer(httpServer, { path = '/ws', log = console.log, timeScale = 1, limits = {} } = {}) {
   const limit = { ...LIMITS, ...limits };
+  const ice = iceServers();
   const rooms = new Map();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
   const socketsPerIp = new Map();
@@ -97,6 +110,8 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
       },
     };
 
+    conn.send({ type: 'hello', iceServers: ice });
+
     const enter = (room, msg) => {
       if (conn.member) conn.room.leave(conn.member);
       const clientId = typeof msg.clientId === 'string' ? msg.clientId.slice(0, 64) : '';
@@ -154,6 +169,8 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'speed': return room.setSpeed(member, msg.speed);
           case 'start': return room.start(member);
           case 'stop': return room.stop(member);
+          case 'voice': return room.setVoice(member, msg.on, msg.muted);
+          case 'rtc': return room.relay(member, msg.to, msg.data);
         }
       } catch (e) {
         console.error('[rooms] message failed', msg.type, e);

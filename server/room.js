@@ -99,6 +99,7 @@ export class Room {
       known: new Map(),
       dropTimer: null,
       chatTimes: [],
+      voice: null, // in voice chat: 'on' or 'muted'
     };
     this.members.push(m);
     if (!this.hostId) this.hostId = m.id;
@@ -123,6 +124,8 @@ export class Room {
     clearTimeout(this.emptyTimer);
     const wasAway = m.away;
     m.away = false;
+    // A new connection says again whether it's in voice chat.
+    m.voice = null;
     m.misses = 0;
     conn.send({ type: 'joined', code: this.code, you: m.id });
     conn.send({ type: 'history', chat: this.chat, log: this.log });
@@ -139,6 +142,7 @@ export class Room {
   // Socket closed without saying goodbye: hold the seat for a while.
   disconnected(m) {
     m.conn = null;
+    m.voice = null;
     clearTimeout(m.dropTimer);
     if (this.status === 'playing' && m.seat >= 0) {
       m.dropTimer = setTimeout(() => {
@@ -159,6 +163,7 @@ export class Room {
 
   leave(m, verb = 'left') {
     clearTimeout(m.dropTimer);
+    m.voice = null;
     if (m.conn) {
       const conn = m.conn;
       m.conn = null;
@@ -262,6 +267,25 @@ export class Room {
     this.chat.push(entry);
     if (this.chat.length > CHAT_KEEP) this.chat.shift();
     this.broadcast({ type: 'chat', ...entry });
+  }
+
+  // ---------- voice chat ----------
+
+  setVoice(m, on, muted) {
+    const voice = on ? (muted ? 'muted' : 'on') : null;
+    if (m.voice === voice) return;
+    m.voice = voice;
+    this.broadcastRoom();
+  }
+
+  // Passes a voice connection offer or answer to another member in voice chat.
+  // The audio itself goes directly between the players.
+  relay(m, to, data) {
+    const target = this.member(to);
+    const sdp = data?.sdp;
+    if (!m.voice || !target?.voice || target === m || typeof data.sid !== 'string') return;
+    if (!sdp || (sdp.type !== 'offer' && sdp.type !== 'answer') || typeof sdp.sdp !== 'string') return;
+    target.conn?.send({ type: 'rtc', from: m.id, data: { sid: data.sid.slice(0, 40), sdp: { type: sdp.type, sdp: sdp.sdp } } });
   }
 
   back(m) {
@@ -478,6 +502,7 @@ export class Room {
         away: m.away,
         left: m.left,
         seat: m.seat,
+        voice: m.voice ?? null,
       })),
     };
     this.broadcast({ type: 'room', room });

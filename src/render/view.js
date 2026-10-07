@@ -455,7 +455,7 @@ export class TableView {
     const hand = mine && p.isHuman ? '' : `<span class="chip" title="Cards in hand"><i class="mini-card"></i>${p.hand.length}</span>`;
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
-    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span>${you}<span class="chips"><span class="chip money" title="Bank">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
+    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips"><span class="chip money" title="Bank">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
     if (html !== panel.html) {
       panel.head.innerHTML = html;
       panel.html = html;
@@ -607,6 +607,16 @@ export class TableView {
     const { w, h } = this.size;
     const side = this.inset.portrait ? (e.clientY < h / 2 ? 'low' : 'high') : e.clientX > w * 0.625 ? 'left' : 'right';
     this.handlers.hover(visible?.card ?? null, visible?.zone ?? null, side);
+  }
+
+  // Voice chat for each player, by seat: '' (not in it), 'on', 'muted' or 'talking'.
+  setVoice(states) {
+    this.panels.forEach((panel, i) => {
+      const s = states[i] || '';
+      panel.el.classList.toggle('voice', !!s);
+      panel.el.classList.toggle('mic-off', s === 'muted');
+      panel.el.classList.toggle('talking', s === 'talking');
+    });
   }
 
   // Screen-space centre of a card (CSS pixels); used for debugging and tests.

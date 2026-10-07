@@ -16,7 +16,5 @@ const gameServer = {
 export default defineConfig({
   // Relative asset paths so the built game can be hosted from any folder.
   base: './',
-  // three.js alone is ~600 kB minified; one chunk is fine for a game this size.
-  build: { chunkSizeWarningLimit: 800 },
   plugins: [gameServer],
 });

@@ -55,6 +55,9 @@ class Client {
       }
     }
     switch (msg.type) {
+      case 'hello':
+        this.iceServers = msg.iceServers;
+        break;
       case 'joined':
         this.memberId = msg.you;
         this.code = msg.code;
@@ -158,6 +161,28 @@ const chatP = bob.next('chat', (m) => m.text === 'hi bob');
 alice.send('chat', { text: 'hi bob' });
 const chat = await chatP;
 if (chat.name !== 'Alice') fail('chat sender wrong');
+
+// Voice chat: the room lists who's in it, and passes connection offers only
+// between members who are.
+if (!alice.iceServers?.length) fail('no ICE servers sent');
+const offer = { sid: 'abc', sdp: { type: 'offer', sdp: 'v=0' } };
+const notRelayed = bob.next('rtc', () => true, 300).then(() => fail('offer reached a member not in voice'), () => {});
+alice.send('voice', { on: true, muted: false });
+alice.send('rtc', { to: bob.memberId, data: offer });
+await notRelayed;
+const bothIn = alice.next('room', (m) => m.room.members.every((x) => x.voice));
+bob.send('voice', { on: true, muted: true });
+await bothIn;
+if (alice.room.members.find((x) => x.id === bob.memberId).voice !== 'muted') fail('muted mic not listed');
+const relayed = bob.next('rtc');
+alice.send('rtc', { to: bob.memberId, data: { ...offer, extra: 'x' } });
+const rtc = await relayed;
+if (rtc.from !== alice.memberId || rtc.data.sdp.sdp !== 'v=0' || rtc.data.extra) fail('offer not passed on cleanly');
+const bothOut = alice.next('room', (m) => !m.room.members.some((x) => x.voice));
+alice.send('voice', { on: false });
+bob.send('voice', { on: false });
+await bothOut;
+console.log('  voice chat: offers passed between members in voice only');
 
 // Non-hosts can't start or add bots.
 bob.send('addBot');
