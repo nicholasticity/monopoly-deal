@@ -149,6 +149,9 @@ Be the first to collect **three complete property sets of different colours**.
 Controls: hover a card to see it full size, **E** ends your turn, **Esc** closes a menu.
 The **Log** button shows everything that has happened.
 
+While it's your turn a gold frame runs round the screen. Your turn starts with a chime and a
+buzz on phones that support it, and the tab title changes if the game is in the background.
+
 Each table shows its owner's property sets; banked money appears only as their total next
 to their name (hover it to see the bills).
 

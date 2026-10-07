@@ -5,7 +5,7 @@ import { MirrorGame } from './mirror.js';
 import { HumanController } from '../ui/human.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
-import { sound, cueLog } from '../ui/sound.js';
+import { cueLog } from '../ui/sound.js';
 import { VoiceChat, voiceSupported } from './voice.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -149,10 +149,7 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) {
-          this.hud.toast('Your turn!', 'turn', 1600);
-          sound.play('turn');
-        }
+        if (msg.playerId === this.seat) this.hud.yourTurn();
         break;
       case 'waiting':
         this.waiting = msg.playerId == null ? null : { ...msg, deadline: Date.now() + msg.remaining };
@@ -452,6 +449,7 @@ export class OnlineSession {
     const watching = this.seat < 0 ? 'Watching · ' : '';
     const plays = `${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`;
     let text;
+    const mine = w ? w.playerId === this.seat : !!this.mirror.current?.isHuman;
     if (w && w.playerId === this.seat) {
       text = {
         turn: `<b>Your turn</b> · ${plays}`,
@@ -466,7 +464,7 @@ export class OnlineSession {
     } else {
       text = `${watching}${nameOf(state.current)} is playing…`;
     }
-    this.hud.setStatus(text + clock);
+    this.hud.setStatus(text + clock, mine);
   }
 
   refreshBanner() {

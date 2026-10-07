@@ -8,6 +8,7 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
+const TITLE = document.title;
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -57,6 +58,7 @@ export class Hud {
     this.newBtn.addEventListener('click', () => this.onNewGame());
     this.stopBtn.addEventListener('click', () => this.onStopGame());
     $('#btn-rules').addEventListener('click', () => this.showRules());
+    document.addEventListener('visibilitychange', () => !document.hidden && (document.title = TITLE));
     this.voiceBtn = $('#btn-voice');
     this.voiceBtn.addEventListener('click', () => this.onVoice(this.voiceBtn));
     this.onVoice = () => {};
@@ -249,8 +251,19 @@ export class Hud {
     }
   }
 
-  setStatus(html) {
+  // `mine`: the status asks something of you, so it glows.
+  setStatus(html, mine = false) {
     this.statusEl.innerHTML = html;
+    this.statusEl.classList.toggle('mine', mine);
+  }
+
+  // The start of your turn: a toast and chime, a buzz on phones, and the tab title
+  // while the game is in the background.
+  yourTurn() {
+    this.toast('Your turn!', 'turn', 1600);
+    sound.play('turn');
+    if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([70, 60, 70]);
+    if (document.hidden) document.title = `🔔 Your turn · ${TITLE}`;
   }
 
   setTurnControls(visible, playsLeft = 0, hint = '') {

@@ -7,7 +7,7 @@ import { Game, GameAborted } from './game/engine.js';
 import * as R from './game/rules.js';
 import { BOT_NAMES, SPEEDS } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
-import { sound, cueMoves, cueLog } from './ui/sound.js';
+import { cueMoves, cueLog } from './ui/sound.js';
 
 const view = new TableView(document.getElementById('stage'));
 const hud = new Hud();
@@ -42,7 +42,7 @@ function updateStatus() {
   } else if (state.turn === 0) {
     hud.setStatus('Dealing…');
   } else if (p.isHuman) {
-    hud.setStatus(`<b>Your turn</b> · ${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`);
+    hud.setStatus(`<b>Your turn</b> · ${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`, true);
   } else {
     hud.setStatus(`<b>${p.name}</b> is playing…`);
   }
@@ -64,10 +64,7 @@ function newGame(opts) {
       hud.log(data.text, data.kind);
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
-    else if (type === 'turn' && data.player.isHuman) {
-      hud.toast('Your turn!', 'turn', 1600);
-      sound.play('turn');
-    }
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn();
     else if (type === 'gameover') onGameOver(data.winner);
     updateStatus();
   });

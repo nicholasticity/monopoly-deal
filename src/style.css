@@ -213,9 +213,28 @@ kbd {
   background: rgba(0, 0, 0, 0.24);
   border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35);
-  transition: left 0.45s, width 0.45s, border-color 0.3s;
+  transition: left 0.45s, width 0.45s, border-color 0.3s, box-shadow 0.3s;
 }
-.board.my-turn .hand-tray { border-color: rgba(255, 215, 94, 0.4); }
+.board.my-turn .hand-tray {
+  border-color: rgba(255, 215, 94, 0.75);
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 215, 94, 0.25), 0 0 22px rgba(255, 215, 94, 0.22);
+}
+/* Your turn: a gold frame round the table, above every card, that flares as the turn starts. */
+.board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4000;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(255, 215, 94, 0.8), inset 0 0 34px rgba(255, 215, 94, 0.22);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.board.my-turn::after { opacity: 1; animation: turn-flare 1.3s ease-out; }
+@keyframes turn-flare {
+  0% { opacity: 0; }
+  25% { opacity: 1; box-shadow: inset 0 0 0 6px var(--gold), inset 0 0 90px rgba(255, 215, 94, 0.5); }
+}
 
 .card {
   position: absolute;
@@ -308,6 +327,11 @@ kbd {
 }
 #status:empty { visibility: hidden; }
 #status b { color: var(--gold); }
+/* The status is asking you to do something (your turn, a payment…). */
+#status.mine {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(255, 215, 94, 0.45), 0 0 18px rgba(255, 215, 94, 0.35), 0 6px 20px rgba(0, 0, 0, 0.35);
+}
 .top-actions { display: flex; gap: 8px; }
 /* Deck and discard counts: the piles themselves on tall screens (see the portrait rules),
    where view.js sends cards into and out of the little cards. Hidden until a game is on. */
