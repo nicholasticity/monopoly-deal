@@ -1,0 +1,9 @@
+# Render Blueprint: New > Blueprint, pick this repo, and Render sets everything up.
+services:
+  - type: web
+    name: monopoly-deal
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz

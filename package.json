@@ -1,0 +1,24 @@
+{
+  "name": "monopoly-deal-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "simulate": "node scripts/simulate.mjs",
+    "start": "node server/index.js",
+    "test:online": "node scripts/online-smoke.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monopoly Deal 3D</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>" />
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hud">
+      <header id="topbar">
+        <div class="brand"><span class="logo">MONOPOLY</span><span class="deal">DEAL</span></div>
+        <div id="status"></div>
+        <div class="top-actions">
+          <button id="btn-chat" class="ghost hidden">Chat <span id="chat-badge" class="badge hidden"></span></button>
+          <button id="btn-log" class="ghost">Log</button>
+          <button id="btn-rules" class="ghost">Rules</button>
+          <button id="btn-stop" class="ghost hidden">End game</button>
+          <button id="btn-new" class="ghost">New game</button>
+        </div>
+      </header>
+      <div id="banner" class="hidden"></div>
+      <aside id="log"></aside>
+      <aside id="chat-dock"></aside>
+      <div id="chat-pops"></div>
+      <div id="preview"></div>
+      <div id="toasts"></div>
+      <div id="hint"></div>
+      <div id="turn-controls">
+        <div id="plays"></div>
+        <button id="btn-end" class="primary">End turn <kbd>E</kbd></button>
+      </div>
+    </div>
+    <div id="lobby-layer"></div>
+    <div id="popup-layer"></div>
+    <div id="modal-layer"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
