@@ -24,6 +24,12 @@ const BANK_STEP = 0.3;
 const ROOM_FOR = 4;
 // Widest a table card gets (px): on small screens, and otherwise.
 const TABLE_MAX = [96, 124];
+// On tall screens where stacked tables would leave opponents' cards narrower than
+// this (px), the opponents get a row of tabs and one of their tables shows at a time.
+const TABS_BELOW = 80;
+// The gap under the tabs, and their padding (px; must match .seat-tab in style.css).
+const TAB_GAP = 4;
+const TAB_PAD = 6;
 // The hand tray: padding round the cards, and the gap below it (px).
 const TRAY_PAD = 8;
 const TRAY_GAP = 10;
@@ -64,6 +70,13 @@ function setBox(el, { x, y, w, h }) {
   if (boxes.get(el) === key) return;
   boxes.set(el, key);
   Object.assign(el.style, { left: `${r1(x)}px`, top: `${r1(y)}px`, width: `${r1(w)}px`, height: `${r1(h)}px` });
+}
+
+const htmls = new WeakMap();
+function setHTML(el, html) {
+  if (htmls.get(el) === html) return;
+  htmls.set(el, html);
+  el.innerHTML = html;
 }
 
 // Every card in a game state, wherever it is.
@@ -119,6 +132,9 @@ export class TableView {
     this.rings = new Map();
     this.panels = [];
     this.seat = 0;
+    // With tabs: the opponent whose table shows, and whose turn it was when it was picked.
+    this.focus = null;
+    this.turnOf = null;
     this.game = null;
     this.pace = 1;
     this.hoverId = null;
@@ -157,23 +173,39 @@ export class TableView {
     for (const ring of this.rings.values()) ring.remove();
     this.rings.clear();
     this.seat = Math.max(0, game.state.players.findIndex((p) => p.isHuman));
+    this.focus = null;
+    this.turnOf = null;
     this.buildPanels(game);
     this.size = null;
     this.resize();
   }
 
   // A panel per player: a header (avatar, name, money, sets, cards in hand) over the
-  // bank on the left and the property piles on the right.
+  // bank on the left and the property piles on the right. Opponents also get a tab,
+  // used instead of the header when the tables take turns to show.
   buildPanels(game) {
-    for (const p of this.panels) p.el.remove();
+    for (const p of this.panels) {
+      p.el.remove();
+      p.tab.remove();
+    }
     this.panels = game.state.players.map((p, i) => {
       const el = div('seat-panel', this.panelLayer);
-      el.style.setProperty('--c', AVATARS[i % AVATARS.length]);
+      const tab = div('seat-tab', this.panelLayer);
+      for (const e of [el, tab]) e.style.setProperty('--c', AVATARS[i % AVATARS.length]);
+      tab.hidden = true;
+      tab.addEventListener('click', () => this.setFocus(i));
       const head = div('seat-head', el);
       const bank = div('area', el, 'Bank');
       const props = div('area', el, 'Properties');
-      return { el, head, bank, props, html: '' };
+      return { el, tab, head, bank, props };
     });
+  }
+
+  // Shows opponent i's table (when the tables have tabs).
+  setFocus(i) {
+    if (i === this.focus) return;
+    this.focus = i;
+    this.layout();
   }
 
   objFor(card) {
@@ -241,6 +273,8 @@ export class TableView {
   // Works out where everything goes on this screen: opponents' panels across the top
   // (one per row on tall screens), the local player's panel above the hand
   // tray, and the deck and discard beside the hand (wide) or above that panel (tall).
+  // Tall screens without room for that get tabs instead: a row with a tab per opponent
+  // and the deck and discard, over one opponent's table at a time.
   fit() {
     const { w, h } = this.size;
     const ins = this.inset;
@@ -272,42 +306,65 @@ export class TableView {
     // tables, within limits. Cards are never taller than ROOM_FOR piles across their
     // panel allow; the local player's panel is wider, so its cards may come out bigger.
     const fitsAcross = (pw) => ((pw - 3 * inner) / (bankWidth(pw) + 1 + PILE_SHOW * (ROOM_FOR - 1))) * RATIO;
-    const avail = Math.max(80, bottom - top - strip - rows * gap - (rows + 1) * (head + inner));
     const max = TABLE_MAX[small ? 0 : 1] * RATIO;
     const s = stackHeight(STACK);
-    const och = Math.min(max, fitsAcross(colW), avail / ((rows + 1) * s));
-    const mch = Math.min(max, fitsAcross(W), avail / s - rows * och);
-    // Height to spare lets taller piles spread out.
-    const spare = Math.max(0, avail - (rows * och + mch) * s) / (rows + 1);
+    const share = (avail, rows, pw) => {
+      const och = Math.min(max, fitsAcross(pw), avail / ((rows + 1) * s));
+      const mch = Math.min(max, fitsAcross(W), avail / s - rows * och);
+      // Height to spare lets taller piles spread out.
+      return { och, mch, spare: Math.max(0, avail - (rows * och + mch) * s) / (rows + 1) };
+    };
+    let { och, mch, spare } = share(Math.max(80, bottom - top - strip - rows * gap - (rows + 1) * (head + inner)), rows, colW);
+    // With tabs, the opponent's table has no header (its tab is one).
+    const tabH = small ? 56 : 66;
+    const tabbed = portrait && och / RATIO < TABS_BELOW;
+    if (tabbed) ({ och, mch, spare } = share(Math.max(80, bottom - top - tabH - TAB_GAP - gap - 3 * inner - head), 1, W));
     const area = (ch) => Math.min(ch * stackHeight(STACK_MAX), ch * s + spare);
 
-    // Every opponent's panel is the same size.
-    const oppH = head + inner + area(och);
     const meH = head + inner + area(mch);
-    const panels = [{ x: pad, y: bottom - meH, w: W, h: meH, card: mch / RATIO, area: area(mch) }];
-    for (let i = 0; i < k; i++) {
-      panels.push({ x: pad + (i % cols) * (colW + gap), y: top + Math.floor(i / cols) * (oppH + gap), w: colW, h: oppH, card: och / RATIO, area: area(och) });
-    }
-
+    const panels = [{ x: pad, y: bottom - meH, w: W, h: meH, head, card: mch / RATIO, area: area(mch) }];
+    let tabs = null;
     let deck, discard;
-    if (portrait) {
-      const y = (top + rows * (oppH + gap) - gap + panels[0].y) / 2;
-      deck = { x: w / 2 - dw * 0.6 - 4, y, w: dw };
-      discard = { x: w / 2 + dw * 0.6 + 4, y, w: dw };
+    if (tabbed) {
+      // The deck and discard sit at the end of the tab row, as tall as the tabs.
+      const sw = (tabH - 6) / RATIO;
+      const y = top + tabH / 2;
+      discard = { x: pad + W - sw / 2 - 2, y, w: sw };
+      deck = { x: discard.x - sw - 6, y, w: sw };
+      const tw = (deck.x - sw / 2 - gap - pad - (k - 1) * TAB_GAP) / k;
+      // Every opponent's table goes in the same spot; only one shows.
+      const body = { x: pad, y: top + tabH + TAB_GAP, w: W, h: 2 * inner + area(och), head: inner, card: och / RATIO, area: area(och) };
+      tabs = [null];
+      for (let i = 0; i < k; i++) {
+        panels.push(body);
+        tabs.push({ x: pad + i * (tw + TAB_GAP), y: top, w: tw, h: tabH });
+      }
     } else {
-      const y = trayTop + (trayH - 18) / 2;
-      deck = { x: pad + dw / 2, y, w: dw };
-      // Far enough apart for their labels.
-      discard = { x: deck.x + Math.max(dw + 12, 76), y, w: dw };
-      hand.x0 = discard.x + dw / 2 + gap * 2;
-      hand.x1 = w - pad - ins.right;
+      // Every opponent's panel is the same size.
+      const oppH = head + inner + area(och);
+      for (let i = 0; i < k; i++) {
+        panels.push({ x: pad + (i % cols) * (colW + gap), y: top + Math.floor(i / cols) * (oppH + gap), w: colW, h: oppH, head, card: och / RATIO, area: area(och) });
+      }
+      if (portrait) {
+        const y = (panels[k].y + panels[k].h + panels[0].y) / 2;
+        deck = { x: w / 2 - dw * 0.6 - 4, y, w: dw };
+        discard = { x: w / 2 + dw * 0.6 + 4, y, w: dw };
+      } else {
+        const y = trayTop + (trayH - 18) / 2;
+        deck = { x: pad + dw / 2, y, w: dw };
+        // Far enough apart for their labels.
+        discard = { x: deck.x + Math.max(dw + 12, 76), y, w: dw };
+        hand.x0 = discard.x + dw / 2 + gap * 2;
+        hand.x1 = w - pad - ins.right;
+      }
     }
     const show = { y: (top + bottom) / 2, w: Math.min((0.3 * h) / RATIO, w * 0.42, 210) };
-    this.geo = { portrait, head, inner, panels, deck, discard, hand, show };
-    this.layoutKey = `${portrait ? 'tall' : 'wide'}:${n}:${cols}`;
+    this.geo = { portrait, tabs, head, inner, panels, deck, discard, hand, show };
+    this.layoutKey = tabbed ? `tabs:${n}` : `${portrait ? 'tall' : 'wide'}:${n}:${cols}`;
     this.root.style.setProperty('--head', `${head}px`);
     this.root.style.setProperty('--inner', `${inner}px`);
     this.root.classList.toggle('small', small);
+    this.root.classList.toggle('tabbed', tabbed);
   }
 
   // ---------- layout ----------
@@ -330,6 +387,13 @@ export class TableView {
     }
     if (fresh && !this.snapping) void this.cardLayer.offsetWidth;
     this.ringsSeen = new Set();
+
+    // With tabs, the table shown is whoever's turn it is, until another tab is picked.
+    if (state.current !== this.turnOf) {
+      this.turnOf = state.current;
+      if (state.current !== this.seat) this.focus = state.current;
+    }
+    if (!state.players[this.focus] || this.focus === this.seat) this.focus = (this.seat + 1) % state.players.length;
 
     this.layoutDeck(state);
     state.players.forEach((p, i) => {
@@ -372,7 +436,7 @@ export class TableView {
   place(obj, x, y, w, { rot = 0, z = 0, up = true, gone = false } = {}) {
     const el = obj.el;
     const zone = obj.zone?.zone;
-    obj.live = up && !obj.card.hidden && zone !== 'deck' && zone !== 'ohand';
+    obj.live = up && !gone && !obj.card.hidden && zone !== 'deck' && zone !== 'ohand';
     if (up) this.showFace(obj);
     el.classList.toggle('down', !up);
     el.classList.toggle('gone', gone);
@@ -416,13 +480,18 @@ export class TableView {
       this.place(obj, x, y, discard.w, { rot: (hash(card.id) - 0.5) * 24, z: 200 + i });
     });
     // Labels go under the piles beside the hand, or out to the sides in the strip.
+    // By the tabs there's only room for the count, on the pile.
     for (const [kind, spot, count] of [['deck', deck, state.deck.length], ['discard', discard, state.discard.length]]) {
       const { spot: el, label } = this.spots[kind];
       const ch = spot.w * RATIO;
       setBox(el, { x: spot.x - spot.w / 2, y: spot.y - ch / 2, w: spot.w, h: ch });
-      label.textContent = `${kind === 'deck' ? 'Deck' : 'Discard'} · ${count}`;
+      label.textContent = this.geo.tabs ? `${count}` : `${kind === 'deck' ? 'Deck' : 'Discard'} · ${count}`;
       const side = kind === 'deck' ? -1 : 1;
-      if (this.geo.portrait) {
+      if (this.geo.tabs) {
+        label.style.left = `${r1(spot.x)}px`;
+        label.style.top = `${r1(spot.y + ch / 2 - 2)}px`;
+        label.style.transform = 'translate(-50%, -100%)';
+      } else if (this.geo.portrait) {
         label.style.left = `${r1(spot.x + side * (spot.w / 2 + 8))}px`;
         label.style.top = `${r1(spot.y)}px`;
         label.style.transform = `translate(${side < 0 ? '-100%' : '0'}, -50%)`;
@@ -434,19 +503,33 @@ export class TableView {
     }
   }
 
-  // Places a player's panel and fills in its header. Returns where the panel's cards
-  // go: their width (smaller when there are many piles), the bank and the piles.
+  // Places a player's panel and fills in its header (or tab). Returns where the
+  // panel's cards go: their width (smaller when there are many piles), the bank and
+  // the piles, or for a table that isn't showing, the avatar they hide in.
   layoutPanel(p, i, zi) {
     const g = this.geo;
     const r = g.panels[zi];
+    const tab = g.tabs?.[zi];
     const panel = this.panels[i];
     const { state } = this.game;
     setBox(panel.el, r);
     const mine = zi === 0;
+    const active = state.current === i && state.phase !== 'over';
+    const winner = state.winner === p;
     panel.el.classList.toggle('me', mine);
-    panel.el.classList.toggle('active', state.current === i && state.phase !== 'over');
-    panel.el.classList.toggle('winner', state.winner === p);
+    panel.el.classList.toggle('active', active);
+    panel.el.classList.toggle('winner', winner);
     panel.el.classList.toggle('compact', r.w < 280);
+    panel.el.classList.toggle('tabbed', !!tab);
+    panel.el.classList.toggle('off', !!tab && i !== this.focus);
+    panel.tab.hidden = !tab;
+    if (tab) {
+      setBox(panel.tab, tab);
+      panel.tab.classList.toggle('narrow', tab.w < 80);
+      panel.tab.classList.toggle('sel', i === this.focus);
+      panel.tab.classList.toggle('active', active);
+      panel.tab.classList.toggle('winner', winner);
+    }
 
     const sets = Math.min(R.completeColors(p).size, R.SETS_TO_WIN);
     const pips = Array.from({ length: R.SETS_TO_WIN }, (_, j) => `<i class="${j < sets ? 'on' : ''}"></i>`).join('');
@@ -454,24 +537,35 @@ export class TableView {
     const hand = mine && p.isHuman ? '' : `<span class="chip" title="Cards in hand"><i class="mini-card"></i>${p.hand.length}</span>`;
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
-    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips"><span class="chip money" title="Bank">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
-    if (html !== panel.html) {
-      panel.head.innerHTML = html;
-      panel.html = html;
-    }
+    const name = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>`;
+    const chips = `<span class="chips"><span class="chip money" title="Bank">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
+    // A tab has the name above the chips.
+    if (tab) setHTML(panel.tab, `<span class="tab-name">${name}</span>${chips}`);
+    else setHTML(panel.head, `${name}${you}${chips}`);
 
+    if (tab && i !== this.focus) return { hide: this.avatarSpot(zi) };
     const n = p.piles.length;
     const bw = Math.min(bankWidth(r.w), 1 + BANK_STEP * Math.max(p.bank.length - 1, 0));
     const cw = Math.min(r.card, (r.w - 3 * g.inner) / (bw + 1 + PILE_SHOW * Math.max(n - 1, 0)));
-    const m = { cw, ch: cw * RATIO, x0: r.x + g.inner, top: r.y + g.head, areaH: r.area, bankW: cw * bw };
+    const m = { cw, ch: cw * RATIO, x0: r.x + g.inner, top: r.y + r.head, areaH: r.area, bankW: cw * bw };
     m.propsX0 = m.x0 + m.bankW + g.inner;
     m.propsX1 = r.x + r.w - g.inner;
     // Dashed outlines mark an empty bank or property area.
-    setBox(panel.bank, { x: g.inner, y: g.head, w: m.bankW, h: m.ch });
-    setBox(panel.props, { x: m.propsX0 - r.x, y: g.head, w: m.propsX1 - m.propsX0, h: m.ch });
+    setBox(panel.bank, { x: g.inner, y: r.head, w: m.bankW, h: m.ch });
+    setBox(panel.props, { x: m.propsX0 - r.x, y: r.head, w: m.propsX1 - m.propsX0, h: m.ch });
     panel.bank.classList.toggle('empty', p.bank.length === 0);
     panel.props.classList.toggle('empty', n === 0);
     return m;
+  }
+
+  // Where a player's avatar is (its centre, and a card size to shrink into there).
+  avatarSpot(zi) {
+    const { panels, tabs, inner, head } = this.geo;
+    const t = tabs?.[zi];
+    if (t) return { x: t.x + TAB_PAD + 9, y: t.y + t.h * 0.32, w: 14 };
+    const r = panels[zi];
+    const size = head * 0.62;
+    return { x: r.x + inner + 2 + size / 2, y: r.y + head / 2, w: size };
   }
 
   // Cards in the local hand sit in a fan on a tray along the bottom.
@@ -508,41 +602,42 @@ export class TableView {
 
   // Opponents' hands aren't shown: their cards fly into (and out of) the avatar.
   layoutOpponentHand(p, zi) {
-    const { panels, inner, head } = this.geo;
-    const r = panels[zi];
-    const size = head * 0.62;
+    const a = this.avatarSpot(zi);
     p.hand.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'ohand', playerId: p.id };
-      this.place(obj, r.x + inner + 2 + size / 2, r.y + head / 2, size, { up: false, gone: true, z: 650 + i });
+      this.place(obj, a.x, a.y, a.w, { up: false, gone: true, z: 650 + i });
     });
   }
 
   layoutBank(p, m) {
     const cards = p.bank.slice().sort((a, b) => b.value - a.value || a.id - b.id);
     const n = cards.length;
-    const step = n > 1 ? Math.min(m.cw * BANK_STEP, (m.bankW - m.cw) / (n - 1)) : 0;
+    const step = n > 1 && !m.hide ? Math.min(m.cw * BANK_STEP, (m.bankW - m.cw) / (n - 1)) : 0;
     cards.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'bank', playerId: p.id };
-      this.place(obj, m.x0 + m.cw / 2 + i * step, m.top + m.ch / 2, m.cw, { z: 400 + i });
+      if (m.hide) this.place(obj, m.hide.x, m.hide.y, m.hide.w, { gone: true, z: 400 + i });
+      else this.place(obj, m.x0 + m.cw / 2 + i * step, m.top + m.ch / 2, m.cw, { z: 400 + i });
     });
   }
 
   layoutPiles(p, m) {
     const n = p.piles.length;
-    const step = n > 1 ? Math.min(m.cw * 1.08, (m.propsX1 - m.propsX0 - m.cw) / (n - 1)) : 0;
+    const step = n > 1 && !m.hide ? Math.min(m.cw * 1.08, (m.propsX1 - m.propsX0 - m.cw) / (n - 1)) : 0;
     p.piles.forEach((pile, j) => {
-      const x = m.propsX0 + m.cw / 2 + j * step;
+      const x = m.hide ? 0 : m.propsX0 + m.cw / 2 + j * step;
       const items = [...pile.cards, pile.house, pile.hotel].filter(Boolean);
-      const casc = items.length > 1 ? Math.min(CASCADE * m.ch, (m.areaH - m.ch) / (items.length - 1)) : 0;
+      const casc = items.length > 1 && !m.hide ? Math.min(CASCADE * m.ch, (m.areaH - m.ch) / (items.length - 1)) : 0;
       const complete = R.isComplete(pile);
-      if (complete) this.ring(`${p.id}:${pile.id}`, { x: x - m.cw / 2, y: m.top, w: m.cw, h: m.ch + casc * (items.length - 1) }, 399 + j * 10);
+      if (complete && !m.hide) this.ring(`${p.id}:${pile.id}`, { x: x - m.cw / 2, y: m.top, w: m.cw, h: m.ch + casc * (items.length - 1) }, 399 + j * 10);
       items.forEach((card, k) => {
         const obj = this.objFor(card);
         obj.zone = { zone: 'pile', playerId: p.id, pileId: pile.id, complete };
         const rot = card.type === 'action' ? -7 : isFlipped(card) ? 180 : 0;
-        this.place(obj, x, m.top + m.ch / 2 + k * casc, m.cw, { rot, z: 400 + j * 10 + k });
+        const z = 400 + j * 10 + k;
+        if (m.hide) this.place(obj, m.hide.x, m.hide.y, m.hide.w, { rot, z, gone: true });
+        else this.place(obj, x, m.top + m.ch / 2 + k * casc, m.cw, { rot, z });
       });
     });
   }
@@ -612,9 +707,11 @@ export class TableView {
   setVoice(states) {
     this.panels.forEach((panel, i) => {
       const s = states[i] || '';
-      panel.el.classList.toggle('voice', !!s);
-      panel.el.classList.toggle('mic-off', s === 'muted');
-      panel.el.classList.toggle('talking', s === 'talking');
+      for (const el of [panel.el, panel.tab]) {
+        el.classList.toggle('voice', !!s);
+        el.classList.toggle('mic-off', s === 'muted');
+        el.classList.toggle('talking', s === 'talking');
+      }
     });
   }
 

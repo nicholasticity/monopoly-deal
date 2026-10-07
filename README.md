@@ -148,6 +148,9 @@ Be the first to collect **three complete property sets of different colours**.
 Controls: hover a card to see it full size, **E** ends your turn, **Esc** closes a menu.
 The **Log** button shows everything that has happened.
 
+On a phone held upright, opponents get a row of tabs and one opponent's table shows at a time:
+whoever's turn it is, or tap a tab to look at someone else's.
+
 ## Code layout
 
 ```
