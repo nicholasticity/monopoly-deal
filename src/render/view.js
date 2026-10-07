@@ -13,6 +13,10 @@ const CORNER = (CARD_W * TEX_RADIUS) / TEX_W;
 const BASE_FOV = 38;
 const HAND_DEPTH = 10;
 const SHOW_DEPTH = 9;
+// Phones show the whole hand on a tray: padding round the cards, and the gap below it (px).
+const TRAY_PAD = 8;
+const TRAY_GAP = 10;
+const TRAY_DEPTH = HAND_DEPTH + 1;
 const ASPECT = CARD_H / CARD_W;
 // The classic table (opponents across the top) when it shows the local player's
 // cards at least this wide (px), or unless a row layout shows them this much bigger.
@@ -282,6 +286,10 @@ export class TableView {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.5, 200);
     this.scene.add(this.camera);
+    // Phones: a tray behind the hand, sized to the screen by placeTray.
+    this.tray = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
+    this.tray.visible = false;
+    this.camera.add(this.tray);
 
     this.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     this.table = buildTable(this.scene, this.renderer);
@@ -497,6 +505,7 @@ export class TableView {
     });
 
     this.layoutShowcase(state.showcase);
+    this.tray.visible = !!this.tray.userData.on && !!state.players[this.seat]?.isHuman;
 
     // Online, a reshuffle swaps the discard pile for freshly numbered deck cards.
     for (const [id, obj] of this.cards) {
@@ -573,13 +582,40 @@ export class TableView {
     obj.setTarget(this.camera.localToWorld(a), quat, scale, false);
   }
 
-  // Width (CSS px) of a card in the local hand, and how much of it shows above the
-  // bottom of the screen.
+  // Width (CSS px) of a card in the local hand, how much of the screen height the hand
+  // takes, and the screen x range (px) the fan may use. On phones the whole fan sits on
+  // a tray clear of the bottom edge; on bigger screens the cards run off it.
   handMetrics() {
     const { w, h } = this.size;
-    const { portrait } = this.inset;
-    const width = Math.min((0.23 * h) / ASPECT, w * (portrait ? 0.21 : 0.1));
-    return { width, visible: width * ASPECT * (portrait ? 0.72 : h < 500 ? 0.75 : 0.9), portrait };
+    const { portrait, right } = this.inset;
+    const tray = portrait || h < 500;
+    const width = Math.min(((tray ? 0.18 : 0.23) * h) / ASPECT, w * (portrait ? 0.21 : 0.1));
+    const ch = width * ASPECT;
+    // Keep the fan clear of the turn controls in the bottom-right corner. In portrait
+    // they sit above the hand, so the fan can use the full width.
+    const x0 = portrait ? 8 + TRAY_PAD : w * 0.02;
+    const x1 = portrait ? w - x0 : (w / 2) * (1 + Math.max(0, Math.min(0.5, 1 - (2 * right) / w)));
+    return { width, visible: tray ? ch * 1.1 + 2 * TRAY_PAD + TRAY_GAP : ch * 0.9, portrait, tray, x0, x1 };
+  }
+
+  // Sizes the tray to the hand area. It hangs off the camera, so it follows every fit().
+  placeTray() {
+    const { h } = this.size;
+    const { visible, tray, x0, x1 } = this.handMetrics();
+    const mesh = this.tray;
+    mesh.userData.on = tray;
+    if (!tray) return;
+    const r = { x0: x0 - TRAY_PAD, x1: x1 + TRAY_PAD, y0: h - visible, y1: h - TRAY_GAP };
+    const a = this.screenToCamera(r.x0, r.y0, TRAY_DEPTH);
+    const b = this.screenToCamera(r.x1, r.y1, TRAY_DEPTH);
+    mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, a.z);
+    mesh.scale.set(b.x - a.x, a.y - b.y, 1);
+    const key = `${r.x1 - r.x0}x${r.y1 - r.y0}`;
+    if (mesh.userData.key === key) return;
+    mesh.userData.key = key;
+    mesh.material.map?.dispose();
+    mesh.material.map = canvasTexture(trayCanvas(r.x1 - r.x0, r.y1 - r.y0), 1);
+    mesh.material.needsUpdate = true;
   }
 
   // Cards in the human hand float in front of the camera like a held fan.
@@ -587,20 +623,19 @@ export class TableView {
     const cards = p.hand;
     const n = cards.length;
     const { w, h } = this.size;
-    const { width: cw, visible, portrait } = this.handMetrics();
+    const { width: cw, visible, portrait, tray, x0, x1 } = this.handMetrics();
     const ch = cw * ASPECT;
     const half = w / 2;
-    // Keep the fan clear of the turn controls in the bottom-right corner. In portrait
-    // they sit above the hand, so the fan can use the full width.
-    const maxRight = portrait ? half - 6 : half * Math.max(0, Math.min(0.5, 1 - (2 * this.inset.right) / w));
-    const minLeft = portrait ? -maxRight : -half * 0.96;
+    const maxRight = x1 - half;
+    const minLeft = x0 - half;
     const span = Math.min(portrait ? Infinity : half * 1.24, maxRight - minLeft, cw * 0.92 * Math.max(n - 1, 0) + cw);
     const step = n > 1 ? (span - cw) / (n - 1) : 0;
-    const cx = half + (portrait ? 0 : Math.min(-half * 0.12, maxRight - span / 2));
+    // On a tray the fan sits in its middle; otherwise a little left, clear of the controls.
+    const cx = tray ? (x0 + x1) / 2 : half + Math.min(-half * 0.12, maxRight - span / 2);
     cards.forEach((card, i) => {
       const t = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;
       const x = cx + (i - (n - 1) / 2) * step;
-      let y = h - visible + ch / 2 + t * t * 0.054 * ch;
+      let y = h - visible + (tray ? TRAY_PAD : 0) + ch / 2 + t * t * 0.054 * ch;
       let size = cw;
       let depth = HAND_DEPTH - i * 0.03;
       let spin = (-t * 0.05 * Math.min(n, 8)) / 4;
@@ -804,6 +839,7 @@ export class TableView {
     if (classicScore >= CLASSIC_PX || classicScore * CLASSIC_BIAS >= best.score) best = { l: classic };
     this.aim(best.l);
     if (best.l.key !== this.layoutKey) this.useLayout(best.l);
+    this.placeTray();
   }
 
   // Points the camera for a layout, then zooms and shifts the picture so the layout's
@@ -858,6 +894,24 @@ export class TableView {
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
   }
+}
+
+// The tray behind the hand on phones: a dark panel with a thin gold rim.
+function trayCanvas(w, h) {
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.beginPath();
+  ctx.roundRect(1, 1, w - 2, h - 2, 16);
+  ctx.fillStyle = 'rgba(5, 12, 9, 0.45)';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255, 215, 94, 0.5)';
+  ctx.stroke();
+  return canvas;
 }
 
 function glowTexture() {

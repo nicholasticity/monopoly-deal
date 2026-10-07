@@ -270,12 +270,29 @@ export class Hud {
       this.modalLayer.innerHTML = '';
       this.cancelTop = null;
     };
-    return { box, close, cancelable };
+    // A button that hides the dialog for a look at the table (hand, bank, sets)
+    // until "Back" (or Escape) brings it back.
+    const peekButton = () => {
+      const look = el('button', 'ghost peek', '👀 Look at my cards first');
+      const back = el('button', 'primary peek-back hidden', '↩ Back to decision');
+      let prevCancel = null;
+      const peek = (on) => {
+        backdrop.classList.toggle('hidden', on);
+        back.classList.toggle('hidden', !on);
+        if (on) [prevCancel, this.cancelTop] = [this.cancelTop, () => peek(false)];
+        else this.cancelTop = prevCancel;
+      };
+      look.addEventListener('click', () => peek(true));
+      back.addEventListener('click', () => peek(false));
+      this.modalLayer.appendChild(back);
+      return look;
+    };
+    return { box, close, cancelable, peekButton };
   }
 
-  choose({ title, body, options, cancel = true, cards = [] }) {
+  choose({ title, body, options, cancel = true, cards = [], peek = false }) {
     return new Promise((resolve) => {
-      const { box, close } = this.modal({ title, body });
+      const { box, close, peekButton } = this.modal({ title, body });
       if (cards.length) {
         const row = el('div', 'card-row');
         cards.forEach((c) => row.appendChild(thumb(c)));
@@ -295,6 +312,7 @@ export class Hud {
         list.appendChild(b);
       }
       box.appendChild(list);
+      if (peek) box.appendChild(peekButton());
       if (cancel) {
         const c = el('button', 'ghost cancel', 'Cancel');
         c.addEventListener('click', () => done(null));

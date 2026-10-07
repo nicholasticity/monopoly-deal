@@ -290,6 +290,7 @@ export class HumanController {
       body,
       cards,
       cancel: false,
+      peek: true,
       options: [
         { label: '✋ Just Say No!', value: 'yes', primary: true },
         { label: ctx.blocking ? 'Accept' : 'Let it go', value: 'no' },
