@@ -16,10 +16,8 @@ const STACK = 3;
 const STACK_MAX = 4;
 // When piles must overlap, at least this much of each shows (of a card's width).
 const PILE_SHOW = 0.42;
-// The bank's widest, in card widths (less in narrow panels). Its money fans out
-// BANK_STEP of a card per card, so a small bank leaves the piles more room.
-const bankWidth = (panelW) => (panelW < 280 ? 1.25 : 1.55);
-const BANK_STEP = 0.3;
+// Width (px) of a banked card where it goes into the bank total in its panel's header.
+const BANK_W = 16;
 // Panels have room for this many piles side by side before they overlap.
 const ROOM_FOR = 4;
 // Widest a table card gets (px): on small screens, and otherwise.
@@ -66,6 +64,18 @@ function setBox(el, { x, y, w, h }) {
   if (boxes.get(el) === key) return;
   boxes.set(el, key);
   Object.assign(el.style, { left: `${r1(x)}px`, top: `${r1(y)}px`, width: `${r1(w)}px`, height: `${r1(h)}px` });
+}
+
+// Where el sits inside ancestor's border box (px), from layout offsets: transforms
+// don't move it.
+function offsetIn(el, ancestor) {
+  let x = 0;
+  let y = 0;
+  for (let e = el; e && e !== ancestor; e = e.offsetParent) {
+    x += e.offsetLeft + (e.offsetParent?.clientLeft ?? 0);
+    y += e.offsetTop + (e.offsetParent?.clientTop ?? 0);
+  }
+  return { x, y };
 }
 
 // Every card in a game state, wherever it is.
@@ -166,18 +176,17 @@ export class TableView {
     this.resize();
   }
 
-  // A panel per player: a header (avatar, name, money, sets, cards in hand) over the
-  // bank on the left and the property piles on the right. On tall screens the header is
-  // a bar down the panel's left side instead.
+  // A panel per player: a header (avatar, name, bank total, sets, cards in hand) over
+  // the property piles. On tall screens the header is a bar down the panel's left side
+  // instead. Banked money only shows as the total.
   buildPanels(game) {
     for (const p of this.panels) p.el.remove();
     this.panels = game.state.players.map((p, i) => {
       const el = div('seat-panel', this.panelLayer);
       el.style.setProperty('--c', AVATARS[i % AVATARS.length]);
       const head = div('seat-head', el);
-      const bank = div('area', el, 'Bank');
       const props = div('area', el, 'Properties');
-      return { el, head, bank, props, html: '' };
+      return { el, head, props, html: '', bankKey: '', bankAt: null };
     });
   }
 
@@ -280,7 +289,7 @@ export class TableView {
     // Card heights: what's left after the headers, shared out evenly between the
     // tables, within limits. Cards are never taller than ROOM_FOR piles across their
     // panel allow; when that holds some panels back, the others get the height.
-    const fitsAcross = (pw) => ((pw - side - 3 * inner) / (bankWidth(pw - side) + 1 + PILE_SHOW * (ROOM_FOR - 1))) * RATIO;
+    const fitsAcross = (pw) => ((pw - side - 2 * inner) / (1 + PILE_SHOW * (ROOM_FOR - 1))) * RATIO;
     const avail = Math.max(80, bottom - top - rows * gap - (rows + 1) * (lead + inner));
     const max = TABLE_MAX[small ? 0 : 1] * RATIO;
     const s = stackHeight(STACK);
@@ -385,8 +394,9 @@ export class TableView {
   place(obj, x, y, w, { rot = 0, z = 0, up = true, gone = false } = {}) {
     const el = obj.el;
     const zone = obj.zone?.zone;
-    obj.live = up && !obj.card.hidden && zone !== 'deck' && zone !== 'ohand';
+    obj.live = up && !gone && !obj.card.hidden && zone !== 'deck' && zone !== 'ohand';
     if (up) this.showFace(obj);
+    const wasGone = el.classList.contains('gone');
     el.classList.toggle('down', !up);
     el.classList.toggle('gone', gone);
     el.classList.toggle('live', obj.live);
@@ -402,9 +412,12 @@ export class TableView {
       // Cards on the move pass over everything else until they land.
       clearTimeout(obj.flying);
       el.classList.add('flying');
+      // Between two hidden spots (a hand, a bank total, the top bar's piles) a card
+      // shows on the way.
+      el.classList.toggle('pass', gone && wasGone);
       obj.flying = setTimeout(() => {
         obj.flying = 0;
-        el.classList.remove('flying');
+        el.classList.remove('flying', 'pass');
         el.style.zIndex = obj.z;
       }, MOVE_MS + 60);
     }
@@ -445,7 +458,7 @@ export class TableView {
   }
 
   // Places a player's panel and fills in its header. Returns where the panel's cards
-  // go: their width (smaller when there are many piles), the bank and the piles.
+  // go: their width (smaller when there are many piles), the bank total and the piles.
   layoutPanel(p, i, zi) {
     const g = this.geo;
     const r = g.panels[zi];
@@ -465,23 +478,31 @@ export class TableView {
     const hand = mine && p.isHuman ? '' : `<span class="chip" title="Cards in hand"><i class="mini-card"></i>${p.hand.length}</span>`;
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
-    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips"><span class="chip money" title="Bank">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
+    const bills = p.bank.map((c) => c.value).sort((a, b) => b - a);
+    const bankTitle = bills.length ? `Bank: ${bills.map((v) => `$${v}M`).join(' + ')}` : 'Bank';
+    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips"><span class="chip money" title="${bankTitle}">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
     if (html !== panel.html) {
       panel.head.innerHTML = html;
       panel.html = html;
     }
+    // Banked cards fly into the total (measured only when the header changes).
+    const bankKey = `${html}|${r.w}|${r.h}|${g.side}|${g.head}`;
+    if (panel.bankKey !== bankKey) {
+      panel.bankKey = bankKey;
+      const chip = panel.head.querySelector('.money');
+      const at = offsetIn(chip, panel.el);
+      panel.bankAt = { x: at.x + chip.offsetWidth / 2, y: at.y + chip.offsetHeight / 2 };
+    }
 
     const n = p.piles.length;
     const inside = r.w - g.side;
-    const bw = Math.min(bankWidth(inside), 1 + BANK_STEP * Math.max(p.bank.length - 1, 0));
-    const cw = Math.min(r.card, (inside - 3 * g.inner) / (bw + 1 + PILE_SHOW * Math.max(n - 1, 0)));
-    const m = { cw, ch: cw * RATIO, x0: r.x + g.side + g.inner, top: r.y + g.lead, areaH: r.area, bankW: cw * bw };
-    m.propsX0 = m.x0 + m.bankW + g.inner;
+    const cw = Math.min(r.card, (inside - 2 * g.inner) / (1 + PILE_SHOW * Math.max(n - 1, 0)));
+    const m = { cw, ch: cw * RATIO, x0: r.x + g.side + g.inner, top: r.y + g.lead, areaH: r.area };
+    m.bank = { x: r.x + panel.bankAt.x, y: r.y + panel.bankAt.y, w: BANK_W };
+    m.propsX0 = m.x0;
     m.propsX1 = r.x + r.w - g.inner;
-    // Dashed outlines mark an empty bank or property area.
-    setBox(panel.bank, { x: g.side + g.inner, y: g.lead, w: m.bankW, h: m.ch });
+    // A dashed outline marks an empty property area.
     setBox(panel.props, { x: m.propsX0 - r.x, y: g.lead, w: m.propsX1 - m.propsX0, h: m.ch });
-    panel.bank.classList.toggle('empty', p.bank.length === 0);
     panel.props.classList.toggle('empty', n === 0);
     return m;
   }
@@ -534,14 +555,12 @@ export class TableView {
     });
   }
 
+  // Banked money isn't laid out: it goes into the bank total in the header.
   layoutBank(p, m) {
-    const cards = p.bank.slice().sort((a, b) => b.value - a.value || a.id - b.id);
-    const n = cards.length;
-    const step = n > 1 ? Math.min(m.cw * BANK_STEP, (m.bankW - m.cw) / (n - 1)) : 0;
-    cards.forEach((card, i) => {
+    p.bank.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'bank', playerId: p.id };
-      this.place(obj, m.x0 + m.cw / 2 + i * step, m.top + m.ch / 2, m.cw, { z: 400 + i });
+      this.place(obj, m.bank.x, m.bank.y, m.bank.w, { gone: true, z: 400 + i });
     });
   }
 

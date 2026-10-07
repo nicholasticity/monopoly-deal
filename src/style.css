@@ -138,7 +138,7 @@ kbd {
   background: linear-gradient(160deg, #e04848, #9e1b1b);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
-/* Dashed outlines that mark an empty bank or property area. */
+/* A dashed outline that marks an empty property area. */
 .area {
   position: absolute;
   display: grid;
@@ -228,6 +228,12 @@ kbd {
 }
 .card.live { pointer-events: auto; cursor: pointer; }
 .card.gone { opacity: 0; }
+/* Passing between two hidden spots (view.js): shows on the way, gone again on arrival. */
+.card.gone.pass { animation: pass 0.45s; }
+@keyframes pass {
+  0%, 100% { opacity: 0; }
+  20%, 75% { opacity: 1; }
+}
 /* No perspective: turning over looks like a flat card flipping. */
 .flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 0.45s; }
 .card.down .flip { transform: rotateY(180deg); }

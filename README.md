@@ -149,6 +149,9 @@ Be the first to collect **three complete property sets of different colours**.
 Controls: hover a card to see it full size, **E** ends your turn, **Esc** closes a menu.
 The **Log** button shows everything that has happened.
 
+Each table shows its owner's property sets; banked money appears only as their total next
+to their name (hover it to see the bills).
+
 On a phone held upright every table stays in view, one per row: each player's name, money,
 sets and hand size sit in a bar down the left of their cards, and the deck and discard pile
 shrink to two counts in the top bar, where cards are drawn from and discarded to.
