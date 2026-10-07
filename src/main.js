@@ -7,6 +7,7 @@ import { Game, GameAborted } from './game/engine.js';
 import * as R from './game/rules.js';
 import { BOT_NAMES, SPEEDS } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
+import { sound, cueMoves, cueLog } from './ui/sound.js';
 
 const view = new TableView(document.getElementById('stage'));
 const hud = new Hud();
@@ -23,6 +24,7 @@ view.insets = () => hud.insets();
 const refit = new ResizeObserver(() => view.resize());
 for (const id of ['topbar', 'status', 'turn-controls']) refit.observe(document.getElementById(id));
 view.on('hover', (card, zone, side) => hud.preview(card, zone, side));
+view.on('moves', cueMoves);
 view.on('click', (card, zone, x, y) => activeHuman()?.onCardClick(card, zone, x, y));
 hud.onEndTurn = () => activeHuman()?.endTurn();
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
@@ -55,9 +57,14 @@ function newGame(opts) {
   const current = game;
   game.on((type, data) => {
     if (current !== game) return;
-    if (type === 'log') hud.log(data.text, data.kind);
-    else if (type === 'toast') hud.toast(data.text, data.kind);
-    else if (type === 'turn' && data.player.isHuman) hud.toast('Your turn!', 'turn', 1600);
+    if (type === 'log') {
+      hud.log(data.text, data.kind);
+      cueLog(data.text, data.kind);
+    } else if (type === 'toast') hud.toast(data.text, data.kind);
+    else if (type === 'turn' && data.player.isHuman) {
+      hud.toast('Your turn!', 'turn', 1600);
+      sound.play('turn');
+    }
     else if (type === 'gameover') onGameOver(data.winner);
     updateStatus();
   });

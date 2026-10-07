@@ -5,6 +5,7 @@ import { MirrorGame } from './mirror.js';
 import { HumanController } from '../ui/human.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
+import { sound, cueLog } from '../ui/sound.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'deciding whether to Just Say No', discard: 'discarding' };
@@ -130,12 +131,16 @@ export class OnlineSession {
         break;
       case 'log':
         this.hud.log(msg.text, msg.kind);
+        cueLog(msg.text, msg.kind);
         break;
       case 'toast':
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.toast('Your turn!', 'turn', 1600);
+        if (msg.playerId === this.seat) {
+          this.hud.toast('Your turn!', 'turn', 1600);
+          sound.play('turn');
+        }
         break;
       case 'waiting':
         this.waiting = msg.playerId == null ? null : { ...msg, deadline: Date.now() + msg.remaining };

@@ -319,7 +319,7 @@ export class TableView {
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2(-10, -10);
     this.pointerDirty = false;
-    this.handlers = { hover: () => {}, click: () => {} };
+    this.handlers = { hover: () => {}, click: () => {}, moves: () => {} };
     // Screen space (CSS px) the HUD covers; main.js hooks this up to the HUD.
     this.insets = () => ({ top: 0, bottom: 0, right: 320, portrait: false });
 
@@ -514,6 +514,23 @@ export class TableView {
       this.cards.delete(id);
       if (this.hoverId === id) this.hoverId = null;
     }
+    this.reportMoves();
+  }
+
+  // Tells the 'moves' handler which cards changed zone since the last layout, and
+  // how many sets were completed by them (for sound effects).
+  reportMoves() {
+    const moves = [];
+    let completed = 0;
+    for (const obj of this.cards.values()) {
+      const from = obj.prevZone;
+      const to = obj.zone;
+      obj.prevZone = to;
+      if (!from || (from.zone === to.zone && from.playerId === to.playerId && from.pileId === to.pileId)) continue;
+      moves.push({ card: obj.card, from, to });
+      if (to.complete && obj.card.type !== 'action' && !(from.zone === 'pile' && from.complete)) completed++;
+    }
+    if (moves.length) this.handlers.moves(moves, completed);
   }
 
   // A soft gold glow under every complete set; it fades out when the set breaks.

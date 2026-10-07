@@ -614,6 +614,19 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   }
 }
 
+/* Narrow phones: a smaller logo so six top-bar buttons (an online host's) still fit. */
+@media (max-width: 420px) {
+  #topbar { gap: 6px; }
+  .brand { gap: 4px; }
+  .logo { font-size: 0.62rem; padding: 2px 5px; }
+  .deal { font-size: 0.78rem; }
+  .top-actions { gap: 4px; }
+  .top-actions button { padding: 6px 6px; }
+}
+@media (max-width: 370px) {
+  .deal { display: none; }
+}
+
 /* Dialogs on phones: smaller cards and padding, and room for browser toolbars. */
 @media (max-width: 640px), (max-height: 540px) {
   .modal { padding: 14px 14px; max-height: 92vh; max-height: 92dvh; }

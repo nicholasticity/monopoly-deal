@@ -1,6 +1,7 @@
 // DOM overlay: status bar, log, toasts, hover preview, popup menus and modals.
 import { cardImageURL, isFlipped } from '../render/textures.js';
 import * as R from '../game/rules.js';
+import { sound } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -53,6 +54,9 @@ export class Hud {
     this.newBtn.addEventListener('click', () => this.onNewGame());
     this.stopBtn.addEventListener('click', () => this.onStopGame());
     $('#btn-rules').addEventListener('click', () => this.showRules());
+    this.soundBtn = $('#btn-sound');
+    this.soundBtn.addEventListener('click', () => this.setMuted(!sound.muted));
+    this.setMuted(sound.muted);
     $('#btn-log').addEventListener('click', () => this.logEl.classList.toggle('open'));
     this.chatBtn.addEventListener('click', () => this.setChatDock(!this.chatDock.classList.contains('open')));
     document.addEventListener('keydown', (e) => {
@@ -96,6 +100,14 @@ export class Hud {
   // Host-only "End game" button while an online game runs.
   setHost(on) {
     this.stopBtn.classList.toggle('hidden', !on);
+  }
+
+  // Sound on/off; the choice is remembered for the next visit.
+  setMuted(muted) {
+    sound.setMuted(muted);
+    this.soundBtn.querySelector('.ico').textContent = muted ? '🔇' : '🔊';
+    this.soundBtn.querySelector('.txt').textContent = muted ? 'Muted' : 'Sound';
+    this.soundBtn.title = muted ? 'Sound off' : 'Sound on';
   }
 
   setChatDock(open) {
@@ -492,6 +504,7 @@ export class Hud {
   }
 
   showGameOver(winner, isHuman, stats, buttonLabel = 'Play again') {
+    sound.play(isHuman ? 'win' : 'lose');
     return new Promise((resolve) => {
       const body = el('div', 'gameover');
       body.innerHTML = `<div class="trophy">${isHuman ? '🏆' : '🎲'}</div>
