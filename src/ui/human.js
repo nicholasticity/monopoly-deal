@@ -6,6 +6,16 @@ import { autoPayment } from '../game/ai.js';
 const money = (n) => `${n}M`;
 const CLICK = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
 
+// The icon or colour swatch shown with a payment's reason ('Orange rent', 'birthday gift', 'Debt Collector').
+function reasonLook(reason) {
+  const color = Object.keys(COLORS).find((k) => reason === `${COLORS[k].name} rent`);
+  if (color) return { swatch: COLORS[color].hex };
+  if (reason === 'birthday gift') return { icon: ACTIONS.birthday.icon };
+  if (reason === 'Debt Collector') return { icon: ACTIONS.debtcollector.icon };
+  return {};
+}
+const REASONS = { rent: (ctx) => `${COLORS[ctx.color].name} rent`, birthday: () => 'birthday gift', debtcollector: () => 'Debt Collector' };
+
 export class HumanController {
   constructor(hud) {
     this.hud = hud;
@@ -242,17 +252,27 @@ export class HumanController {
   // ---------- responses during any turn ----------
 
   async choosePayment(game, me, amount, creditor, reason) {
-    const groups = [{ label: 'Bank', items: me.bank.map((c) => ({ card: c, value: c.id })) }];
+    // Money cards show their value; tag everything else with what it's worth.
+    const tag = (c) => (c.type === 'money' || !c.value ? null : money(c.value));
+    const groups = [{ label: `Bank · ${money(R.bankTotal(me))}`, items: me.bank.map((c) => ({ card: c, value: c.id, tag: tag(c) })) }];
     for (const pile of me.piles) {
       const items = [...pile.cards, pile.house, pile.hotel]
         .filter(Boolean)
-        .map((c) => ({ card: c, value: c.id, selectable: c.value > 0, note: c.value > 0 ? null : 'no value' }));
+        .map((c) => ({ card: c, value: c.id, selectable: c.value > 0, note: c.value > 0 ? null : 'no value', tag: tag(c) }));
       groups.push({ label: `${COLORS[pile.color].name}${R.isComplete(pile) ? ' (full set)' : ''}`, items });
     }
     const payable = R.payableCards(me);
     const ids = await this.hud.pickCards({
-      title: `Pay ${creditor.name} ${money(amount)}`,
-      body: `For ${reason}. Choose cards from your bank and/or table. No change is given.`,
+      title: 'Payment due',
+      body: this.hud.dueBox({
+        label: 'You owe',
+        amount,
+        to: creditor.name,
+        reason,
+        ...reasonLook(reason),
+        player: me,
+        text: `${CLICK} cards from your bank and/or table worth at least ${money(amount)}. No change is given.`,
+      }),
       groups,
       mode: 'multi',
       cancel: false,
@@ -260,7 +280,8 @@ export class HumanController {
       suggest: () => autoPayment(me, amount).map((c) => c.id),
       validate: (sel) => {
         const total = R.sum(payable.filter((c) => sel.includes(c.id)));
-        return { ok: total >= amount, text: `Selected ${money(total)} of ${money(amount)}${total > amount ? ` (overpaying ${money(total - amount)})` : ''}` };
+        if (total < amount) return { ok: false, text: `Selected ${money(total)} of ${money(amount)} · ${money(amount - total)} to go` };
+        return { ok: true, text: `✓ Selected ${money(total)} of ${money(amount)}${total > amount ? ` · overpaying ${money(total - amount)}` : ''}` };
       },
     });
     return ids;
@@ -282,9 +303,24 @@ export class HumanController {
   async chooseJustSayNo(game, me, ctx) {
     const cards = [ctx.card];
     if (ctx.targetCard) cards.push(ctx.targetCard);
-    const body = ctx.blocking
+    let body = ctx.blocking
       ? `${this.describeThreat(ctx)} Do you want to play Just Say No?`
       : `${ctx.target.name} said "Just Say No!" to your ${ctx.card.name}. Play your own Just Say No to push it through?`;
+    // Asked to pay: show the amount and what paying it would take from you.
+    if (ctx.blocking && REASONS[ctx.kind]) {
+      const reason = REASONS[ctx.kind](ctx);
+      const total = R.totalAssets(me);
+      body = this.hud.dueBox({
+        label: 'You’d pay',
+        amount: ctx.amount,
+        to: ctx.actor.name,
+        reason,
+        ...reasonLook(reason),
+        player: me,
+        note: total === 0 ? 'You have nothing to pay with, so they’d get nothing.' : total <= ctx.amount ? `That’s everything you have (${money(total)}).` : '',
+        text: 'Do you want to play Just Say No?',
+      });
+    }
     const v = await this.hud.choose({
       title: ctx.blocking ? 'Just Say No?' : 'Counter their Just Say No?',
       body,

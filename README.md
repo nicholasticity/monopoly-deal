@@ -142,7 +142,8 @@ Be the first to collect **three complete property sets of different colours**.
 - Click a wild card already on your table to move it to another colour (free).
 - **Just Say No** is offered automatically whenever an action targets you, and can be
   countered with another Just Say No.
-- When you pay a debt you choose the cards (or press **Auto-select**). No change is given.
+- When you pay a debt you choose the cards (or press **Auto-select**). No change is given. The
+  payment dialog shows the amount owed next to what you have: your bank cards, table and total.
 - You may hold at most 7 cards at the end of your turn.
 
 Controls: hover a card to see it full size, **E** ends your turn, **Esc** closes a menu.

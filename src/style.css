@@ -520,8 +520,59 @@ body:has(.peek-back:not(.hidden)) #status { visibility: hidden; }
 .pick-tile.locked { opacity: 0.35; cursor: not-allowed; filter: grayscale(0.6); }
 .pick-tile.locked:hover { transform: none; }
 .tile-note { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 0.7rem; background: rgba(0, 0, 0, 0.7); padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
-.pick-footer { display: flex; align-items: center; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--panel-border); padding-top: 12px; }
-.pick-info { margin-right: auto; color: #dfe5e0; }
+.tile-tag { position: absolute; top: 4px; right: 4px; font-size: 0.72rem; font-weight: 800; color: #2a1d00; background: var(--gold); padding: 0 5px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); }
+/* The footer (selected total and Pay) stays in view while the cards scroll. */
+.modal.picker { padding-bottom: 0; }
+.pick-footer { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--panel-border); margin: 0 -22px; padding: 12px 22px 20px; background: #121915; }
+.pick-info { margin-right: auto; color: #ffd1a1; font-weight: 600; }
+.pick-info.ok { color: #8fe3a6; }
+
+/* What's owed and what you have, at the top of a payment. */
+.due-wrap { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.due-wrap .modal-body { margin: 0; font-size: 0.9rem; color: var(--muted); }
+.due {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 215, 94, 0.22), rgba(224, 169, 31, 0.1));
+  border: 1px solid rgba(255, 215, 94, 0.55);
+}
+.due-amount { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.due-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #fff1c4; }
+.due-amount b { font-size: 2.4rem; font-weight: 900; color: var(--gold); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); margin-top: 2px; }
+.due-what { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 1rem; color: #f4f1e8; }
+.due-to b { color: #fff; }
+.due-for { display: flex; align-items: center; gap: 6px; color: #dfe5e0; }
+.have { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--panel-border); }
+.have-stats { display: flex; gap: 6px; }
+.have-stat { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 3px 4px; border-radius: 8px; background: rgba(0, 0, 0, 0.25); }
+.have-stat span { font-size: 0.72rem; color: var(--muted); font-weight: 600; }
+.have-stat b { font-size: 1.15rem; }
+.have-stat.total b { color: #8fe3a6; }
+.have-stat.total.short b { color: #ffb38a; }
+.cash-list { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.cash-list .muted { font-size: 0.82rem; }
+.cash {
+  --bg: #e9e4d6;
+  --ink: #8a8574;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1b1b1b;
+  background: var(--bg);
+  border: 2px solid var(--ink);
+}
+.cash.act { background: rgba(255, 255, 255, 0.1); color: var(--text); border: 1px dashed rgba(255, 255, 255, 0.45); }
+/* Wide dialogs have room for the two side by side. */
+@media (min-width: 641px) {
+  .modal.wide .due-wrap { flex-direction: row; flex-wrap: wrap; }
+  .modal.wide .due { flex: 1 1 280px; }
+  .modal.wide .have { flex: 1 1 380px; }
+  .modal.wide .due-wrap > p { flex-basis: 100%; }
+}
 
 /* ---------- start / game over / rules ---------- */
 .start { display: flex; flex-direction: column; gap: 14px; align-items: stretch; text-align: center; }
@@ -863,7 +914,14 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   .pick-group { justify-content: space-between; }
   .pick-label { width: 0; min-width: 100%; font-size: 0.74rem; line-height: 1.25; }
   .pick-row { gap: 6px; padding-top: 6px; }
-  .pick-footer { flex-wrap: wrap; gap: 8px; }
+  .pick-footer { flex-wrap: wrap; gap: 8px; margin: 0 -14px; padding: 8px 14px 14px; }
+  /* The selected total gets its own line; the buttons share the one below. */
+  .pick-info { flex-basis: 100%; text-align: center; }
+  .pick-footer button { flex: 1; }
+  .due { padding: 6px 12px; gap: 12px; }
+  .due-amount b { font-size: 2rem; }
+  .due-what { font-size: 0.92rem; }
+  .have { padding: 6px 8px; }
   .popup { max-height: 80vh; max-height: 80dvh; min-width: 200px; max-width: calc(100vw - 16px); }
   .popup-item, .choice { padding: 10px 10px; }
   .start { gap: 11px; }

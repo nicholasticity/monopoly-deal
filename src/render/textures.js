@@ -10,7 +10,7 @@ const EMOJI = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-s
 // Narrowest a name may be squeezed (of its width) before its font gets smaller.
 const SQUEEZE = 0.85;
 
-const MONEY_COLORS = {
+export const MONEY_COLORS = {
   1: ['#f4ead0', '#c8b27a'],
   2: ['#f7cfcf', '#d37c7c'],
   3: ['#d6ecc8', '#79ad5b'],

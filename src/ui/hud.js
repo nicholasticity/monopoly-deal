@@ -1,5 +1,6 @@
 // DOM overlay: status bar, log, toasts, hover preview, popup menus and modals.
-import { cardImageURL, isFlipped } from '../render/textures.js';
+import { cardImageURL, isFlipped, MONEY_COLORS } from '../render/textures.js';
+import { ACTIONS } from '../game/cards.js';
 import * as R from '../game/rules.js';
 import { sound } from './sound.js';
 
@@ -352,11 +353,52 @@ export class Hud {
     });
   }
 
-  // groups: [{ label, items: [{ card, value, selectable, flipped, note }] }]
+  // A payment at a glance: the amount owed, big, and what `player` has to pay it with
+  // (each bank card as a chip, the table's value and the total). For a modal body.
+  dueBox({ label, amount, to, reason, icon = '', swatch = null, player, note = '', text = '' }) {
+    const wrap = el('div', 'due-wrap');
+    const due = el('div', 'due');
+    due.innerHTML = `<div class="due-amount"><span class="due-label">${esc(label)}</span><b>${amount}M</b></div>`;
+    const what = el('div', 'due-what');
+    what.appendChild(el('span', 'due-to', `to <b>${esc(to)}</b>`));
+    const mark = swatch ? `<span class="swatch" style="background: ${esc(swatch)}"></span>` : icon ? `${icon} ` : '';
+    what.appendChild(el('span', 'due-for', `for ${mark}${esc(reason)}`));
+    due.appendChild(what);
+    wrap.appendChild(due);
+
+    const bank = R.bankTotal(player);
+    const total = R.totalAssets(player);
+    const have = el('div', 'have');
+    have.innerHTML = `<div class="have-stats">
+      <span class="have-stat"><span>Your bank</span><b>${bank}M</b></span>
+      <span class="have-stat"><span>Your table</span><b>${total - bank}M</b></span>
+      <span class="have-stat total${total < amount ? ' short' : ''}"><span>Total</span><b>${total}M</b></span>
+    </div>`;
+    const cash = el('div', 'cash-list');
+    const cards = [...player.bank].sort((a, b) => b.value - a.value);
+    for (const c of cards) {
+      const chip = el('span', `cash${c.type === 'money' ? '' : ' act'}`, `${c.value}M${c.type === 'action' ? ` ${ACTIONS[c.action].icon}` : ''}`);
+      chip.title = c.name;
+      if (MONEY_COLORS[c.value] && c.type === 'money') {
+        chip.style.setProperty('--bg', MONEY_COLORS[c.value][0]);
+        chip.style.setProperty('--ink', MONEY_COLORS[c.value][1]);
+      }
+      cash.appendChild(chip);
+    }
+    if (!cards.length) cash.appendChild(el('span', 'muted', 'Your bank is empty.'));
+    have.appendChild(cash);
+    wrap.appendChild(have);
+    if (note) wrap.appendChild(el('p', 'note info', esc(note)));
+    if (text) wrap.appendChild(el('p', 'modal-body', esc(text)));
+    return wrap;
+  }
+
+  // groups: [{ label, items: [{ card, value, selectable, flipped, note, tag }] }]
   // mode 'single' resolves on first click; 'multi' needs validate(values) -> { ok, text }.
   pickCards({ title, body, groups, mode = 'single', validate, confirmLabel = 'Confirm', cancel = true, suggest = null }) {
     return new Promise((resolve) => {
       const { box, close } = this.modal({ title, body, wide: true });
+      box.classList.add('picker');
       const selected = new Set();
       const done = (v) => {
         close();
@@ -371,6 +413,7 @@ export class Hud {
         if (mode === 'multi') {
           const v = validate([...selected]);
           info.textContent = v.text;
+          info.classList.toggle('ok', v.ok);
           confirm.disabled = !v.ok;
         }
       };
@@ -384,6 +427,7 @@ export class Hud {
           const tile = el('div', `pick-tile${item.selectable === false ? ' locked' : ''}`);
           tile.appendChild(thumb(item.card, { flipped: item.flipped ?? isFlipped(item.card) }));
           if (item.note) tile.appendChild(el('span', 'tile-note', item.note));
+          if (item.tag) tile.appendChild(el('span', 'tile-tag', item.tag));
           if (item.selectable !== false) {
             tile.addEventListener('click', () => {
               if (mode === 'single') return done(item.value);
