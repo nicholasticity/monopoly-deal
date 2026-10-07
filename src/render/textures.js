@@ -7,6 +7,8 @@ export const TEX_RADIUS = 30;
 
 const FONT = '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
 const EMOJI = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+// Narrowest a name may be squeezed (of its width) before its font gets smaller.
+const SQUEEZE = 0.85;
 
 const MONEY_COLORS = {
   1: ['#f4ead0', '#c8b27a'],
@@ -60,11 +62,12 @@ function drawWrapped(ctx, text, cx, y, maxW, lineH) {
   return lines.length;
 }
 
-// Shrinks the font until the wrapped text fits in maxLines.
+// Shrinks the font until the wrapped text fits in maxLines (and no word is too wide).
 function fitWrapped(ctx, text, maxW, maxLines, size, weight = 'bold', min = 12) {
   for (; size > min; size--) {
     setFont(ctx, size, weight);
-    if (wrap(ctx, text, maxW).length <= maxLines) break;
+    const lines = wrap(ctx, text, maxW);
+    if (lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) break;
   }
   return size;
 }
@@ -175,8 +178,8 @@ function rentTable(ctx, color, x, y, w, rowH, textColor = '#222') {
     }
     ctx.fillStyle = textColor;
     ctx.textAlign = 'left';
-    setFont(ctx, 24, '800');
-    ctx.fillText(String(i + 1), x + 44 + i * 6, cy);
+    setFont(ctx, 28, '800');
+    ctx.fillText(String(i + 1), x + 42 + i * 6, cy);
     if (i === info.rent.length - 1) {
       setFont(ctx, 15, '800');
       ctx.fillText('FULL SET', x + 66 + i * 6, cy);
@@ -187,11 +190,11 @@ function rentTable(ctx, color, x, y, w, rowH, textColor = '#222') {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x + (i === info.rent.length - 1 ? 150 : 90) + i * 6, cy + 2);
-    ctx.lineTo(x + w - 70, cy + 2);
+    ctx.lineTo(x + w - 84, cy + 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.textAlign = 'right';
-    setFont(ctx, 30, '900');
+    setFont(ctx, 36, '900');
     ctx.fillText(`$${amount}M`, x + w, cy);
   });
 }
@@ -212,16 +215,18 @@ function drawProperty(ctx, card) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   setFont(ctx, 15, '800');
-  ctx.fillText('TITLE DEED', TEX_W / 2, hy + 24);
+  ctx.fillText('TITLE DEED', TEX_W / 2, hy + 26);
+  // The name sits below the value badge, so it gets the band's full width (lines may
+  // be squeezed a little to keep it big) and stays readable on small table cards. Its
+  // first line is in the strip that still shows when the card is covered in a pile.
   const name = card.name.toUpperCase();
-  const size = fitWrapped(ctx, name, hw - 90, 2, 36, '900');
-  const lines = wrap(ctx, name, hw - 90);
+  const nameW = hw - 40;
+  const size = fitWrapped(ctx, name, nameW / SQUEEZE, 2, 42, '900', 20);
+  wrap(ctx, name, nameW / SQUEEZE).forEach((l, i) => ctx.fillText(l, TEX_W / 2, hy + 75 + i * size, nameW));
   const icon = propertyIcon(card);
-  const top = hy + (icon ? 66 : 80) - ((lines.length - 1) * size * 1.05) / 2;
-  lines.forEach((l, i) => ctx.fillText(l, TEX_W / 2, top + i * size * 1.05));
   if (icon) {
     setFont(ctx, 34, 'normal', EMOJI);
-    ctx.fillText(icon, TEX_W / 2, hy + hh - 26);
+    ctx.fillText(icon, TEX_W - 52, 52);
   }
 
   ctx.fillStyle = '#222';
@@ -253,8 +258,8 @@ function wildHalf(ctx, color, value, flip) {
   ctx.textBaseline = 'middle';
   setFont(ctx, 17, '800');
   ctx.fillText('PROPERTY WILD CARD', TEX_W / 2 + 22, y + 26);
-  setFont(ctx, 34, '900');
-  ctx.fillText(info.name.toUpperCase(), TEX_W / 2 + 22, y + 66);
+  setFont(ctx, 42, '900');
+  ctx.fillText(info.name.toUpperCase(), TEX_W / 2 + 22, y + 68, w - 100);
   // compact rent chips
   const n = info.rent.length;
   const chipW = Math.min(72, (w - 40) / n);

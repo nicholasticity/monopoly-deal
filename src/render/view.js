@@ -7,18 +7,23 @@ import * as R from '../game/rules.js';
 const W0 = 200;
 const H0 = 280;
 const RATIO = H0 / W0;
-// How much of each covered pile card shows (of its height); panels make room for
-// piles this many cards tall (fewer on short screens; taller piles squeeze up).
+// How much of each covered pile card shows (of its height). Panels make room for
+// piles STACK cards tall, up to STACK_MAX when there's height to spare; taller piles
+// squeeze up.
 const CASCADE = 0.21;
 const stackHeight = (cards) => 1 + CASCADE * (cards - 1);
+const STACK = 3;
+const STACK_MAX = 4;
 // When piles must overlap, at least this much of each shows (of a card's width).
 const PILE_SHOW = 0.42;
-// The bank's width, in card widths: less in narrow panels.
+// The bank's widest, in card widths (less in narrow panels). Its money fans out
+// BANK_STEP of a card per card, so a small bank leaves the piles more room.
 const bankWidth = (panelW) => (panelW < 280 ? 1.25 : 1.55);
+const BANK_STEP = 0.3;
 // Panels have room for this many piles side by side before they overlap.
 const ROOM_FOR = 4;
-// The local player's table cards are this much bigger than the opponents'.
-const MINE = 1.3;
+// Widest a table card gets (px): on small screens, and otherwise.
+const TABLE_MAX = [96, 124];
 // The hand tray: padding round the cards, and the gap below it (px).
 const TRAY_PAD = 8;
 const TRAY_GAP = 10;
@@ -248,8 +253,6 @@ export class TableView {
     const head = small ? 26 : 34;
     const inner = small ? 6 : 10;
 
-    // Tall screens stack the opponents, so their piles get less height to grow into.
-    const stackH = stackHeight(portrait || h < 500 ? 3 : 4);
     const hw = portrait ? Math.min((0.18 * h) / RATIO, w * 0.21, 118) : Math.min(((h < 500 ? 0.18 : 0.17) * h) / RATIO, w * 0.085, 124);
     const trayH = hw * RATIO * 1.08 + 2 * TRAY_PAD;
     const trayTop = h - TRAY_GAP - trayH;
@@ -265,29 +268,25 @@ export class TableView {
     const dw = portrait ? clamp(w * 0.11, 34, 56) : hw * 0.78;
     const strip = portrait ? dw * RATIO + 12 : 0;
 
-    // Card heights: what's left after the headers, shared out so the local player's
-    // cards come out MINE times bigger, within limits. Cards are never taller than
-    // ROOM_FOR piles across their panel allow, which leaves no height unused.
+    // Card heights: what's left after the headers, shared out evenly between the
+    // tables, within limits. Cards are never taller than ROOM_FOR piles across their
+    // panel allow; the local player's panel is wider, so its cards may come out bigger.
     const fitsAcross = (pw) => ((pw - 3 * inner) / (bankWidth(pw) + 1 + PILE_SHOW * (ROOM_FOR - 1))) * RATIO;
-    const room = Math.max(60, bottom - top - strip - rows * gap - (rows + 1) * (head + inner)) / stackH;
-    const ocap = Math.min((small ? 80 : 96) * RATIO, fitsAcross(colW));
-    const mcap = Math.min((small ? 96 : 118) * RATIO, fitsAcross(W));
-    let och = room / (rows + MINE);
-    let mch = och * MINE;
-    if (mch > mcap) {
-      mch = mcap;
-      och = Math.min(ocap, (room - mch) / rows);
-    } else if (och > ocap) {
-      och = ocap;
-      mch = Math.min(mcap, room - och * rows);
-    }
+    const avail = Math.max(80, bottom - top - strip - rows * gap - (rows + 1) * (head + inner));
+    const max = TABLE_MAX[small ? 0 : 1] * RATIO;
+    const s = stackHeight(STACK);
+    const och = Math.min(max, fitsAcross(colW), avail / ((rows + 1) * s));
+    const mch = Math.min(max, fitsAcross(W), avail / s - rows * och);
+    // Height to spare lets taller piles spread out.
+    const spare = Math.max(0, avail - (rows * och + mch) * s) / (rows + 1);
+    const area = (ch) => Math.min(ch * stackHeight(STACK_MAX), ch * s + spare);
 
     // Every opponent's panel is the same size.
-    const oppH = head + inner + och * stackH;
-    const meH = head + inner + mch * stackH;
-    const panels = [{ x: pad, y: bottom - meH, w: W, h: meH, card: mch / RATIO }];
+    const oppH = head + inner + area(och);
+    const meH = head + inner + area(mch);
+    const panels = [{ x: pad, y: bottom - meH, w: W, h: meH, card: mch / RATIO, area: area(mch) }];
     for (let i = 0; i < k; i++) {
-      panels.push({ x: pad + (i % cols) * (colW + gap), y: top + Math.floor(i / cols) * (oppH + gap), w: colW, h: oppH, card: och / RATIO });
+      panels.push({ x: pad + (i % cols) * (colW + gap), y: top + Math.floor(i / cols) * (oppH + gap), w: colW, h: oppH, card: och / RATIO, area: area(och) });
     }
 
     let deck, discard;
@@ -304,7 +303,7 @@ export class TableView {
       hand.x1 = w - pad - ins.right;
     }
     const show = { y: (top + bottom) / 2, w: Math.min((0.3 * h) / RATIO, w * 0.42, 210) };
-    this.geo = { portrait, head, inner, stackH, panels, deck, discard, hand, show };
+    this.geo = { portrait, head, inner, panels, deck, discard, hand, show };
     this.layoutKey = `${portrait ? 'tall' : 'wide'}:${n}:${cols}`;
     this.root.style.setProperty('--head', `${head}px`);
     this.root.style.setProperty('--inner', `${inner}px`);
@@ -462,9 +461,9 @@ export class TableView {
     }
 
     const n = p.piles.length;
-    const bw = bankWidth(r.w);
+    const bw = Math.min(bankWidth(r.w), 1 + BANK_STEP * Math.max(p.bank.length - 1, 0));
     const cw = Math.min(r.card, (r.w - 3 * g.inner) / (bw + 1 + PILE_SHOW * Math.max(n - 1, 0)));
-    const m = { cw, ch: cw * RATIO, x0: r.x + g.inner, top: r.y + g.head, areaH: r.card * RATIO * g.stackH, bankW: cw * bw };
+    const m = { cw, ch: cw * RATIO, x0: r.x + g.inner, top: r.y + g.head, areaH: r.area, bankW: cw * bw };
     m.propsX0 = m.x0 + m.bankW + g.inner;
     m.propsX1 = r.x + r.w - g.inner;
     // Dashed outlines mark an empty bank or property area.
@@ -522,7 +521,7 @@ export class TableView {
   layoutBank(p, m) {
     const cards = p.bank.slice().sort((a, b) => b.value - a.value || a.id - b.id);
     const n = cards.length;
-    const step = n > 1 ? Math.min(m.cw * 0.3, (m.bankW - m.cw) / (n - 1)) : 0;
+    const step = n > 1 ? Math.min(m.cw * BANK_STEP, (m.bankW - m.cw) / (n - 1)) : 0;
     cards.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'bank', playerId: p.id };
