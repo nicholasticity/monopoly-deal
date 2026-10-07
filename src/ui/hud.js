@@ -73,7 +73,7 @@ export class Hud {
 
   // ---------- online extras ----------
 
-  // Screen space (CSS px) the HUD covers, for the 3D view to keep clear: the top bar,
+  // Screen space (CSS px) the HUD covers, for the table view to keep clear: the top bar,
   // and either the turn controls beside the hand or (portrait) the status row above it.
   insets() {
     const portrait = PORTRAIT.matches;
@@ -412,7 +412,7 @@ export class Hud {
       this.closeAll();
       const body = el('div', 'start');
       body.innerHTML = `
-        <div class="start-logo"><span class="logo">MONOPOLY</span><span class="deal">DEAL</span><span class="three">3D</span></div>
+        <div class="start-logo"><span class="logo">MONOPOLY</span><span class="deal">DEAL</span></div>
         <p class="tagline">Collect three full property sets of different colours to win.</p>
         <p class="note warn" id="opt-notice"></p>
         <div class="seg mode" id="opt-mode"><button data-v="solo">🤖 Vs computer</button><button data-v="online">🌐 Online with friends</button></div>

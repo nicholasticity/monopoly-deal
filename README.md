@@ -1,7 +1,7 @@
-# Monopoly Deal 3D
+# Monopoly Deal
 
-A browser version of the Monopoly Deal card game built with [Three.js](https://threejs.org/).
-Play against 1–4 computer opponents on a 3D card table, or **online with friends**: create a
+A browser version of the Monopoly Deal card game, in plain JavaScript with no frameworks.
+Play against 1–4 computer opponents on a 2D card table, or **online with friends**: create a
 room, send the invite link, and play in your browsers (2–5 players, bots fill empty seats).
 
 ## Running
@@ -132,10 +132,9 @@ src/
     rules.js     set sizes, rent, payments, validation
     engine.js    async turn loop; asks controllers for every decision
     ai.js        computer opponents
-  render/    Three.js
-    view.js      scene, camera, card animation and layout
+  render/    the table (DOM + CSS)
+    view.js      player panels, card layout and animation
     textures.js  card faces drawn on canvas
-    table.js     table, felt and lighting
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions
@@ -164,5 +163,5 @@ Online, the server runs that same engine. A human seat's controller forwards eac
 to that player's browser as a `request` and waits for the `response`, falling back to the AI
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
-can't peek. The client applies snapshots to a mirror game that the existing 3D view and
+can't peek. The client applies snapshots to a mirror game that the existing table view and
 HUD read from, and answers requests with the same `HumanController` used for solo play.

@@ -480,12 +480,27 @@ export function cardCanvas(card) {
   return canvas;
 }
 
+// An image URL for a card face (null: the back), ready straight away.
 export function cardImageURL(card) {
   const key = card ? card.key : 'back';
   let url = urlCache.get(key);
   if (!url) {
     url = cardCanvas(card).toDataURL('image/png');
     urlCache.set(key, url);
+  }
+  return url;
+}
+
+// The same, encoded off the main thread: the table loads faces this way so a deal
+// doesn't stall while dozens of cards are drawn.
+const blobCache = new Map();
+export function loadCardImage(card) {
+  const key = card ? card.key : 'back';
+  let url = blobCache.get(key);
+  if (!url) {
+    const canvas = cardCanvas(card);
+    url = new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : cardImageURL(card)), 'image/png'));
+    blobCache.set(key, url);
   }
   return url;
 }

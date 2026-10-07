@@ -55,8 +55,177 @@ kbd {
 }
 
 #stage { position: fixed; inset: 0; }
-#stage canvas { display: block; touch-action: none; }
-.label-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
+
+/* ---------- table ---------- */
+/* Everything is placed by src/render/view.js: panels and spots in px, cards by
+   transform from a 200x280 element. */
+.board {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: manipulation;
+  background: radial-gradient(ellipse at 50% 38%, #2b3c34 0%, #18221d 55%, #0b0f0d 100%);
+}
+.panel-layer, .card-layer { position: absolute; inset: 0; pointer-events: none; }
+.board.snap *, .board.snap .flip { transition: none !important; }
+
+.seat-panel {
+  position: absolute;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+}
+.seat-panel.me { background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)); }
+.seat-panel.active { border-color: rgba(255, 215, 94, 0.75); box-shadow: 0 0 0 1px rgba(255, 215, 94, 0.3), 0 0 28px rgba(255, 215, 94, 0.2); }
+.seat-panel.winner { border-color: var(--gold); background: linear-gradient(180deg, rgba(255, 215, 94, 0.2), rgba(255, 215, 94, 0.05)); }
+.seat-head {
+  height: var(--head);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--inner);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--head) * 0.66);
+  height: calc(var(--head) * 0.66);
+  border-radius: 50%;
+  background: var(--c);
+  color: #15120a;
+  font-size: 0.78em;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+.seat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.seat-panel.active .seat-name, .seat-panel.winner .seat-name { color: var(--gold); }
+.seat-head .tag { margin-right: 4px; }
+.you {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chips { display: flex; flex: none; gap: 6px; margin-left: auto; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+.chip.money { color: #9ee6a8; font-weight: 700; }
+.chip.sets { gap: 3px; }
+.chip.sets i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+.chip.sets i.on { background: var(--gold); box-shadow: 0 0 6px rgba(255, 215, 94, 0.7); }
+.mini-card {
+  width: 8px;
+  height: 11px;
+  border-radius: 2px;
+  background: linear-gradient(160deg, #e04848, #9e1b1b);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+/* Dashed outlines that mark an empty bank or property area. */
+.area {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.area.empty { opacity: 1; }
+.board.small .seat-head { gap: 6px; font-size: 0.74rem; }
+.board.small .chip { padding: 1px 6px; font-size: 0.7rem; }
+.board.small .chips { gap: 4px; }
+.seat-panel.compact .seat-head { gap: 5px; }
+.seat-panel.compact .chips { gap: 3px; }
+.seat-panel.compact .chip { padding: 1px 4px; }
+.seat-panel.compact .you { display: none; }
+
+.spot { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.14); border-radius: 9px; }
+.spot-label { position: absolute; color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+.hand-tray {
+  position: absolute;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35);
+  transition: left 0.45s, width 0.45s, border-color 0.3s;
+}
+.board.my-turn .hand-tray { border-color: rgba(255, 215, 94, 0.4); }
+
+.card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 280px;
+  pointer-events: none;
+  transition: transform 0.45s cubic-bezier(0.2, 0.75, 0.25, 1), opacity 0.35s;
+}
+.card.live { pointer-events: auto; cursor: pointer; }
+.card.gone { opacity: 0; }
+/* No perspective: turning over looks like a flat card flipping. */
+.flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 0.45s; }
+.card.down .flip { transform: rotateY(180deg); }
+.face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 15px;
+  background: #fdfcf7;
+  backface-visibility: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35), 0 6px 16px rgba(0, 0, 0, 0.25);
+  transition: box-shadow 0.25s;
+}
+.face.back { transform: rotateY(180deg); }
+.card.flying .face { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.card.hover .face { box-shadow: 0 0 0 4px var(--gold), 0 14px 34px rgba(0, 0, 0, 0.5); }
+/* A raised hand card still counts as hovered where it used to be, so it doesn't
+   drop back as soon as it lifts out from under the pointer. */
+.card.hover::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 32%; }
+.set-ring {
+  position: absolute;
+  border: 2px solid var(--gold);
+  border-radius: 11px;
+  box-shadow: 0 0 16px rgba(255, 215, 94, 0.55), inset 0 0 10px rgba(255, 215, 94, 0.25);
+  pointer-events: none;
+  transition: left 0.45s, top 0.45s, width 0.45s, height 0.45s, opacity 0.3s;
+  animation: ring-in 0.4s ease-out;
+}
+.set-ring.out { opacity: 0; }
+@keyframes ring-in { from { opacity: 0; transform: scale(1.12); } }
+/* Behind cards being played, in front of the rest of the table. */
+.show-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 850;
+  background: rgba(4, 7, 6, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.show-dim.on { opacity: 1; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
@@ -194,40 +363,6 @@ kbd {
 }
 #hint.show { opacity: 1; }
 
-/* ---------- 3D labels ---------- */
-.plabel {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0 10px;
-  align-items: center;
-  padding: 5px 12px;
-  border-radius: 16px;
-  background: rgba(10, 14, 12, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  font-size: 0.85rem;
-  white-space: nowrap;
-  transition: box-shadow 0.2s, border-color 0.2s;
-}
-.plabel b { font-size: 0.92rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.plabel .stats { display: flex; gap: 10px; }
-.plabel.row { flex-wrap: nowrap; }
-.plabel.row b { min-width: 0; }
-.plabel.row .stats { flex-shrink: 0; }
-.plabel.compact { padding: 4px 8px; font-size: 0.76rem; }
-.plabel.compact b { font-size: 0.8rem; }
-.plabel.compact .stats { gap: 7px; }
-.plabel.active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255, 215, 94, 0.35), 0 0 22px rgba(255, 215, 94, 0.45); }
-.plabel.active b { color: var(--gold); }
-.plabel.winner { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #2a1d00; }
-.plabel.winner b { color: #2a1d00; }
-.pile-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.75);
-  text-shadow: 0 1px 3px #000;
-  padding-top: 4px;
-}
-
 /* ---------- popup menu ---------- */
 #popup-layer, #modal-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 #popup-layer > *, #modal-layer > * { pointer-events: auto; }
@@ -331,7 +466,6 @@ body:has(.peek-back:not(.hidden)) #status { visibility: hidden; }
 .start-logo { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 6px 0 2px; transform: rotate(-4deg); }
 .start-logo .logo { font-size: 1.9rem; padding: 6px 16px; border-width: 3px; }
 .start-logo .deal { font-size: 2.4rem; font-weight: 900; }
-.start-logo .three { font-size: 1rem; font-weight: 900; background: var(--gold); color: #2a1d00; padding: 2px 8px; border-radius: 6px; align-self: flex-start; }
 .tagline { margin: 0; color: var(--muted); }
 .start label { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .start input {
@@ -371,7 +505,6 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   font-weight: 800;
   line-height: 1.2;
 }
-.plabel .tag { margin-right: 5px; }
 .clock { margin-left: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .clock.low { color: #ff8c75; font-weight: 700; }
 
@@ -545,13 +678,6 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   #toasts { top: 62px; }
   .toast { padding: 7px 14px; font-size: 0.9rem; max-width: 92vw; }
   .toast.no, .toast.turn { font-size: 1rem; }
-  .plabel { font-size: 0.72rem; padding: 3px 8px; gap: 0 8px; }
-  .plabel b { font-size: 0.78rem; }
-  .plabel .stats { gap: 7px; }
-  .plabel.compact { padding: 2px 6px; font-size: 0.66rem; }
-  .plabel.compact b { font-size: 0.7rem; }
-  .plabel.compact .stats { gap: 5px; }
-  .pile-label { font-size: 0.66rem; }
   #turn-controls { right: 10px; bottom: 10px; gap: 10px; padding: 6px 8px 6px 12px; }
   .plays-text, #btn-end kbd { display: none; }
   #hint { right: 12px; bottom: 64px; font-size: 0.8rem; }
@@ -559,7 +685,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 
 /* Phones and other tall screens: the status and End turn button move down to a row
-   just above the hand (--hand-h is set by the 3D view). Keep in sync with hud.js. */
+   just above the hand (--hand-h is set by the table view). Keep in sync with hud.js. */
 @media (max-aspect-ratio: 1/1), (max-width: 640px) {
   #status {
     position: fixed;
