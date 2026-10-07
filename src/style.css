@@ -207,17 +207,6 @@ kbd {
 
 .spot { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.14); border-radius: 9px; }
 .spot-label { position: absolute; color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
-/* On tall screens a count sits on each pile. */
-.board.bars .spot-label {
-  z-index: 350;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
-  font-size: 0.64rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
 .hand-tray {
   position: absolute;
   border-radius: 16px;
@@ -314,6 +303,28 @@ kbd {
 #status:empty { visibility: hidden; }
 #status b { color: var(--gold); }
 .top-actions { display: flex; gap: 8px; }
+/* Deck and discard counts: the piles themselves on tall screens (see the portrait rules),
+   where view.js sends cards into and out of the little cards. Hidden until a game is on. */
+#piles { display: none; flex: none; gap: 5px; margin-right: auto; }
+/* When the buttons leave no room for them, the logo gives way: first DEAL, then MONOPOLY. */
+#topbar.tight .deal, #topbar.tighter .brand { display: none; }
+.pile-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.pile-dot i { width: 8px; height: 11px; border-radius: 2px; }
+#pile-deck i { background: linear-gradient(160deg, #e04848, #9e1b1b); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55); }
+#pile-discard i { background: #f3eee0; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); transform: rotate(-10deg); }
+.pile-dot b { min-width: 2ch; }
 .top-actions .ico { display: none; }
 
 /* ---------- log ---------- */
@@ -843,6 +854,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
     padding: 6px 14px;
   }
   .peek-back { top: auto; bottom: calc(var(--hand-h, 110px) + 8px); }
+  #piles:not(.idle) { display: flex; }
   #hud.my-turn #status { left: 8px; transform: none; max-width: calc(100vw - 150px); }
   #turn-controls {
     right: 8px;

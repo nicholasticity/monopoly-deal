@@ -151,7 +151,7 @@ The **Log** button shows everything that has happened.
 
 On a phone held upright every table stays in view, one per row: each player's name, money,
 sets and hand size sit in a bar down the left of their cards, and the deck and discard pile
-sit beside your own table.
+shrink to two counts in the top bar, where cards are drawn from and discarded to.
 
 ## Code layout
 

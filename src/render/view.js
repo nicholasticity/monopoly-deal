@@ -126,7 +126,7 @@ export class TableView {
     this.hoverId = null;
     this.layoutKey = null;
     this.snapping = false;
-    this.handlers = { hover: () => {}, click: () => {}, moves: () => {} };
+    this.handlers = { hover: () => {}, click: () => {}, moves: () => {}, piles: () => {} };
     // Screen space (CSS px) the HUD covers; main.js hooks this up to the HUD.
     this.insets = () => ({ top: 0, bottom: 0, right: 320, portrait: false });
 
@@ -160,6 +160,8 @@ export class TableView {
     this.rings.clear();
     this.seat = Math.max(0, game.state.players.findIndex((p) => p.isHuman));
     this.buildPanels(game);
+    // Show the HUD's pile counts first: on tall screens the piles are placed on them.
+    this.handlers.piles(game.state.deck.length, game.state.discard.length);
     this.size = null;
     this.resize();
   }
@@ -243,7 +245,7 @@ export class TableView {
 
   // Works out where everything goes on this screen: opponents' panels across the top
   // (one per row on tall screens), the local player's panel above the hand
-  // tray, and the deck and discard beside the hand (wide) or beside that panel (tall).
+  // tray, and the deck and discard beside the hand (wide) or in the top bar (tall).
   fit() {
     const { w, h } = this.size;
     const ins = this.inset;
@@ -273,9 +275,7 @@ export class TableView {
     const cols = portrait ? 1 : k;
     const rows = Math.ceil(k / cols);
     const colW = (W - (cols - 1) * gap) / cols;
-    const dw = portrait ? clamp(w * 0.11, 34, 56) : hw * 0.78;
-    // On tall screens the deck and discard sit side by side at the right of your panel.
-    const myW = portrait ? W - 2 * dw - 2 * gap : W;
+    const dw = hw * 0.78;
 
     // Card heights: what's left after the headers, shared out evenly between the
     // tables, within limits. Cards are never taller than ROOM_FOR piles across their
@@ -285,7 +285,7 @@ export class TableView {
     const max = TABLE_MAX[small ? 0 : 1] * RATIO;
     const s = stackHeight(STACK);
     let och = Math.min(max, fitsAcross(colW), avail / ((rows + 1) * s));
-    const mch = Math.min(max, fitsAcross(myW), avail / s - rows * och);
+    const mch = Math.min(max, fitsAcross(W), avail / s - rows * och);
     och = Math.min(max, fitsAcross(colW), (avail / s - mch) / rows);
     // Height to spare lets taller piles spread out.
     const spare = Math.max(0, avail - (rows * och + mch) * s) / (rows + 1);
@@ -294,17 +294,17 @@ export class TableView {
     // Every opponent's panel is the same size.
     const oppH = lead + inner + area(och);
     const meH = lead + inner + area(mch);
-    const panels = [{ x: pad, y: bottom - meH, w: myW, h: meH, card: mch / RATIO, area: area(mch) }];
+    const panels = [{ x: pad, y: bottom - meH, w: W, h: meH, card: mch / RATIO, area: area(mch) }];
     for (let i = 0; i < k; i++) {
       panels.push({ x: pad + (i % cols) * (colW + gap), y: top + Math.floor(i / cols) * (oppH + gap), w: colW, h: oppH, card: och / RATIO, area: area(och) });
     }
 
+    // On tall screens the piles are just counts in the HUD's top bar (ins.piles):
+    // cards come out of and go into those.
+    const dots = !!(portrait && ins.piles);
     let deck, discard;
-    if (portrait) {
-      const pw = Math.min(dw, (meH - 2 * inner) / RATIO);
-      const y = panels[0].y + meH / 2;
-      deck = { x: pad + myW + gap + dw / 2, y, w: pw };
-      discard = { x: w - pad - dw / 2, y, w: pw };
+    if (dots) {
+      ({ deck, discard } = ins.piles);
     } else {
       const y = trayTop + (trayH - 18) / 2;
       deck = { x: pad + dw / 2, y, w: dw };
@@ -314,7 +314,7 @@ export class TableView {
       hand.x1 = w - pad - ins.right;
     }
     const show = { y: (top + bottom) / 2, w: Math.min((0.3 * h) / RATIO, w * 0.42, 210) };
-    this.geo = { portrait, head, side, lead, inner, panels, deck, discard, hand, show };
+    this.geo = { portrait, head, side, lead, inner, panels, dots, deck, discard, hand, show };
     this.layoutKey = `${portrait ? 'tall' : 'wide'}:${n}:${cols}`;
     this.root.style.setProperty('--head', `${head}px`);
     this.root.style.setProperty('--inner', `${inner}px`);
@@ -412,13 +412,13 @@ export class TableView {
   }
 
   layoutDeck(state) {
-    const { deck, discard } = this.geo;
+    const { deck, discard, dots } = this.geo;
     state.deck.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'deck' };
       // The bottom cards step up a little, so the deck has some thickness.
-      const lift = Math.min(i, 24) * 0.22;
-      this.place(obj, deck.x - lift * 0.4, deck.y - lift, deck.w, { up: false, z: 10 + i });
+      const lift = dots ? 0 : Math.min(i, 24) * 0.22;
+      this.place(obj, deck.x - lift * 0.4, deck.y - lift, deck.w, { up: false, gone: dots, z: 10 + i });
     });
     state.discard.forEach((card, i) => {
       const obj = this.objFor(card);
@@ -426,25 +426,21 @@ export class TableView {
       const jitter = 0.1 * discard.w;
       const x = discard.x + (hash(card.id + 7) - 0.5) * jitter;
       const y = discard.y + (hash(card.id + 3) - 0.5) * jitter;
-      this.place(obj, x, y, discard.w, { rot: (hash(card.id) - 0.5) * 24, z: 200 + i });
+      this.place(obj, x, y, discard.w, { rot: (hash(card.id) - 0.5) * 24, gone: dots, z: 200 + i });
     });
-    // Labels go under the piles beside the hand; on tall screens a count sits on each.
+    this.handlers.piles(state.deck.length, state.discard.length);
+    // Outlines and labels under the piles beside the hand.
     for (const [kind, spot, count] of [['deck', deck, state.deck.length], ['discard', discard, state.discard.length]]) {
       const { spot: el, label } = this.spots[kind];
+      el.classList.toggle('hidden', dots);
+      label.classList.toggle('hidden', dots);
+      if (dots) continue;
       const ch = spot.w * RATIO;
       setBox(el, { x: spot.x - spot.w / 2, y: spot.y - ch / 2, w: spot.w, h: ch });
-      label.title = kind === 'deck' ? 'Deck' : 'Discard pile';
-      if (this.geo.portrait) {
-        label.textContent = `${count}`;
-        label.style.left = `${r1(spot.x)}px`;
-        label.style.top = `${r1(spot.y + ch / 2 - 2)}px`;
-        label.style.transform = 'translate(-50%, -100%)';
-      } else {
-        label.textContent = `${kind === 'deck' ? 'Deck' : 'Discard'} · ${count}`;
-        label.style.left = `${r1(spot.x)}px`;
-        label.style.top = `${r1(spot.y + ch / 2 + 4)}px`;
-        label.style.transform = 'translateX(-50%)';
-      }
+      label.textContent = `${kind === 'deck' ? 'Deck' : 'Discard'} · ${count}`;
+      label.style.left = `${r1(spot.x)}px`;
+      label.style.top = `${r1(spot.y + ch / 2 + 4)}px`;
+      label.style.transform = 'translateX(-50%)';
     }
   }
 

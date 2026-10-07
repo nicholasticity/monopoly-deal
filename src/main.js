@@ -22,9 +22,10 @@ const activeHuman = () => (online ? online.human : human);
 // The table fits around the HUD, so refit whenever the top bar or status changes size.
 view.insets = () => hud.insets();
 const refit = new ResizeObserver(() => view.resize());
-for (const id of ['topbar', 'status', 'turn-controls']) refit.observe(document.getElementById(id));
+for (const sel of ['#topbar', '#status', '#turn-controls', '#piles', '.top-actions']) refit.observe(document.querySelector(sel));
 view.on('hover', (card, zone, side) => hud.preview(card, zone, side));
 view.on('moves', cueMoves);
+view.on('piles', (deck, discard) => hud.setPiles(deck, discard));
 view.on('click', (card, zone, x, y) => activeHuman()?.onCardClick(card, zone, x, y));
 hud.onEndTurn = () => activeHuman()?.endTurn();
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());

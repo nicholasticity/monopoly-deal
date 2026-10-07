@@ -28,6 +28,8 @@ export class Hud {
   constructor() {
     this.hudEl = $('#hud');
     this.topbarEl = $('#topbar');
+    this.pilesEl = $('#piles');
+    this.piles = { deck: $('#pile-deck'), discard: $('#pile-discard') };
     this.logEl = $('#log');
     this.statusEl = $('#status');
     this.toastsEl = $('#toasts');
@@ -81,9 +83,16 @@ export class Hud {
 
   // Screen space (CSS px) the HUD covers, for the table view to keep clear: the top bar,
   // and either the turn controls beside the hand or (portrait) the status row above it.
+  // In portrait the deck and discard live in the top bar: where their little cards are.
   insets() {
+    this.fitTopbar();
     const portrait = PORTRAIT.matches;
+    const spot = (pile) => {
+      const r = pile.querySelector('i').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
+    };
     return {
+      piles: portrait ? { deck: spot(this.piles.deck), discard: spot(this.piles.discard) } : null,
       portrait,
       top: this.topbarEl.getBoundingClientRect().bottom,
       bottom: portrait ? Math.max(this.statusEl.offsetHeight, this.controlsEl.offsetHeight) + 12 : 0,
@@ -221,6 +230,23 @@ export class Hud {
     while (this.toastsEl.childElementCount > 3) this.toastsEl.firstChild.remove();
     setTimeout(() => t.classList.add('out'), ms);
     setTimeout(() => t.remove(), ms + 500);
+  }
+
+  // The top bar also holds the pile counts in portrait: when the buttons leave no room,
+  // the logo gives way (first DEAL, then MONOPOLY).
+  fitTopbar() {
+    const bar = this.topbarEl;
+    bar.classList.remove('tight', 'tighter');
+    for (const cls of ['tight', 'tighter']) if (bar.scrollWidth > bar.clientWidth) bar.classList.add(cls);
+  }
+
+  // Cards left in the deck and on the discard pile (shown in the top bar in portrait).
+  setPiles(deck, discard) {
+    this.pilesEl.classList.remove('idle');
+    for (const [pile, n] of [[this.piles.deck, deck], [this.piles.discard, discard]]) {
+      const b = pile.querySelector('b');
+      if (b.textContent !== String(n)) b.textContent = n;
+    }
   }
 
   setStatus(html) {
