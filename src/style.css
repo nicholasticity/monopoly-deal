@@ -160,58 +160,55 @@ kbd {
 .seat-panel.compact .chips { gap: 3px; }
 .seat-panel.compact .chip { padding: 1px 4px; }
 .seat-panel.compact .you { display: none; }
-
-/* Phones: a tab per opponent (name over money, sets and cards in hand); the picked
-   one's table shows below the tabs, without a header. Padding matches TAB_PAD in view.js. */
-.seat-tab {
+/* Tall screens: the header is a bar down the panel's left side, avatar at the top
+   (view.js aims opponents' cards at it), name below and the counts at the bottom. */
+.board.bars .seat-head {
   position: absolute;
-  display: flex;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--side);
+  height: auto;
   flex-direction: column;
-  justify-content: center;
   gap: 3px;
-  padding: 0 6px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.76rem;
-  white-space: nowrap;
-  pointer-events: auto;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+  padding: 7px 3px 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px 0 0 13px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 0.66rem;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
 }
-.seat-tab[hidden] { display: none; }
-.seat-tab.sel { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.24); }
-/* A bar in the player's colour joins the picked tab to the table below. */
-.seat-tab.sel::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: var(--c);
+.board.bars .seat-panel.active .seat-head { background: rgba(255, 215, 94, 0.1); }
+.board.bars .avatar { width: 20px; height: 20px; font-size: 0.7rem; }
+.board.bars .seat-name {
+  display: -webkit-box;
+  max-width: 100%;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
-.seat-tab.active { border-color: rgba(255, 215, 94, 0.75); box-shadow: 0 0 0 1px rgba(255, 215, 94, 0.3), 0 0 16px rgba(255, 215, 94, 0.2); }
-.seat-tab.winner { border-color: var(--gold); background: rgba(255, 215, 94, 0.16); }
-.seat-tab.active .seat-name, .seat-tab.winner .seat-name { color: var(--gold); }
-.tab-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.seat-tab .avatar { width: 18px; height: 18px; font-size: 0.7rem; }
-.board .seat-tab .chips { flex-wrap: wrap; gap: 1px 6px; margin-left: 0; }
-.board .seat-tab .chip { padding: 0; background: none; font-size: 0.7rem; }
-.seat-tab .chip.sets { order: 1; }
-.seat-tab .chip.sets i { width: 6px; height: 6px; }
-.seat-tab.narrow { padding: 0 4px; font-size: 0.7rem; }
-.seat-tab.narrow .tab-name { gap: 3px; }
-.seat-tab.narrow .avatar { width: 16px; height: 16px; }
-.board .seat-tab.narrow .chips { gap: 1px 4px; }
-.board .seat-tab.narrow .chip { gap: 3px; font-size: 0.66rem; }
-.seat-panel.tabbed { border-top-color: var(--c); }
-.seat-panel.tabbed .seat-head { display: none; }
-.seat-panel.off { visibility: hidden; }
-/* By the tabs, the deck and discard counts sit on the piles. */
-.board.tabbed .spot-label {
+.board.bars .seat-panel.short .seat-head { gap: 1px; padding: 4px 3px; }
+.board.bars .seat-panel.short .avatar { width: 16px; height: 16px; font-size: 0.62rem; }
+.board.bars .seat-panel.short .seat-name { -webkit-line-clamp: 1; }
+.board.bars .seat-panel.short .chips { row-gap: 1px; }
+.board.bars .seat-panel.short .mic { top: 5px; right: 4px; }
+.board.bars .seat-head .tag { margin-right: 2px; }
+.board.bars .mic { position: absolute; top: 9px; right: 5px; }
+.board.bars .you { display: none; }
+.board.bars .chips { flex-wrap: wrap; justify-content: center; gap: 3px 5px; margin: auto 0 0; }
+.board.bars .chip { padding: 0; background: none; font-size: 0.66rem; }
+.board.bars .chip.sets { gap: 2px; }
+.board.bars .chip.sets i { width: 6px; height: 6px; }
+.board.bars .mini-card { width: 7px; height: 10px; }
+.board.bars .chip.money { flex-basis: 100%; justify-content: center; padding: 1px 0; border-radius: 6px; background: rgba(0, 0, 0, 0.3); }
+
+.spot { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.14); border-radius: 9px; }
+.spot-label { position: absolute; color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+/* On tall screens a count sits on each pile. */
+.board.bars .spot-label {
   z-index: 350;
   padding: 0 5px;
   border-radius: 999px;
@@ -221,9 +218,6 @@ kbd {
   font-weight: 700;
   line-height: 1.4;
 }
-
-.spot { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.14); border-radius: 9px; }
-.spot-label { position: absolute; color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
 .hand-tray {
   position: absolute;
   border-radius: 16px;
@@ -636,7 +630,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   color: #ff8c75;
 }
 .talking .mic { color: #5fd68a; }
-.seat-panel.talking .avatar, .seat-tab.talking .avatar { box-shadow: 0 0 0 2px #5fd68a, 0 0 12px rgba(95, 214, 138, 0.85); }
+.seat-panel.talking .avatar { box-shadow: 0 0 0 2px #5fd68a, 0 0 12px rgba(95, 214, 138, 0.85); }
 .seat.talking { border-color: rgba(95, 214, 138, 0.8); box-shadow: 0 0 10px rgba(95, 214, 138, 0.3); }
 #btn-voice, .voice-btn { position: relative; transition: box-shadow 0.15s, border-color 0.15s; }
 #btn-voice.on, .voice-btn.on { background: rgba(255, 215, 94, 0.18); border-color: rgba(255, 215, 94, 0.5); }
