@@ -18,7 +18,11 @@ html, body {
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 30%, #33473d 0%, #141c18 60%, #070a09 100%);
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
+button, .pick-tile { touch-action: manipulation; }
 
 button {
   font: inherit;
@@ -51,7 +55,7 @@ kbd {
 }
 
 #stage { position: fixed; inset: 0; }
-#stage canvas { display: block; }
+#stage canvas { display: block; touch-action: none; }
 .label-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
@@ -86,6 +90,7 @@ kbd {
 #status:empty { visibility: hidden; }
 #status b { color: var(--gold); }
 .top-actions { display: flex; gap: 8px; }
+.top-actions .ico { display: none; }
 
 /* ---------- log ---------- */
 #log {
@@ -206,6 +211,9 @@ kbd {
 }
 .plabel b { font-size: 0.92rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .plabel .stats { display: flex; gap: 10px; }
+.plabel.row { flex-wrap: nowrap; }
+.plabel.row b { min-width: 0; }
+.plabel.row .stats { flex-shrink: 0; }
 .plabel.compact { padding: 4px 8px; font-size: 0.76rem; }
 .plabel.compact b { font-size: 0.8rem; }
 .plabel.compact .stats { gap: 7px; }
@@ -297,7 +305,7 @@ kbd {
 .pick-groups { display: flex; flex-wrap: wrap; gap: 14px 20px; margin: 10px 0 14px; }
 .pick-group { display: flex; flex-direction: column; gap: 0; }
 .pick-label { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
-.pick-row { display: flex; gap: 8px; padding-top: 8px; }
+.pick-row { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
 .pick-tile { position: relative; cursor: pointer; border-radius: 10px; transition: transform 0.12s, box-shadow 0.12s; }
 .pick-tile:hover { transform: translateY(-4px); }
 .pick-tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--gold), 0 0 18px rgba(255, 215, 94, 0.6); }
@@ -505,4 +513,115 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   .lobby-cols { grid-template-columns: 1fr; }
   .chat-slot { height: 220px; }
   #chat-dock, #chat-pops { width: min(320px, calc(100vw - 24px)); }
+}
+
+/* ---------- small screens ---------- */
+/* Narrow or short windows: icon buttons and a slimmer top bar. */
+@media (max-width: 900px), (max-height: 540px) {
+  #topbar { padding: 6px 8px; gap: 8px; }
+  .logo { font-size: 0.72rem; padding: 2px 6px; }
+  .deal { font-size: 0.9rem; }
+  #status { font-size: 0.86rem; padding: 5px 12px; min-width: 0; }
+  .top-actions { gap: 5px; }
+  .top-actions button { padding: 6px 8px; line-height: 1.2; }
+  .top-actions .ico { display: inline; }
+  .top-actions .txt { display: none; }
+  .badge { top: -5px; right: -5px; min-width: 16px; font-size: 0.62rem; }
+  #log, #chat-dock, #chat-pops { top: 50px; }
+  #log { max-height: 50vh; }
+  #banner { top: 50px; }
+  #toasts { top: 62px; }
+  .toast { padding: 7px 14px; font-size: 0.9rem; max-width: 92vw; }
+  .toast.no, .toast.turn { font-size: 1rem; }
+  .plabel { font-size: 0.72rem; padding: 3px 8px; gap: 0 8px; }
+  .plabel b { font-size: 0.78rem; }
+  .plabel .stats { gap: 7px; }
+  .plabel.compact { padding: 2px 6px; font-size: 0.66rem; }
+  .plabel.compact b { font-size: 0.7rem; }
+  .plabel.compact .stats { gap: 5px; }
+  .pile-label { font-size: 0.66rem; }
+  #turn-controls { right: 10px; bottom: 10px; gap: 10px; padding: 6px 8px 6px 12px; }
+  .plays-text, #btn-end kbd { display: none; }
+  #hint { right: 12px; bottom: 64px; font-size: 0.8rem; }
+  #preview { width: min(200px, 24vw); }
+}
+
+/* Phones and other tall screens: the status and End turn button move down to a row
+   just above the hand (--hand-h is set by the 3D view). Keep in sync with hud.js. */
+@media (max-aspect-ratio: 1/1), (max-width: 640px) {
+  #status {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--hand-h, 110px) + 8px);
+    transform: translateX(-50%);
+    max-width: calc(100vw - 16px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85rem;
+    padding: 6px 14px;
+  }
+  #hud.my-turn #status { left: 8px; transform: none; max-width: calc(100vw - 150px); }
+  #turn-controls {
+    right: 8px;
+    bottom: calc(var(--hand-h, 110px) + 8px);
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+  }
+  #turn-controls.show { opacity: 1; visibility: visible; }
+  #plays, #hint { display: none; }
+  #btn-end { padding: 7px 16px; }
+  #preview, #preview.left {
+    left: 50%;
+    right: auto;
+    top: 54px;
+    width: min(46vw, 200px);
+    width: min(46vw, 200px, calc((100dvh - var(--hand-h, 110px) - 120px) / 1.4));
+    transform: translate(-50%, -10px);
+  }
+  #preview.low { top: auto; bottom: calc(var(--hand-h, 110px) + 52px); transform: translate(-50%, 10px); }
+  #preview.show { transform: translate(-50%, 0); }
+  #log { left: 8px; right: 8px; width: auto; }
+  #chat-dock { left: 8px; right: 8px; width: auto; height: min(380px, 50vh); }
+  #chat-pops { right: 8px; width: min(300px, calc(100vw - 16px)); }
+  #banner {
+    max-width: calc(100vw - 16px);
+    width: max-content;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 14px;
+    font-size: 0.88rem;
+    padding: 6px 8px 6px 14px;
+  }
+}
+
+/* Dialogs on phones: smaller cards and padding, and room for browser toolbars. */
+@media (max-width: 640px), (max-height: 540px) {
+  .modal { padding: 14px 14px; max-height: 92vh; max-height: 92dvh; }
+  .modal h2 { font-size: 1.12rem; }
+  .modal-body { font-size: 0.92rem; }
+  .thumb { width: 66px; border-radius: 6px; }
+  .card-row .thumb { width: 84px; }
+  .pick-groups { gap: 10px 14px; margin: 6px 0 10px; }
+  /* Labels wrap to the width of their cards so small groups share a line. */
+  .pick-group { justify-content: space-between; }
+  .pick-label { width: 0; min-width: 100%; font-size: 0.74rem; line-height: 1.25; }
+  .pick-row { gap: 6px; padding-top: 6px; }
+  .pick-footer { flex-wrap: wrap; gap: 8px; }
+  .popup { max-height: 80vh; max-height: 80dvh; min-width: 200px; max-width: calc(100vw - 16px); }
+  .popup-item, .choice { padding: 10px 10px; }
+  .start { gap: 11px; }
+  .start-logo .logo { font-size: 1.5rem; }
+  .start-logo .deal { font-size: 1.9rem; }
+  .start input { width: min(200px, 52vw); }
+  .seg button { padding: 6px 11px; }
+  button.big { padding: 11px 22px; font-size: 1.05rem; }
+  .room-code { font-size: 1.6rem; }
+  .lobby-head { flex-wrap: wrap; gap: 8px; }
 }

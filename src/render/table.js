@@ -65,28 +65,10 @@ function woodTexture() {
   return tex;
 }
 
-export function buildTable(scene, renderer) {
-  const felt = new THREE.Mesh(
-    new THREE.PlaneGeometry(TABLE_W, TABLE_D),
-    new THREE.MeshStandardMaterial({ map: feltTexture(renderer), roughness: 0.95 }),
-  );
-  felt.rotation.x = -Math.PI / 2;
-  felt.position.z = TABLE_CZ;
-  felt.receiveShadow = true;
-  scene.add(felt);
-
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(TABLE_W, TABLE_D),
-    new THREE.MeshBasicMaterial({ map: vignetteTexture(), transparent: true, depthWrite: false }),
-  );
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.set(0, 0.002, TABLE_CZ);
-  scene.add(glow);
-
-  // Wooden rim: an extruded rounded frame around the felt.
-  const rim = 1.6;
+// Wooden rim: an extruded rounded frame around a w × d felt.
+function rimGeometry(w, d, rim) {
   const outer = new THREE.Shape();
-  const ow = TABLE_W / 2 + rim, od = TABLE_D / 2 + rim, r = 2.2;
+  const ow = w / 2 + rim, od = d / 2 + rim, r = 2.2;
   outer.moveTo(-ow + r, -od);
   outer.lineTo(ow - r, -od);
   outer.quadraticCurveTo(ow, -od, ow, -od + r);
@@ -97,37 +79,76 @@ export function buildTable(scene, renderer) {
   outer.lineTo(-ow, -od + r);
   outer.quadraticCurveTo(-ow, -od, -ow + r, -od);
   const hole = new THREE.Path();
-  const iw = TABLE_W / 2, id = TABLE_D / 2;
+  const iw = w / 2, id = d / 2;
   hole.moveTo(-iw, -id);
   hole.lineTo(-iw, id);
   hole.lineTo(iw, id);
   hole.lineTo(iw, -id);
   hole.lineTo(-iw, -id);
   outer.holes.push(hole);
-  const rimGeo = new THREE.ExtrudeGeometry(outer, { depth: 0.9, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 3 });
-  const rimMesh = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.55, metalness: 0.05 }));
+  return new THREE.ExtrudeGeometry(outer, { depth: 0.9, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 3 });
+}
+
+// Returns setSize(w, d, cz), which reshapes the table (felt w × d, centred on z = cz)
+// for the current layout.
+export function buildTable(scene, renderer) {
+  const feltMap = feltTexture(renderer);
+  const felt = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: feltMap, roughness: 0.95 }));
+  felt.rotation.x = -Math.PI / 2;
+  felt.receiveShadow = true;
+  scene.add(felt);
+
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: vignetteTexture(), transparent: true, depthWrite: false }),
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.002;
+  scene.add(glow);
+
+  const rim = 1.6;
+  const rimMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.55, metalness: 0.05 }));
   rimMesh.rotation.x = -Math.PI / 2;
-  rimMesh.position.set(0, -0.35, TABLE_CZ);
+  rimMesh.position.y = -0.35;
   rimMesh.castShadow = rimMesh.receiveShadow = true;
   scene.add(rimMesh);
 
-  const base = new THREE.Mesh(
-    new THREE.BoxGeometry(TABLE_W + rim * 2, 2, TABLE_D + rim * 2),
-    new THREE.MeshStandardMaterial({ color: 0x2b170a, roughness: 0.8 }),
-  );
-  base.position.set(0, -1.36, TABLE_CZ);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({ color: 0x2b170a, roughness: 0.8 }));
+  base.position.y = -1.36;
   scene.add(base);
 
   scene.add(new THREE.HemisphereLight(0xfff6e8, 0x20301f, 1.5));
   const sun = new THREE.DirectionalLight(0xffffff, 1.7);
-  sun.position.set(-10, 34, 14);
-  sun.target.position.set(0, 0, -5);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
-  sc.left = -30; sc.right = 30; sc.top = 26; sc.bottom = -26; sc.near = 5; sc.far = 80;
+  sc.near = 5;
+  sc.far = 80;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
   sun.shadow.radius = 4;
   scene.add(sun, sun.target);
+
+  let current = '';
+  const setSize = (w, d, cz) => {
+    const key = `${w}:${d}:${cz}`;
+    if (key === current) return;
+    current = key;
+    felt.scale.set(w, d, 1);
+    glow.scale.set(w, d, 1);
+    felt.position.z = glow.position.z = rimMesh.position.z = base.position.z = cz;
+    feltMap.repeat.set((6 * w) / TABLE_W, (4.5 * d) / TABLE_D);
+    rimMesh.geometry.dispose();
+    rimMesh.geometry = rimGeometry(w, d, rim);
+    base.scale.set(w + rim * 2, 1, d + rim * 2);
+    sun.position.set(-10, 34, cz + 20.5);
+    sun.target.position.set(0, 0, cz + 1.5);
+    sc.left = -(w / 2 + 5);
+    sc.right = w / 2 + 5;
+    sc.top = d / 2 + 8;
+    sc.bottom = -(d / 2 + 8);
+    sc.updateProjectionMatrix();
+  };
+  setSize(TABLE_W, TABLE_D, TABLE_CZ);
+  return { setSize };
 }

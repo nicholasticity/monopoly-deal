@@ -18,6 +18,10 @@ let settings = { mode: 'solo', name: localStorage.getItem('md-name') || '', oppo
 
 const activeHuman = () => (online ? online.human : human);
 
+// The table fits around the HUD, so refit whenever the top bar or status changes size.
+view.insets = () => hud.insets();
+const refit = new ResizeObserver(() => view.resize());
+for (const id of ['topbar', 'status', 'turn-controls']) refit.observe(document.getElementById(id));
 view.on('hover', (card, zone, side) => hud.preview(card, zone, side));
 view.on('click', (card, zone, x, y) => activeHuman()?.onCardClick(card, zone, x, y));
 hud.onEndTurn = () => activeHuman()?.endTurn();

@@ -4,6 +4,8 @@ import * as R from '../game/rules.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+// Phones and other tall screens; must match the portrait rules in style.css.
+const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -22,6 +24,8 @@ export function thumb(card, { flipped = isFlipped(card) } = {}) {
 
 export class Hud {
   constructor() {
+    this.hudEl = $('#hud');
+    this.topbarEl = $('#topbar');
     this.logEl = $('#log');
     this.statusEl = $('#status');
     this.toastsEl = $('#toasts');
@@ -65,9 +69,23 @@ export class Hud {
 
   // ---------- online extras ----------
 
+  // Screen space (CSS px) the HUD covers, for the 3D view to keep clear: the top bar,
+  // and either the turn controls beside the hand or (portrait) the status row above it.
+  insets() {
+    const portrait = PORTRAIT.matches;
+    return {
+      portrait,
+      top: this.topbarEl.getBoundingClientRect().bottom,
+      bottom: portrait ? Math.max(this.statusEl.offsetHeight, this.controlsEl.offsetHeight) + 12 : 0,
+      right: portrait ? 0 : this.controlsEl.offsetWidth + 30,
+    };
+  }
+
   setOnline(on) {
     this.online = on;
-    this.newBtn.textContent = on ? 'Leave room' : 'New game';
+    this.newBtn.title = on ? 'Leave room' : 'New game';
+    this.newBtn.querySelector('.ico').textContent = on ? '🚪' : '🔄';
+    this.newBtn.querySelector('.txt').textContent = this.newBtn.title;
     this.chatBtn.classList.toggle('hidden', !on);
     if (!on) {
       this.setChatDock(false);
@@ -182,6 +200,7 @@ export class Hud {
 
   setTurnControls(visible, playsLeft = 0, hint = '') {
     this.controlsEl.classList.toggle('show', visible);
+    this.hudEl.classList.toggle('my-turn', visible);
     this.playsEl.innerHTML = Array.from({ length: R.PLAYS_PER_TURN }, (_, i) => `<span class="pip ${i < playsLeft ? 'on' : ''}"></span>`).join('') + `<span class="plays-text">${playsLeft} play${playsLeft === 1 ? '' : 's'} left</span>`;
     this.hintEl.textContent = hint;
     this.hintEl.classList.toggle('show', visible && !!hint);
@@ -195,6 +214,7 @@ export class Hud {
     this.previewEl.innerHTML = '';
     this.previewEl.appendChild(thumb(card, { flipped: zone?.zone === 'pile' && isFlipped(card) }));
     this.previewEl.classList.toggle('left', side === 'left');
+    this.previewEl.classList.toggle('low', side === 'low');
     this.previewEl.classList.add('show');
   }
 
@@ -227,7 +247,11 @@ export class Hud {
       }
       backdrop.addEventListener('pointerdown', () => done(null));
       this.popupLayer.append(backdrop, box);
-      const r = box.getBoundingClientRect();
+      // Layout size, not getBoundingClientRect: the pop-in animation scales the box.
+      const r = { width: box.offsetWidth, height: box.offsetHeight };
+      // On phones, keep clear of the hand and the status row above it.
+      const handH = parseFloat(document.documentElement.style.getPropertyValue('--hand-h')) || 0;
+      if (PORTRAIT.matches) y = Math.min(y, window.innerHeight - handH - 56);
       box.style.left = `${Math.max(8, Math.min(x - r.width / 2, window.innerWidth - r.width - 8))}px`;
       box.style.top = `${Math.max(8, Math.min(y - r.height - 18, window.innerHeight - r.height - 8))}px`;
       this.cancelTop = () => done(null);
@@ -473,7 +497,7 @@ export class Hud {
       <ul>
         <li>Start of your turn: draw 2 cards (5 if your hand is empty).</li>
         <li>Play up to <b>3 cards</b> per turn: bank money or action cards, lay down properties, or play actions.</li>
-        <li>Click a card in your hand to see what you can do with it. Click a wild property on your table to move it to another colour (free).</li>
+        <li>Click (or tap) a card in your hand to see what you can do with it. Click a wild property on your table to move it to another colour (free).</li>
         <li>Rent: two-colour rent charges <i>everyone</i>; wild rent charges one player. Add <b>Double The Rent</b> to multiply it.</li>
         <li>Paying debts: use bank and/or properties on the table. No change is given. Cards in hand can never be used to pay.</li>
         <li><b>Sly Deal</b> and <b>Forced Deal</b> can't touch complete sets — but <b>Deal Breaker</b> can.</li>

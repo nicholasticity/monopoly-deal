@@ -3,7 +3,8 @@ import * as R from '../game/rules.js';
 import { COLORS, ACTIONS, describeCard } from '../game/cards.js';
 import { autoPayment } from '../game/ai.js';
 
-const money = (n) => `$${n}M`;
+const money = (n) => `${n}M`;
+const CLICK = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
 
 export class HumanController {
   constructor(hud) {
@@ -17,7 +18,7 @@ export class HumanController {
   chooseTurnAction(game, me) {
     return new Promise((resolve) => {
       this.pending = { game, me, resolve };
-      this.hud.setTurnControls(true, game.state.playsLeft, 'Click a card in your hand to play it.');
+      this.hud.setTurnControls(true, game.state.playsLeft, `${CLICK} a card in your hand to play it.`);
     });
   }
 
@@ -218,7 +219,7 @@ export class HumanController {
             groups.push({ label: `${o.name} · ${COLORS[pile.color].name} set · rent ${money(R.pileRent(pile))}`, items });
           }
         }
-        const pick = await this.hud.pickCards({ title: 'Deal Breaker', body: 'Click a complete set to take it — buildings included.', groups });
+        const pick = await this.hud.pickCards({ title: 'Deal Breaker', body: `${CLICK} a complete set to take it — buildings included.`, groups });
         if (pick == null) return null;
         const [targetId, pileId] = pick.split(':').map(Number);
         return { ...base, targetId, pileId };
