@@ -12,7 +12,7 @@ export const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
 // A total: a real minus, but no plus.
 export const scoreText = (n) => (n < 0 ? `−${-n}` : `${n}`);
 // A suit symbol in its colour (text style, not emoji).
-export const suitMark = (key) => `<span class="suit${SUITS[key].red ? ' red' : ''}">${SUITS[key].symbol}&#xFE0E;</span>`;
+export const suitMark = (key) => `<span class="suit ${key}">${SUITS[key].symbol}&#xFE0E;</span>`;
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -54,7 +54,7 @@ export class JudgementHuman {
       for (const key of SUIT_ORDER) {
         const suit = SUITS[key];
         const held = me.hand.filter((c) => c.suit === key).sort((a, b) => b.rank - a.rank);
-        const b = el('button', `suit-btn${suit.red ? ' red' : ''}`);
+        const b = el('button', `suit-btn ${key}`);
         b.innerHTML = `<span class="sym">${suit.symbol}&#xFE0E;</span><span class="nm">${suit.name}</span><span class="held">${held.length ? `${held.map((c) => rankLabel(c.rank)).join(' ')}` : 'none'}</span>`;
         b.addEventListener('click', () => {
           close();

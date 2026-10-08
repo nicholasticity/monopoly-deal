@@ -56,7 +56,7 @@ if (R.trickWinner([t('hearts', 5, 0), t('hearts', 14, 1), t('spades', 2, 2)], 's
 if (R.trickWinner([t('hearts', 5, 0), t('clubs', 14, 1), t('hearts', 9, 2)], 'spades').playerId !== 2) throw new Error('led suit should win');
 
 const games = Number(process.argv[2] || 200);
-const stats = { byPlayers: {}, made: 0, bids: 0, busts: 0, bidSum: 0, wins: [] };
+const stats = { byPlayers: {}, made: 0, bids: 0, busts: 0, bidSum: 0, wins: [], rounds: {}, deals: {} };
 const started = Date.now();
 for (let g = 0; g < games; g++) {
   const rng = mulberry32(g + 1);
@@ -68,6 +68,9 @@ for (let g = 0; g < games; g++) {
   let rounds = 0;
   game.on((type, data) => {
     if (type === 'state') checkCards(game);
+    // A deal counts once the den calls; bidding only starts once everyone holds a trump.
+    if (type === 'turn' && data.what === 'trump') stats.deals[n] = (stats.deals[n] || 0) + 1;
+    if (type === 'turn' && data.what === 'bid' && R.withoutTrumps(game.state.players, game.state.trump).length) throw new Error('bidding with someone out of trumps');
     if (type === 'round') {
       rounds++;
       const size = game.state.handSize;
@@ -92,8 +95,10 @@ for (let g = 0; g < games; g++) {
     if (p.history.reduce((s, h) => s + h.points, 0) !== p.score) throw new Error('score total');
   }
   stats.byPlayers[n] = (stats.byPlayers[n] || 0) + 1;
+  stats.rounds[n] = (stats.rounds[n] || 0) + rounds;
   stats.wins.push(top);
 }
 const pct = (a, b) => `${((100 * a) / b).toFixed(0)}%`;
 console.log(`games=${games} in ${((Date.now() - started) / 1000).toFixed(1)}s, by player count:`, stats.byPlayers);
+console.log('redeals per round:', Object.fromEntries(Object.keys(stats.rounds).map((k) => [k, pct(stats.deals[k] - stats.rounds[k], stats.rounds[k])])));
 console.log(`bids made ${pct(stats.made, stats.bids)}, short ${pct(stats.bids - stats.made - stats.busts, stats.bids)}, bust ${pct(stats.busts, stats.bids)}; average bid ${(stats.bidSum / stats.bids).toFixed(1)}; average winning score ${(stats.wins.reduce((a, b) => a + b, 0) / games).toFixed(0)}`);

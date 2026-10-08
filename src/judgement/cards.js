@@ -1,13 +1,15 @@
 // The standard 52-card deck for Judgement. Aces are high (rank 14).
 
+// A four-colour deck (black spades, red hearts, green clubs, blue diamonds), so no two
+// suits look alike. The colours are in textures.js and style.css, by suit name.
 export const SUITS = {
-  spades:   { name: 'Spades',   symbol: '♠', red: false },
-  hearts:   { name: 'Hearts',   symbol: '♥', red: true },
-  clubs:    { name: 'Clubs',    symbol: '♣', red: false },
-  diamonds: { name: 'Diamonds', symbol: '♦', red: true },
+  spades:   { name: 'Spades',   symbol: '♠' },
+  hearts:   { name: 'Hearts',   symbol: '♥' },
+  clubs:    { name: 'Clubs',    symbol: '♣' },
+  diamonds: { name: 'Diamonds', symbol: '♦' },
 };
 
-// Alternating colours, so neighbouring suits in a sorted hand are easy to tell apart.
+// Each suit next to differently coloured ones in a sorted hand.
 export const SUIT_ORDER = Object.keys(SUITS);
 
 const RANK_NAMES = { 11: 'Jack', 12: 'Queen', 13: 'King', 14: 'Ace' };

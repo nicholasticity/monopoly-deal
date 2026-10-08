@@ -53,6 +53,9 @@ export function sortHand(hand, trump = null) {
   return hand;
 }
 
+// The players holding no card of the trump suit; any at all means a fresh deal.
+export const withoutTrumps = (players, trump) => players.filter((p) => !p.hand.some((c) => c.suit === trump));
+
 export function topScore(players) {
   return Math.max(...players.map((p) => p.score));
 }

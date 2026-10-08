@@ -475,8 +475,9 @@ function drawBack(ctx) {
 export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back' };
 
 const SUIT_RED = '#c8102e';
-const SUIT_BLACK = '#1b1b24';
-const suitColor = (suit) => (suit === 'hearts' || suit === 'diamonds' ? SUIT_RED : SUIT_BLACK);
+// Four colours, so spades and clubs (and hearts and diamonds) are easy to tell apart.
+const SUIT_INK = { spades: '#1b1b24', hearts: SUIT_RED, clubs: '#13803a', diamonds: '#1a5fd0' };
+const suitColor = (suit) => SUIT_INK[suit];
 const RANK_TEXT = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 
 // A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
@@ -503,7 +504,7 @@ function drawSuit(ctx, suit, x, y, size, flip = false, color = suitColor(suit)) 
     ctx.quadraticCurveTo(-0.14, -0.2, 0, -0.5);
   } else if (suit === 'spades') {
     ctx.moveTo(0, -0.5);
-    ctx.bezierCurveTo(-0.15, -0.32, -0.5, -0.12, -0.5, 0.1);
+    ctx.bezierCurveTo(-0.07, -0.36, -0.5, -0.16, -0.5, 0.1);
     ctx.bezierCurveTo(-0.5, 0.3, -0.34, 0.38, -0.22, 0.38);
     ctx.bezierCurveTo(-0.12, 0.38, -0.05, 0.33, -0.03, 0.27);
     ctx.lineTo(-0.15, 0.5);
@@ -511,20 +512,20 @@ function drawSuit(ctx, suit, x, y, size, flip = false, color = suitColor(suit)) 
     ctx.lineTo(0.03, 0.27);
     ctx.bezierCurveTo(0.05, 0.33, 0.12, 0.38, 0.22, 0.38);
     ctx.bezierCurveTo(0.34, 0.38, 0.5, 0.3, 0.5, 0.1);
-    ctx.bezierCurveTo(0.5, -0.12, 0.15, -0.32, 0, -0.5);
+    ctx.bezierCurveTo(0.5, -0.16, 0.07, -0.36, 0, -0.5);
   } else {
-    for (const [cx, cy] of [[0, -0.25], [-0.25, 0.07], [0.25, 0.07]]) {
-      ctx.moveTo(cx + 0.23, cy);
-      ctx.arc(cx, cy, 0.23, 0, Math.PI * 2);
+    for (const [cx, cy] of [[0, -0.255], [-0.255, 0.08], [0.255, 0.08]]) {
+      ctx.moveTo(cx + 0.245, cy);
+      ctx.arc(cx, cy, 0.245, 0, Math.PI * 2);
     }
-    ctx.moveTo(0.12, 0);
-    ctx.arc(0, 0, 0.12, 0, Math.PI * 2);
+    ctx.moveTo(0.1, 0.02);
+    ctx.arc(0, 0.02, 0.1, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(-0.04, 0.05);
-    ctx.lineTo(-0.15, 0.5);
-    ctx.lineTo(0.15, 0.5);
-    ctx.lineTo(0.04, 0.05);
+    ctx.quadraticCurveTo(-0.04, 0.4, -0.18, 0.5);
+    ctx.lineTo(0.18, 0.5);
+    ctx.quadraticCurveTo(0.04, 0.4, 0.04, 0.05);
   }
   ctx.closePath();
   ctx.fill();
@@ -544,7 +545,7 @@ function cornerIndex(ctx, card) {
     ctx.textBaseline = 'alphabetic';
     fitFont(ctx, text, 84, 92, '800');
     ctx.fillText(text, 62, 112);
-    drawSuit(ctx, card.suit, 62, 160, 58);
+    drawSuit(ctx, card.suit, 62, 170, 74);
     ctx.restore();
   }
 }
@@ -563,9 +564,16 @@ const PIPS = {
   10: [[0, 0], [2, 0], [1, 1 / 6], [0, 1 / 3], [2, 1 / 3], [0, 2 / 3], [2, 2 / 3], [1, 5 / 6], [0, 1], [2, 1]],
 };
 
-// Court cards: a double-headed figure in the classic red, blue and gold, the robe in
-// the suit's colour. Each half is drawn upright, then the same again turned round.
+// Court cards: a double-headed figure in red, blue and gold, the robe in the suit's
+// colour (dark slate for spades). Each half is drawn upright, then the same again turned round.
 const COURT_BLUE = '#2456a6';
+// Robe and trim for each suit.
+const ROBES = {
+  spades: ['#2e3448', SUIT_RED],
+  hearts: [SUIT_RED, COURT_BLUE],
+  clubs: [SUIT_INK.clubs, SUIT_RED],
+  diamonds: [SUIT_INK.diamonds, SUIT_RED],
+};
 const COURT_GOLD = '#f2b632';
 const SKIN = '#f8d9b4';
 const INK = '#1b1b24';
@@ -814,9 +822,7 @@ function drawFigure(ctx, card, robe, trim) {
 }
 
 function drawCourt(ctx, card) {
-  const red = suitColor(card.suit) === SUIT_RED;
-  const robe = red ? SUIT_RED : COURT_BLUE;
-  const trim = red ? COURT_BLUE : SUIT_RED;
+  const [robe, trim] = ROBES[card.suit];
   const x = 106, y = 34, w = TEX_W - 212, h = TEX_H - 68;
   rr(ctx, x, y, w, h, 12);
   ctx.fillStyle = '#fbf4e2';

@@ -19,6 +19,8 @@ const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 // Log grammar for a player named "You" (the human's default name).
 const you = (p) => p.name === 'You';
 const verb = (p, third, base) => (you(p) ? base : third);
+// "A", "A and B", "A, B and C".
+const listNames = (names) => (names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 export class JudgementGame {
   constructor({ players, view = null, rng = Math.random, firstPlayer = null }) {
@@ -106,12 +108,42 @@ export class JudgementGame {
     state.winners = state.players.filter((p) => p.score === top);
     state.winner = state.winners[0];
     const names = state.winners.map((p) => p.name);
-    const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    const who = listNames(names);
     const wins = names.length === 1 ? verb(state.winner, 'wins', 'win') : 'share the win';
     this.log(`🏆 ${who} ${wins} with ${top} points!`, 'win');
     await this.sync(200);
     this.emit('gameover', { winner: state.winner, winners: state.winners });
     return state.winner;
+  }
+
+  // Shuffles every hand back into the deck and deals a fresh round: half the cards,
+  // the den's call, then the rest.
+  async dealHands(den) {
+    const { state } = this;
+    const size = state.handSize;
+    for (const p of state.players) state.deck.push(...p.hand.splice(0));
+    state.trump = null;
+    shuffle(state.deck, this.rng);
+    state.phase = 'deal';
+    await this.sync(450);
+
+    const first = R.denSees(size);
+    await this.deal(first);
+    for (const p of state.players) R.sortHand(p.hand);
+    await this.sync(250);
+
+    state.phase = 'trump';
+    this.emit('turn', { player: den, what: 'trump' });
+    const suit = await this.ask(den.controller.chooseTrump(this, den));
+    state.trump = SUITS[suit] ? suit : pickTrump(den.hand);
+    this.log(`${den.name} called ${SUITS[state.trump].symbol} ${SUITS[state.trump].name} as trumps.`, 'action');
+    for (const p of state.players) R.sortHand(p.hand, state.trump);
+    await this.sync(500);
+
+    state.phase = 'deal';
+    await this.deal(size - first);
+    for (const p of state.players) R.sortHand(p.hand, state.trump);
+    await this.sync(300);
   }
 
   // One card each at a time, starting left of the den.
@@ -133,35 +165,25 @@ export class JudgementGame {
     const den = state.players[state.den];
 
     for (const p of state.players) {
-      state.deck.push(...p.hand.splice(0), ...p.tricks.splice(0));
+      state.deck.push(...p.tricks.splice(0));
       p.bid = null;
       p.won = 0;
     }
     state.deck.push(...state.trick.splice(0).map((t) => t.card));
-    state.trump = null;
     state.current = state.leader = den.id;
-    shuffle(state.deck, this.rng);
-    state.phase = 'deal';
     this.log(`Round ${state.round} of ${state.rounds} · ${den.name} ${verb(den, 'is', 'are')} the den.`, 'turn');
-    await this.sync(450);
-
-    const first = R.denSees(size);
-    await this.deal(first);
-    for (const p of state.players) R.sortHand(p.hand);
-    await this.sync(250);
-
-    state.phase = 'trump';
-    this.emit('turn', { player: den, what: 'trump' });
-    const suit = await this.ask(den.controller.chooseTrump(this, den));
-    state.trump = SUITS[suit] ? suit : pickTrump(den.hand);
-    this.log(`${den.name} called ${SUITS[state.trump].symbol} ${SUITS[state.trump].name} as trumps.`, 'action');
-    for (const p of state.players) R.sortHand(p.hand, state.trump);
-    await this.sync(500);
-
-    state.phase = 'deal';
-    await this.deal(size - first);
-    for (const p of state.players) R.sortHand(p.hand, state.trump);
-    await this.sync(300);
+    // If anyone ends the deal without a trump, the cards are shuffled and dealt again,
+    // and the den calls trumps again.
+    for (;;) {
+      await this.dealHands(den);
+      const none = R.withoutTrumps(state.players, state.trump);
+      if (!none.length) break;
+      const has = none.length === 1 ? verb(none[0], 'has', 'have') : 'have';
+      const text = `${listNames(none.map((p) => p.name))} ${has} no trumps, so the cards are dealt again.`;
+      this.log(text, 'action');
+      this.toast(text, 'action');
+      await this.sync(1800);
+    }
 
     state.phase = 'bid';
     for (let i = 0; i < n; i++) {

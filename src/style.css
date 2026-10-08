@@ -875,7 +875,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 /* Judgement's brand: navy, with the four suits in place of DEAL. */
 .logo.judgement { background: #1d3461; }
 .deal.suits i { font-style: normal; }
-.deal.suits i.red, .suit.red { color: #ff6b7d; }
+/* Four suit colours (as on the cards, lightened for the dark UI); spades stay white. */
+.deal.suits i.hearts, .suit.hearts { color: #ff6b7d; }
+.deal.suits i.clubs, .suit.clubs { color: #4fd17e; }
+.deal.suits i.diamonds, .suit.diamonds { color: #5aa9ff; }
 
 /* ---------- Judgement table ---------- */
 .board[hidden] { display: none; }
@@ -926,7 +929,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   line-height: 1;
   pointer-events: none;
 }
-.trump-mark.red { color: rgba(255, 90, 110, 0.12); }
+.trump-mark.hearts { color: rgba(255, 90, 110, 0.12); }
+.trump-mark.clubs { color: rgba(80, 220, 130, 0.1); }
+.trump-mark.diamonds { color: rgba(80, 160, 255, 0.13); }
 
 /* Trumps and the round in the top bar; it opens the scores. */
 #game-info {
@@ -972,7 +977,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   background: #fffdf8;
   color: #1b1b24;
 }
-.suit-btn.red { color: #c8102e; }
+.suit-btn.hearts { color: #c8102e; }
+.suit-btn.clubs { color: #13803a; }
+.suit-btn.diamonds { color: #1a5fd0; }
 .suit-btn:hover { background: #fff; border-color: var(--gold); }
 .suit-btn .sym { font-size: 2rem; line-height: 1; }
 .suit-btn .nm { font-size: 0.85rem; font-weight: 800; }

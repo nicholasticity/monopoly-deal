@@ -177,7 +177,8 @@ Bid how many tricks you'll take, then take at least that many, but not twice as 
   deck is dealt out evenly: 26, 17, 13 or 10 cards each for 2–5 players. Any cards left over
   are set aside unseen.
 - The den sees only the first half of their cards, then calls **trumps**. The rest of the
-  cards are dealt after that.
+  cards are dealt after that. If anyone ends up with no trumps, the cards are shuffled and
+  dealt again, and the den calls trumps again.
 - Starting with the den and going clockwise, everyone **bids** how many tricks they'll take:
   at least 2, at most the number of cards in hand.
 - The den leads the first trick, and whoever wins a trick leads the next. Follow the suit

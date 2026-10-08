@@ -12,7 +12,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
 // Each game's name in the top bar and on its start screen. The suits use their text
 // forms, not emoji.
-const SUIT_LOGO = '&#x2660;&#xFE0E;<i class="red">&#x2665;&#xFE0E;</i>&#x2663;&#xFE0E;<i class="red">&#x2666;&#xFE0E;</i>';
+const SUIT_LOGO = '&#x2660;&#xFE0E;<i class="hearts">&#x2665;&#xFE0E;</i><i class="clubs">&#x2663;&#xFE0E;</i><i class="diamonds">&#x2666;&#xFE0E;</i>';
 const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
   judgement: `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${SUIT_LOGO}</span>`,
@@ -749,6 +749,7 @@ const JUDGEMENT_RULES = `
       <ul>
         <li>Each round the whole deck is dealt out evenly (26, 17, 13 or 10 cards each for 2–5 players); any left over are set aside unseen.</li>
         <li>The den sees only the first half of their cards, then calls <b>trumps</b>. The rest of the cards are dealt after that.</li>
+        <li>If anyone ends up with no trumps, the cards are shuffled and dealt again, and the den calls trumps again.</li>
         <li>Starting with the den, everyone <b>bids</b> how many tricks they'll take: at least 2, at most the number of cards in hand.</li>
         <li>The den leads the first trick, and whoever wins a trick leads the next. Follow the suit that was led if you can; if not, play anything.</li>
         <li>The highest trump wins the trick; with no trumps in it, the highest card of the suit led. Aces are high.</li>
