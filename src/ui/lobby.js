@@ -1,5 +1,5 @@
 // Pre-game room screen: invite link, seats, host controls and chat.
-import { SPEEDS } from '../game/settings.js';
+import { SPEEDS, GAMES } from '../game/settings.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -30,7 +30,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), speed(s), start, leave, rules, voice(button) }
+  // actions: { addBot, kick(id), speed(s), game(kind), start, leave, rules, voice(button) }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -48,7 +48,7 @@ export class Lobby {
 
     const head = el('div', 'lobby-head');
     const title = el('div', 'lobby-title');
-    title.append(el('span', 'muted', 'Room'), (this.codeEl = el('span', 'room-code')));
+    title.append(el('span', 'muted', 'Room'), (this.codeEl = el('span', 'room-code')), (this.gameEl = el('span', 'room-game muted')));
     const leave = el('button', 'ghost', 'Leave room');
     leave.addEventListener('click', () => this.actions.leave());
     const rules = el('button', 'ghost', 'How to play');
@@ -78,6 +78,15 @@ export class Lobby {
     this.listEl = el('div', 'seats');
     this.addBotBtn = el('button', 'ghost add-bot', '+ Add a bot');
     this.addBotBtn.addEventListener('click', () => this.actions.addBot());
+    const gameRow = el('div', 'opt-row');
+    this.gameSeg = el('div', 'seg');
+    for (const [kind, g] of Object.entries(GAMES)) {
+      const b = el('button', null, g.name);
+      b.dataset.v = kind;
+      b.addEventListener('click', () => this.isHost && this.actions.game(kind));
+      this.gameSeg.appendChild(b);
+    }
+    gameRow.append(el('span', null, 'Game'), this.gameSeg);
     const speedRow = el('div', 'opt-row');
     this.speedSeg = el('div', 'seg');
     for (const s of Object.keys(SPEEDS)) {
@@ -90,7 +99,7 @@ export class Lobby {
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, this.addBotBtn, speedRow, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, speedRow, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -126,6 +135,7 @@ export class Lobby {
     this.you = you;
     const host = this.isHost;
     this.codeEl.textContent = room.code;
+    this.gameEl.textContent = GAMES[room.game]?.name ?? '';
     this.linkInput.value = inviteLink(room.code);
     this.localNote.style.display = isLocalHost() ? '' : 'none';
 
@@ -164,11 +174,13 @@ export class Lobby {
     for (let i = players; i < room.max; i++) this.listEl.appendChild(el('div', 'seat empty', host ? 'Empty seat — invite a friend or add a bot' : 'Empty seat'));
 
     this.addBotBtn.style.display = host && room.status === 'lobby' && players < room.max ? '' : 'none';
-    for (const b of this.speedSeg.children) {
-      b.classList.toggle('on', b.dataset.v === room.speed);
-      b.disabled = !host && b.dataset.v !== room.speed;
+    for (const [seg, value] of [[this.gameSeg, room.game], [this.speedSeg, room.speed]]) {
+      for (const b of seg.children) {
+        b.classList.toggle('on', b.dataset.v === value);
+        b.disabled = (!host || room.status !== 'lobby') && b.dataset.v !== value;
+      }
+      seg.classList.toggle('readonly', !host);
     }
-    this.speedSeg.classList.toggle('readonly', !host);
     this.startBtn.style.display = host ? '' : 'none';
     this.startBtn.disabled = players < 2 || room.status !== 'lobby';
     const hostName = room.members.find((m) => m.id === room.hostId)?.name ?? 'the host';

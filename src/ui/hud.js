@@ -1,14 +1,22 @@
 // DOM overlay: status bar, log, toasts, hover preview, popup menus and modals.
 import { cardImageURL, isFlipped, MONEY_COLORS } from '../render/textures.js';
-import { ACTIONS } from '../game/cards.js';
+import { ACTIONS, buildDeck } from '../game/cards.js';
 import * as R from '../game/rules.js';
+import { buildDeck as playingDeck } from '../judgement/cards.js';
+import { GAMES } from '../game/settings.js';
 import { sound } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-const TITLE = document.title;
+// Each game's name in the top bar and on its start screen. The suits use their text
+// forms, not emoji.
+const SUIT_LOGO = '&#x2660;&#xFE0E;<i class="red">&#x2665;&#xFE0E;</i>&#x2663;&#xFE0E;<i class="red">&#x2666;&#xFE0E;</i>';
+const BRANDS = {
+  deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
+  judgement: `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${SUIT_LOGO}</span>`,
+};
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -47,18 +55,24 @@ export class Hud {
     this.bannerEl = $('#banner');
     this.newBtn = $('#btn-new');
     this.stopBtn = $('#btn-stop');
+    this.brandEl = $('#topbar .brand');
+    this.infoEl = $('#game-info');
+    this.title = document.title;
+    this.game = 'deal';
     this.online = false;
     this.unread = 0;
     this.cancelTop = null;
     this.onEndTurn = () => {};
     this.onNewGame = () => {};
     this.onStopGame = () => {};
+    this.onGameInfo = () => {};
 
     $('#btn-end').addEventListener('click', () => this.onEndTurn());
     this.newBtn.addEventListener('click', () => this.onNewGame());
     this.stopBtn.addEventListener('click', () => this.onStopGame());
     $('#btn-rules').addEventListener('click', () => this.showRules());
-    document.addEventListener('visibilitychange', () => !document.hidden && (document.title = TITLE));
+    this.infoEl.addEventListener('click', () => this.onGameInfo());
+    document.addEventListener('visibilitychange', () => !document.hidden && (document.title = this.title));
     this.voiceBtn = $('#btn-voice');
     this.voiceBtn.addEventListener('click', () => this.onVoice(this.voiceBtn));
     this.onVoice = () => {};
@@ -79,6 +93,24 @@ export class Hud {
         this.setChatDock(true);
       }
     });
+  }
+
+  // The game on the table: its name in the top bar and the tab, and the HUD pieces it uses.
+  setGame(kind) {
+    this.game = kind;
+    this.brandEl.innerHTML = BRANDS[kind];
+    this.title = document.title = GAMES[kind].name;
+    this.hudEl.classList.toggle('judgement', kind === 'judgement');
+    // The deck and discard counts come back with the next Monopoly Deal game.
+    this.pilesEl.classList.add('idle');
+    this.setGameInfo('');
+  }
+
+  // A button by the logo with the state of play (Judgement: trumps and the round).
+  setGameInfo(html, title = '') {
+    this.infoEl.classList.toggle('hidden', !html);
+    if (this.infoEl.innerHTML !== html) this.infoEl.innerHTML = html;
+    this.infoEl.title = title;
   }
 
   // ---------- online extras ----------
@@ -235,7 +267,7 @@ export class Hud {
   }
 
   // The top bar also holds the pile counts in portrait: when the buttons leave no room,
-  // the logo gives way (first DEAL, then MONOPOLY).
+  // the logo gives way (first DEAL or the suits, then the rest).
   fitTopbar() {
     const bar = this.topbarEl;
     bar.classList.remove('tight', 'tighter');
@@ -258,12 +290,14 @@ export class Hud {
   }
 
   // The start of your turn: a toast and chime, a buzz on phones, and the tab title
-  // while the game is in the background.
-  yourTurn() {
-    this.toast('Your turn!', 'turn', 1600);
-    sound.play('turn');
-    if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([70, 60, 70]);
-    if (document.hidden) document.title = `🔔 Your turn · ${TITLE}`;
+  // while the game is in the background. text: null for no toast; quiet: no chime or buzz either.
+  yourTurn(text = 'Your turn!', { quiet = false } = {}) {
+    if (text) this.toast(text, 'turn', 1600);
+    if (!quiet) {
+      sound.play('turn');
+      if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([70, 60, 70]);
+    }
+    if (document.hidden) document.title = `🔔 ${text ?? 'Your turn'} · ${this.title}`;
   }
 
   setTurnControls(visible, playsLeft = 0, hint = '') {
@@ -328,10 +362,11 @@ export class Hud {
     });
   }
 
-  modal({ title, body, cancelable = true, wide = false }) {
+  // dock: a panel above the hand that leaves the table in view and usable.
+  modal({ title, body, cancelable = true, wide = false, dock = false }) {
     this.modalLayer.innerHTML = '';
-    const backdrop = el('div', 'modal-backdrop');
-    const box = el('div', `modal${wide ? ' wide' : ''}`);
+    const backdrop = el('div', `modal-backdrop${dock ? ' dock' : ''}`);
+    const box = el('div', `modal${wide ? ' wide' : ''}${dock ? ' dock' : ''}`);
     box.appendChild(el('h2', null, title));
     if (body) box.appendChild(typeof body === 'string' ? el('p', 'modal-body', body) : body);
     backdrop.appendChild(box);
@@ -507,14 +542,44 @@ export class Hud {
     });
   }
 
-  // Resolves { mode: 'solo' | 'create' | 'join', name, opponents, speed, code }.
+  // The first screen: which game to play. Resolves its key.
+  showHome(current) {
+    return new Promise((resolve) => {
+      this.closeAll();
+      const body = el('div', 'home');
+      body.appendChild(el('p', 'tagline', 'Pick a game. Both play against the computer or online with friends.'));
+      const deal = buildDeck();
+      const playing = playingDeck();
+      const looks = {
+        deal: ['Boardwalk', 'Deal Breaker', '$5M'].map((name) => deal.find((c) => c.name === name)),
+        judgement: ['spades-14', 'hearts-13', 'diamonds-12'].map((key) => playing.find((c) => c.key === key)),
+      };
+      for (const [kind, info] of Object.entries(GAMES)) {
+        const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
+        const fan = tile.appendChild(el('span', 'tile-fan'));
+        for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
+        tile.appendChild(el('span', 'start-logo', BRANDS[kind]));
+        tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
+        tile.appendChild(el('span', 'tile-meta muted', '2–5 players'));
+        tile.addEventListener('click', () => {
+          close();
+          resolve(kind);
+        });
+        body.appendChild(tile);
+      }
+      const { close } = this.modal({ title: 'What shall we play?', body, cancelable: false });
+    });
+  }
+
+  // Resolves { mode: 'solo' | 'create' | 'join' | 'home', name, opponents, speed, code }.
   showStart(defaults) {
     return new Promise((resolve) => {
       this.closeAll();
       const body = el('div', 'start');
       body.innerHTML = `
-        <div class="start-logo"><span class="logo">MONOPOLY</span><span class="deal">DEAL</span></div>
-        <p class="tagline">Collect three full property sets of different colours to win.</p>
+        <button class="ghost back-home" id="opt-home" title="Choose another game">← Games</button>
+        <div class="start-logo">${BRANDS[this.game]}</div>
+        <p class="tagline">${esc(GAMES[this.game].tagline)}</p>
         <p class="note warn" id="opt-notice"></p>
         <div class="seg mode" id="opt-mode"><button data-v="solo">🤖 Vs computer</button><button data-v="online">🌐 Online with friends</button></div>
         <label>Your name <input id="opt-name" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
@@ -590,6 +655,7 @@ export class Hud {
         }
         finish({ mode: 'join' });
       };
+      $b('#opt-home').addEventListener('click', () => finish({ mode: 'home' }));
       $b('#opt-start').addEventListener('click', () => finish({ mode: 'solo' }));
       $b('#opt-create').addEventListener('click', create);
       $b('#opt-join').addEventListener('click', join);
@@ -605,15 +671,26 @@ export class Hud {
   }
 
   showGameOver(winner, isHuman, stats, buttonLabel = 'Play again') {
-    sound.play(isHuman ? 'win' : 'lose');
+    return this.showResult({
+      won: isHuman,
+      title: isHuman ? 'You win!' : `${esc(winner.name)} wins`,
+      text: isHuman ? 'You collected three full sets. Congratulations, tycoon!' : `${esc(winner.name)} collected three full sets.`,
+      extra: el('p', 'muted', stats),
+      buttonLabel,
+    });
+  }
+
+  // The end of a game: a win or loss fanfare, the headline (HTML) and any details
+  // (an element), until the button.
+  showResult({ won, title, text, extra = null, buttonLabel = 'Play again' }) {
+    sound.play(won ? 'win' : 'lose');
     return new Promise((resolve) => {
       const body = el('div', 'gameover');
-      body.innerHTML = `<div class="trophy">${isHuman ? '🏆' : '🎲'}</div>
-        <p>${isHuman ? 'You collected three full sets. Congratulations, tycoon!' : `${esc(winner.name)} collected three full sets.`}</p>
-        <p class="muted">${stats}</p>`;
+      body.innerHTML = `<div class="trophy">${won ? '🏆' : '🎲'}</div><p>${text}</p>`;
+      if (extra) body.appendChild(extra);
       const again = el('button', 'primary big', buttonLabel);
       body.appendChild(again);
-      const { close } = this.modal({ title: isHuman ? 'You win!' : `${esc(winner.name)} wins`, body });
+      const { close } = this.modal({ title, body });
       again.addEventListener('click', () => {
         close();
         resolve();
@@ -621,10 +698,38 @@ export class Hud {
     });
   }
 
-  // Rules sit in their own layer above any open prompt, which stays intact underneath.
+  // A dialog in its own layer above any open prompt, which stays intact underneath.
+  // Resolves when it's closed.
+  overlay({ title, body, button = 'Got it', wide = false }) {
+    return new Promise((resolve) => {
+      const ok = el('button', 'primary', button);
+      body.appendChild(ok);
+      const prevCancel = this.cancelTop;
+      const layer = el('div', 'modal-backdrop top');
+      const box = el('div', `modal${wide ? ' wide' : ''}`);
+      box.appendChild(el('h2', null, title));
+      box.appendChild(body);
+      layer.appendChild(box);
+      document.body.appendChild(layer);
+      const close = () => {
+        layer.remove();
+        this.cancelTop = prevCancel;
+        resolve();
+      };
+      ok.addEventListener('click', close);
+      layer.addEventListener('pointerdown', (e) => e.target === layer && close());
+      this.cancelTop = close;
+    });
+  }
+
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = `
+    body.innerHTML = this.game === 'judgement' ? JUDGEMENT_RULES : DEAL_RULES;
+    this.overlay({ title: 'How to play', body, wide: true });
+  }
+}
+
+const DEAL_RULES = `
       <p><b>Goal:</b> be the first to collect <b>3 complete property sets</b> of different colours.</p>
       <ul>
         <li>Start of your turn: draw 2 cards (5 if your hand is empty).</li>
@@ -638,20 +743,20 @@ export class Hud {
         <li>End your turn with at most 7 cards in hand; extras are discarded.</li>
       </ul>
       <p class="muted">Tip: hover any face-up card to see it up close. Press <b>E</b> to end your turn.</p>`;
-    const ok = el('button', 'primary', 'Got it');
-    body.appendChild(ok);
-    const prevCancel = this.cancelTop;
-    const layer = el('div', 'modal-backdrop top');
-    const box = el('div', 'modal wide');
-    box.appendChild(el('h2', null, 'How to play'));
-    box.appendChild(body);
-    layer.appendChild(box);
-    document.body.appendChild(layer);
-    const close = () => {
-      layer.remove();
-      this.cancelTop = prevCancel;
-    };
-    ok.addEventListener('click', close);
-    this.cancelTop = close;
-  }
-}
+
+const JUDGEMENT_RULES = `
+      <p><b>Goal:</b> the highest score after every player has been the <b>den</b> once (one round each).</p>
+      <ul>
+        <li>Each round the whole deck is dealt out evenly (26, 17, 13 or 10 cards each for 2–5 players); any left over are set aside unseen.</li>
+        <li>The den sees only the first half of their cards, then calls <b>trumps</b>. The rest of the cards are dealt after that.</li>
+        <li>Starting with the den, everyone <b>bids</b> how many tricks they'll take: at least 2, at most the number of cards in hand.</li>
+        <li>The den leads the first trick, and whoever wins a trick leads the next. Follow the suit that was led if you can; if not, play anything.</li>
+        <li>The highest trump wins the trick; with no trumps in it, the highest card of the suit led. Aces are high.</li>
+      </ul>
+      <p><b>Scoring</b> (extra tricks are the ones over your bid):</p>
+      <ul>
+        <li>Fewer tricks than you bid: <b>−10 × bid</b>.</li>
+        <li>Your bid, with fewer extra tricks than you bid: <b>10 × bid + extras</b>. Bid 3 and take 5: +32.</li>
+        <li>As many extra tricks as you bid, or more: <b>−(10 × bid + extras)</b>. Bid 3 and take 6: −33.</li>
+      </ul>
+      <p class="muted">Tip: cards you can't play are dimmed. The round counter in the top bar shows everyone's scores.</p>`;

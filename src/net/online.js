@@ -2,13 +2,21 @@
 // the table view and turns the server's prompts into the usual HUD dialogs.
 import { Connection } from './connection.js';
 import { MirrorGame } from './mirror.js';
+import { JudgementMirror } from './judgement-mirror.js';
 import { HumanController } from '../ui/human.js';
+import { JudgementHuman, judgementStatus, gameInfo, gameResult, roundBoard, turnToast } from '../ui/judgement.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { cueLog } from '../ui/sound.js';
 import { VoiceChat, voiceSupported } from './voice.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  e.className = cls;
+  e.textContent = text;
+  return e;
+}
 const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'deciding whether to Just Say No', discard: 'discarding' };
 // The countdown only shows once a decision is running short.
 const CLOCK_FROM_S = 30;
@@ -34,10 +42,13 @@ export function setRoomInURL(code) {
 }
 
 export class OnlineSession {
-  // code: room to join, or null to create one. onExit(message) runs once the
-  // session is over (left, kicked, or the room is gone).
-  constructor({ view, hud, name, code, onExit }) {
+  // code: room to join, or null to create one; game: what a new room plays.
+  // useGame(kind) puts that game's table on show and returns its view.
+  // onExit(message) runs once the session is over (left, kicked, or the room is gone).
+  constructor({ view, useGame, hud, name, game, code, onExit }) {
     this.view = view;
+    this.useGame = useGame;
+    this.kind = game;
     this.hud = hud;
     this.name = name;
     this.code = code;
@@ -63,6 +74,7 @@ export class OnlineSession {
       addBot: () => this.send('addBot'),
       kick: (id) => this.send('kick', { id }),
       speed: (speed) => this.send('speed', { speed }),
+      game: (game) => this.send('game', { game }),
       start: () => this.send('start'),
       leave: () => this.confirmLeave(),
       rules: () => this.hud.showRules(),
@@ -92,7 +104,7 @@ export class OnlineSession {
   join() {
     const id = clientId();
     if (this.code) this.send('join', { code: this.code, name: this.name, clientId: id });
-    else this.send('create', { name: this.name, clientId: id });
+    else this.send('create', { name: this.name, clientId: id, game: this.kind });
   }
 
   get me() {
@@ -149,7 +161,10 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.yourTurn();
+        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? turnToast(msg.what) : undefined);
+        break;
+      case 'round':
+        this.onRound(msg);
         break;
       case 'waiting':
         this.waiting = msg.playerId == null ? null : { ...msg, deadline: Date.now() + msg.remaining };
@@ -190,6 +205,8 @@ export class OnlineSession {
     this.justJoined = false;
     // The game may have ended while we were disconnected.
     if (room.status === 'lobby' && this.inGame) this.endGame();
+    // Between games the top bar (and the rules) follow the host's pick.
+    if (!this.inGame && !this.gameoverOpen) this.setKind(room.game);
     this.lobby.update(room, this.memberId);
     this.voice.update(room.members);
     if (room.status === 'lobby' && !this.gameoverOpen) this.showLobby();
@@ -201,8 +218,14 @@ export class OnlineSession {
     this.updateStatus();
   }
 
+  setKind(kind = 'deal') {
+    this.kind = kind;
+    this.view = this.useGame(kind);
+  }
+
   showLobby() {
     if (this.closed || this.inGame) return;
+    if (this.room) this.setKind(this.room.game);
     this.hud.closeAll();
     this.hud.setChatDock(false);
     this.lobby.show();
@@ -235,7 +258,8 @@ export class OnlineSession {
     if (!sameGame) {
       this.gameNo = msg.gameNo;
       this.seat = msg.you;
-      this.mirror = new MirrorGame(msg.seats, msg.you);
+      this.setKind(msg.kind);
+      this.mirror = this.kind === 'judgement' ? new JudgementMirror(msg.seats, msg.you) : new MirrorGame(msg.seats, msg.you);
       this.needsAttach = true;
       this.waiting = null;
       this.hud.closeAll();
@@ -280,11 +304,11 @@ export class OnlineSession {
     // Re-sent after a reconnect while the prompt is still open here.
     if (this.req?.id === msg.reqId) return;
     this.dropRequest();
-    const human = new HumanController(this.hud);
+    const g = this.mirror;
+    const human = g.kind === 'judgement' ? new JudgementHuman(this.hud) : new HumanController(this.hud);
     const req = { id: msg.reqId, kind: msg.kind };
     this.req = req;
     this.human = human;
-    const g = this.mirror;
     const me = g.me;
     const a = msg.args;
     let value;
@@ -300,6 +324,15 @@ export class OnlineSession {
         break;
       case 'discard':
         value = await human.chooseDiscards(g, me, a.count);
+        break;
+      case 'trump':
+        value = await human.chooseTrump(g, me);
+        break;
+      case 'bid':
+        value = await human.chooseBid(g, me, a);
+        break;
+      case 'play':
+        value = await human.choosePlay(g, me);
         break;
       default:
         return;
@@ -319,13 +352,33 @@ export class OnlineSession {
     this.hud.setTurnControls(false);
   }
 
+  // Judgement: the round's scores while the next one is dealt. The next prompt (or
+  // Continue) closes them; the last round's are in the game-over table instead.
+  onRound(msg) {
+    const state = this.mirror?.state;
+    if (!state || this.req || msg.round >= state.rounds) return;
+    const body = roundBoard({ ...state, round: msg.round }, msg.results, this.seat);
+    const ok = el('button', 'primary big', 'Continue');
+    body.appendChild(ok);
+    const { close } = this.hud.modal({ title: `Round ${msg.round} scores`, body });
+    ok.addEventListener('click', close);
+    this.hud.cancelTop = close;
+  }
+
   async onGameOver(msg) {
     this.dropRequest();
     this.waiting = null;
-    const winner = this.mirror?.state.players[msg.winnerId];
+    const state = this.mirror?.state;
+    const winner = state?.players[msg.winnerId];
     if (!winner) return;
     this.gameoverOpen = true;
-    await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
+    if (this.mirror.kind === 'judgement') {
+      state.winners = msg.winnerIds.map((id) => state.players[id]);
+      state.phase = 'over';
+      await this.hud.showResult({ ...gameResult(state, this.seat), buttonLabel: 'Back to lobby' });
+    } else {
+      await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
+    }
     // If the host already started the next game, the modal was closed for us.
     this.gameoverOpen = false;
     if (!this.closed && this.room?.status === 'lobby') this.showLobby();
@@ -431,9 +484,20 @@ export class OnlineSession {
     if (this.closed) return;
     if (!this.inGame || !this.mirror) {
       this.hud.setStatus(this.room ? `Room <b>${this.room.code}</b> · ${this.room.status === 'playing' ? 'game in progress' : 'lobby'}` : 'Connecting…');
+      this.hud.setGameInfo('');
       return;
     }
     const { state } = this.mirror;
+    const w = this.waiting;
+    const secs = w ? Math.max(0, Math.ceil((w.deadline - Date.now()) / 1000)) : null;
+    const clock = secs != null && secs <= CLOCK_FROM_S ? ` <span class="clock${secs <= 10 ? ' low' : ''}">⏱ ${secs}s</span>` : '';
+    const watching = this.seat < 0 ? 'Watching · ' : '';
+    if (this.mirror.kind === 'judgement') {
+      const { text, mine } = judgementStatus(state, this.seat);
+      this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
+      this.hud.setGameInfo(gameInfo(state), 'Scores');
+      return;
+    }
     const nameOf = (i) => `<b>${esc(state.players[i]?.name ?? '')}</b>`;
     if (state.phase === 'over' && state.winner) {
       this.hud.setStatus(`${nameOf(state.winner.id)} won the game`);
@@ -443,10 +507,6 @@ export class OnlineSession {
       this.hud.setStatus('Dealing…');
       return;
     }
-    const w = this.waiting;
-    const secs = w ? Math.max(0, Math.ceil((w.deadline - Date.now()) / 1000)) : null;
-    const clock = secs != null && secs <= CLOCK_FROM_S ? ` <span class="clock${secs <= 10 ? ' low' : ''}">⏱ ${secs}s</span>` : '';
-    const watching = this.seat < 0 ? 'Watching · ' : '';
     const plays = `${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`;
     let text;
     const mine = w ? w.playerId === this.seat : !!this.mirror.current?.isHuman;

@@ -4,7 +4,9 @@
 import { Game, GameAborted } from '../src/game/engine.js';
 import { AIController } from '../src/game/ai.js';
 import * as R from '../src/game/rules.js';
-import { BOT_NAMES, SPEEDS, MAX_PLAYERS, TIMEOUTS } from '../src/game/settings.js';
+import { JudgementGame } from '../src/judgement/engine.js';
+import { JudgementAI } from '../src/judgement/ai.js';
+import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEEDS, MAX_PLAYERS, TIMEOUTS } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 
 const MAX_MEMBERS = MAX_PLAYERS + 3; // a few spectators may watch a running game
@@ -32,13 +34,15 @@ export function cleanName(raw) {
 }
 
 export class Room {
-  // timeScale shortens every pause and bot delay (tests use 0).
-  constructor(code, onClose, { timeScale = 1 } = {}) {
+  // timeScale shortens every pause and bot delay (tests use 0). game: which game
+  // the room plays (the host can change it in the lobby).
+  constructor(code, onClose, { timeScale = 1, game = DEFAULT_GAME } = {}) {
     this.code = code;
     this.onClose = onClose;
     this.timeScale = timeScale;
     this.members = [];
     this.hostId = null;
+    this.kind = GAMES[game] ? game : DEFAULT_GAME;
     this.speed = 'normal';
     this.status = 'lobby';
     this.game = null;
@@ -249,6 +253,13 @@ export class Room {
     this.broadcastRoom();
   }
 
+  setGame(m, kind) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !GAMES[kind] || kind === this.kind) return;
+    this.kind = kind;
+    this.system(`${m.name} picked ${GAMES[kind].name}.`);
+    this.broadcastRoom();
+  }
+
   say(m, text) {
     const now = Date.now();
     m.chatTimes = m.chatTimes.filter((t) => now - t < 10_000);
@@ -303,11 +314,13 @@ export class Room {
     const seated = this.members.slice(0, MAX_PLAYERS);
     if (seated.length < 2) return;
     const speed = SPEEDS[this.speed];
+    const judgement = this.kind === 'judgement';
+    const Bot = judgement ? JudgementAI : AIController;
     const players = seated.map((s, i) => {
       s.seat = i;
       s.away = false;
       s.misses = 0;
-      s.ai = new AIController({ delay: speed.delay * this.timeScale });
+      s.ai = new Bot({ delay: speed.delay * this.timeScale });
       return { name: s.name, controller: s.kind === 'bot' ? s.ai : new SeatController(this, s) };
     });
     for (const s of this.members.slice(MAX_PLAYERS)) s.seat = -1;
@@ -317,7 +330,8 @@ export class Room {
     this.waitingFor = null;
     this.gameNo++;
     // The server has no renderer; the "view" just paces the game so clients can animate.
-    const game = new Game({ players, view: { sync: (g, ms) => sleep(ms * speed.pace * this.timeScale) } });
+    const view = { sync: (g, ms) => sleep(ms * speed.pace * this.timeScale) };
+    const game = judgement ? new JudgementGame({ players, view }) : new Game({ players, view });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -389,10 +403,18 @@ export class Room {
         this.broadcast({ type: 'toast', ...data });
         break;
       case 'turn':
-        this.broadcast({ type: 'turn', playerId: data.player.id });
+        this.broadcast({ type: 'turn', playerId: data.player.id, what: data.what ?? null });
+        break;
+      // Judgement: a round's scores.
+      case 'round':
+        this.broadcast({ type: 'round', round: data.round, results: data.results });
         break;
       case 'gameover': {
         const w = data.winner;
+        if (game.kind === 'judgement') {
+          this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
+          break;
+        }
         const sets = new Set(w.piles.filter(R.isComplete).map((p) => p.color)).size;
         this.broadcast({ type: 'gameover', winnerId: w.id, stats: `Finished on turn ${game.state.turn} with ${sets} complete sets.` });
         break;
@@ -408,7 +430,7 @@ export class Room {
   // still waiting on this player, so the client can drop a stale prompt.
   sendGame(m) {
     const seats = this.members.filter((x) => x.seat >= 0).sort((a, b) => a.seat - b.seat);
-    m.conn?.send({ type: 'game', gameNo: this.gameNo, you: m.seat, reqId: m.pending?.id ?? null, seats: seats.map((s) => ({ id: s.id, name: s.name })) });
+    m.conn?.send({ type: 'game', kind: this.kind, gameNo: this.gameNo, you: m.seat, reqId: m.pending?.id ?? null, seats: seats.map((s) => ({ id: s.id, name: s.name })) });
   }
 
   sendState(m) {
@@ -492,6 +514,7 @@ export class Room {
       code: this.code,
       hostId: this.hostId,
       status: this.status,
+      game: this.kind,
       speed: this.speed,
       max: MAX_PLAYERS,
       members: this.members.map((m) => ({
@@ -552,6 +575,19 @@ class SeatController {
 
   chooseDiscards(game, me, count) {
     return this.room.ask(this.m, 'discard', { count }, () => this.m.ai.chooseDiscards(game, me, count), (v) => this.ids(v));
+  }
+
+  // Judgement. The engine checks the answers and has the bot decide if they won't do.
+  chooseTrump(game, me) {
+    return this.room.ask(this.m, 'trump', {}, () => this.m.ai.chooseTrump(game, me), (v) => (typeof v === 'string' ? v : null));
+  }
+
+  chooseBid(game, me, range) {
+    return this.room.ask(this.m, 'bid', range, () => this.m.ai.chooseBid(game, me, range), (v) => (Number.isInteger(v) ? v : null));
+  }
+
+  choosePlay(game, me) {
+    return this.room.ask(this.m, 'play', {}, () => this.m.ai.choosePlay(game, me), (v) => this.viewer.real(v));
   }
 
   // Rebuild a client's action from known fields only; the engine validates the rest.

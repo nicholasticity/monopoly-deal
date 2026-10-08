@@ -1,8 +1,9 @@
-# Monopoly Deal
+# Monopoly Deal & Judgement
 
-A browser version of the Monopoly Deal card game, in plain JavaScript with no frameworks.
-Play against 1–4 computer opponents on a 2D card table, or **online with friends**: create a
-room, send the invite link, and play in your browsers (2–5 players, bots fill empty seats).
+Two card games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**
+and the trick-taking game **Judgement**. Pick one on the home screen, then play against 1–4
+computer opponents on a 2D card table, or **online with friends**: create a room, send the
+invite link, and play in your browsers (2–5 players, bots fill empty seats).
 
 ## Running
 
@@ -21,15 +22,21 @@ Other scripts:
 | `npm start`        | Production server: the built game and online rooms on one port |
 | `npm run preview`  | Serve the production build locally (online rooms included)    |
 | `npm run simulate` | Play 300 headless AI-vs-AI games to sanity-check the rules     |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games over WebSocket |
+| `npm run simulate:judgement` | The same for Judgement (200 games): how often bids are made, missed or overshot |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of both over WebSocket |
 
 ## Playing online with friends
 
-1. On the start screen pick **🌐 Online with friends**, enter a name and press **Create a room**.
+1. Pick a game, then on its start screen pick **🌐 Online with friends**, enter a name and
+   press **Create a room**.
 2. Send your friends the **invite link** from the lobby (or just the 4-letter room code — they
    pick *Online with friends*, type the code and press **Join room**).
 3. Everyone shows up in the lobby. The host (👑) can add bots, remove players, choose the game
    speed and press **Start game** once there are at least 2 players. Up to 5 can play.
+
+A room plays the game you picked on the home screen. The host can switch between Monopoly
+Deal and Judgement in the lobby between games. An invite link skips the game picker, because
+the room decides the game.
 
 While you play:
 
@@ -41,8 +48,9 @@ While you play:
   each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
   **M** to mute. See [Voice chat](#voice-chat).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
-  30 s for a Just Say No. The clock shows in the status bar for the last 30 s. If you miss a
-  turn (or two prompts in a row) a bot plays for you until you press **I'm back**.
+  30 s for a Just Say No. In Judgement you have 45 s to call trumps, bid or play a card. The
+  clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
+  row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
   than 15 s a bot covers for you until you return. Leaving the room hands your cards to a bot
   for the rest of that game.
@@ -131,6 +139,8 @@ connection details and never carries any audio.
 
 ## How to play
 
+### Monopoly Deal
+
 Be the first to collect **three complete property sets of different colours**.
 
 - At the start of your turn you draw 2 cards (5 if your hand is empty).
@@ -159,27 +169,64 @@ On a phone held upright every table stays in view, one per row: each player's na
 sets and hand size sit in a bar down the left of their cards, and the deck and discard pile
 shrink to two counts in the top bar, where cards are drawn from and discarded to.
 
+### Judgement
+
+Bid how many tricks you'll take, then take at least that many, but not twice as many.
+
+- A game has one round per player, and everyone is the **den** once. Each round the whole
+  deck is dealt out evenly: 26, 17, 13 or 10 cards each for 2–5 players. Any cards left over
+  are set aside unseen.
+- The den sees only the first half of their cards, then calls **trumps**. The rest of the
+  cards are dealt after that.
+- Starting with the den and going clockwise, everyone **bids** how many tricks they'll take:
+  at least 2, at most the number of cards in hand.
+- The den leads the first trick, and whoever wins a trick leads the next. Follow the suit
+  that was led if you can; if not, play anything. The highest trump wins the trick; with no
+  trumps in it, the highest card of the suit led wins. Aces are high.
+- **Scoring** (extra tricks are the ones over your bid):
+  - Fewer tricks than you bid: **−10 × bid**.
+  - Your bid, with fewer extra tricks than you bid: **10 × bid + extras**. Bid 3 and
+    take 5: +32.
+  - As many extra tricks as you bid, or more: **−(10 × bid + extras)**. Bid 3 and
+    take 6: −33.
+- The highest total after the last round wins, and a tie is a shared win.
+
+Click a card to play it (on a phone, tap to lift it and tap again to play). Cards you can't
+play are dimmed. The trump call and the bid sit in a panel above your hand, so the table
+stays in view, and the bid panel shows what your bid would score. Each player's bar shows
+their total and the tricks they've won out of their bid. The round counter in the top bar
+(with the trump suit) opens the scores so far.
+
 ## Code layout
 
 ```
 src/
-  game/      pure rules — no rendering
+  game/      Monopoly Deal's pure rules — no rendering
     cards.js     the 106-card deck
     rules.js     set sizes, rent, payments, validation
     engine.js    async turn loop; asks controllers for every decision
     ai.js        computer opponents
-  render/    the table (DOM + CSS)
+    settings.js  the games, speeds and online time limits
+  judgement/ Judgement's rules, engine and AI, the same way
+    cards.js     the 52-card deck
+    rules.js     dealing, bids, following suit, trick winners, scoring
+    engine.js    rounds and tricks; asks controllers for trumps, bids and cards
+    ai.js        computer opponents
+  render/    the tables (DOM + CSS)
     view.js      player panels, card layout and animation
-    textures.js  card faces drawn on canvas
+    judgement-view.js  the Judgement table, built on view.js
+    textures.js  card faces (both decks) drawn on canvas
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions
+    judgement.js Judgement's prompts, status line and score tables
     lobby.js     online room lobby
     chat.js      room chat panel
   net/       online client
     connection.js  WebSocket with automatic reconnect
     online.js      one online session: lobby, game, prompts, chat, voice
     mirror.js      read-only copy of the server's game for the view and HUD
+    judgement-mirror.js  the same for a Judgement game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
   main.js    wires it all together
 server/
@@ -189,16 +236,19 @@ server/
   viewer.js    per-player snapshots that hide other players' cards
 scripts/
   simulate.mjs     headless AI games
+  simulate-judgement.mjs  the same for Judgement
   online-smoke.mjs headless multiplayer games over real sockets
 ```
 
 The engine talks to players only through a controller interface (`chooseTurnAction`,
 `choosePayment`, `chooseJustSayNo`, `chooseDiscards`), so humans and the AI are
-interchangeable, and the engine runs headless without a view.
+interchangeable, and the engine runs headless without a view. Judgement's engine works the
+same way, with `chooseTrump`, `chooseBid` and `choosePlay`.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
 to that player's browser as a `request` and waits for the `response`, falling back to the AI
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` used for solo play.
+HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`)
+used for solo play.

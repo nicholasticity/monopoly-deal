@@ -843,6 +843,177 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   #chat-dock, #chat-pops { width: min(320px, calc(100vw - 24px)); }
 }
 
+/* ---------- game picker ---------- */
+.home { display: flex; flex-direction: column; gap: 12px; }
+.home .tagline { text-align: center; }
+.game-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'fan logo' 'fan text' 'fan meta';
+  align-items: center;
+  gap: 4px 16px;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+}
+.game-tile:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 215, 94, 0.6); }
+.game-tile.last { border-color: rgba(255, 215, 94, 0.45); }
+.game-tile.last .tile-meta::after { content: ' · last played'; color: var(--gold); }
+.tile-fan { grid-area: fan; position: relative; width: 108px; height: 98px; }
+.tile-fan .thumb { position: absolute; left: 26px; top: 4px; width: 56px; transform-origin: 50% 120%; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); }
+.tile-fan .thumb:nth-child(1) { transform: rotate(-16deg); }
+.tile-fan .thumb:nth-child(3) { transform: rotate(16deg); }
+.game-tile .start-logo { grid-area: logo; justify-content: flex-start; margin: 0; transform: none; }
+.game-tile .start-logo .logo { font-size: 1rem; padding: 3px 9px; border-width: 2px; }
+.game-tile .start-logo .deal { font-size: 1.25rem; }
+.tile-text { grid-area: text; color: #dfe5e0; font-size: 0.9rem; line-height: 1.35; }
+.tile-meta { grid-area: meta; font-size: 0.78rem; }
+.back-home { align-self: flex-start; margin-bottom: -10px; padding: 4px 10px; font-size: 0.85rem; }
+/* Judgement's brand: navy, with the four suits in place of DEAL. */
+.logo.judgement { background: #1d3461; }
+.deal.suits i { font-style: normal; }
+.deal.suits i.red, .suit.red { color: #ff6b7d; }
+
+/* ---------- Judgement table ---------- */
+.board[hidden] { display: none; }
+.board.judgement { background: radial-gradient(ellipse at 50% 42%, #24503d 0%, #163126 55%, #0a130f 100%); }
+.board.judgement .mini-card { background: linear-gradient(160deg, #3a5a94, #1d3461); }
+.chip.score { font-weight: 800; }
+.chip.score small { color: var(--muted); font-size: 0.85em; font-weight: 600; }
+.chip.tricks { font-weight: 700; }
+.chip.tricks.made { color: #9ee6a8; }
+.chip.tricks.bust { color: #ff9a9a; }
+.den-pill {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--gold);
+  color: #2a1d00;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.seat-panel.compact .den-pill { padding: 1px 4px; font-size: 0.58rem; }
+/* Whose card is whose in the trick. */
+.trick-tag {
+  position: absolute;
+  max-width: 120px;
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--c);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+/* Cards you can't play right now. */
+.card.dim .face { filter: brightness(0.55) saturate(0.7); }
+/* The trump suit, large and faint behind the trick. */
+.trump-mark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.07);
+  line-height: 1;
+  pointer-events: none;
+}
+.trump-mark.red { color: rgba(255, 90, 110, 0.12); }
+
+/* Trumps and the round in the top bar; it opens the scores. */
+#game-info {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+#game-info.hidden { display: none; }
+#game-info .suit { font-size: 1.2em; line-height: 1; }
+#game-info .suit.none { color: var(--muted); }
+#hud.judgement #piles { display: none !important; }
+
+/* A prompt docked above the hand (and your panel): the table stays in view and playable. */
+#modal-layer > .modal-backdrop.dock {
+  align-items: flex-end;
+  padding-bottom: calc(var(--dock-h, 110px) + 8px);
+  background: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+.modal.dock { width: min(520px, 94vw); max-height: calc(100dvh - var(--dock-h, 110px) - 70px); pointer-events: auto; }
+
+/* ---------- Judgement prompts & scores ---------- */
+.jprompt { display: flex; flex-direction: column; gap: 10px; }
+.jprompt .modal-body { margin: 0; }
+.suit-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.suit-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: #1b1b24;
+}
+.suit-btn.red { color: #c8102e; }
+.suit-btn:hover { background: #fff; border-color: var(--gold); }
+.suit-btn .sym { font-size: 2rem; line-height: 1; }
+.suit-btn .nm { font-size: 0.85rem; font-weight: 800; }
+.suit-btn .held { min-height: 1.2em; color: #5c5c66; font-size: 0.72rem; font-variant-numeric: tabular-nums; text-align: center; }
+.bid-info { display: flex; flex-direction: column; gap: 3px; color: #dfe5e0; font-size: 0.88rem; }
+.bid-info b { color: var(--gold); }
+.bid-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; }
+.bid-btn { padding: 9px 0; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bid-btn.on, .bid-btn.on:hover { background: var(--gold); color: #2a1d00; }
+.bid-explain {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 2px 12px;
+  min-height: 2.6em;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+.bid-explain .good { color: #9ee6a8; }
+.bid-explain .bad { color: #ff9a9a; }
+.jscores { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.jscores p { margin: 0; text-align: center; }
+.score-scroll { overflow-x: auto; }
+.score-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.score-table th, .score-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); text-align: center; }
+.score-table thead th { color: var(--muted); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.score-table tbody th { max-width: 9em; overflow: hidden; font-weight: 700; text-align: left; white-space: nowrap; text-overflow: ellipsis; }
+.score-table tr.me { background: rgba(255, 255, 255, 0.06); }
+.score-table .total { font-weight: 800; }
+.score-table tr.lead .total { color: var(--gold); }
+.score-table .made { color: #9ee6a8; }
+.score-table .bust, .score-table .short { color: #ff9a9a; }
+.score-table small { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 400; }
+.score-table .now { background: rgba(255, 215, 94, 0.08); }
+.score-table.full td { min-width: 2.8em; }
+.seat-dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--c); vertical-align: 0.05em; }
+.gameover .jscores { margin: 8px 0 14px; }
+.room-game:not(:empty)::before { content: '· '; }
+
 /* ---------- small screens ---------- */
 /* Narrow or short windows: icon buttons and a slimmer top bar. */
 @media (max-width: 900px), (max-height: 540px) {
@@ -885,6 +1056,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   }
   .peek-back { top: auto; bottom: calc(var(--hand-h, 110px) + 8px); }
   #piles:not(.idle) { display: flex; }
+  body:has(#modal-layer > .modal-backdrop.dock) #status { visibility: hidden; }
   #hud.my-turn #status { left: 8px; transform: none; max-width: calc(100vw - 150px); }
   #turn-controls {
     right: 8px;
@@ -967,6 +1139,15 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   .seg button { padding: 6px 11px; }
   button.big { padding: 11px 22px; font-size: 1.05rem; }
   .room-code { font-size: 1.6rem; }
+  .game-tile { gap: 3px 12px; padding: 12px; }
+  .tile-fan { width: 84px; height: 80px; }
+  .tile-fan .thumb { left: 20px; width: 44px; }
+  .tile-text { font-size: 0.84rem; }
+  .suit-btn .sym { font-size: 1.7rem; }
+  .score-table { font-size: 0.84rem; }
+  .score-table th, .score-table td { padding: 5px 5px; }
+  .modal.dock { padding: 12px 12px; }
+  .modal.dock h2 { margin-bottom: 6px; font-size: 1.02rem; }
   .lobby-head { flex-wrap: wrap; gap: 8px; }
   .lobby-head-btns { flex-wrap: wrap; }
   .lobby-head-btns button { padding: 7px 10px; font-size: 0.88rem; white-space: nowrap; }

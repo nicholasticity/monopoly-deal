@@ -1,12 +1,15 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state. Also checks that no client ever sees a hidden card.
+// (redacted) state, Monopoly Deal and then Judgement. Also checks that no client
+// ever sees a hidden card.
 // Usage: node scripts/online-smoke.mjs
 import http from 'node:http';
 import { WebSocket } from 'ws';
 import { attachGameServer } from '../server/hub.js';
 import { MirrorGame } from '../src/net/mirror.js';
+import { JudgementMirror } from '../src/net/judgement-mirror.js';
 import { AIController } from '../src/game/ai.js';
+import { JudgementAI } from '../src/judgement/ai.js';
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -24,7 +27,10 @@ class Client {
     this.name = name;
     this.clientId = `${name}-${Math.random().toString(36).slice(2)}`;
     this.ai = new AIController();
+    this.jai = new JudgementAI();
     this.handlers = [];
+    this.turns = [];
+    this.rounds = [];
     this.requests = 0;
     this.snapshots = 0;
   }
@@ -69,7 +75,16 @@ class Client {
         if (msg.text.includes('shuffled into a new deck')) reshuffles++;
         break;
       case 'game':
-        this.mirror = new MirrorGame(msg.seats, msg.you);
+        this.kind = msg.kind;
+        this.mirror = msg.kind === 'judgement' ? new JudgementMirror(msg.seats, msg.you) : new MirrorGame(msg.seats, msg.you);
+        this.turns = [];
+        this.rounds = [];
+        break;
+      case 'turn':
+        this.turns.push(msg.what);
+        break;
+      case 'round':
+        this.rounds.push(msg);
         break;
       case 'state':
         this.mirror.apply(msg);
@@ -94,11 +109,15 @@ class Client {
       case 'payment': return this.ai.choosePayment(g, me, args.amount);
       case 'justsayno': return this.ai.chooseJustSayNo(g, me, g.justSayNoContext(args));
       case 'discard': return this.ai.chooseDiscards(g, me, args.count);
+      case 'trump': return this.jai.chooseTrump(g, me);
+      case 'bid': return this.jai.chooseBid(g, me, args);
+      case 'play': return this.jai.choosePlay(g, me);
     }
     fail(`unknown request ${kind}`);
   }
 
   checkHidden() {
+    if (this.kind === 'judgement') return this.checkHiddenJudgement();
     const { state, you } = this.mirror;
     for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a deck card`);
     for (const p of state.players) {
@@ -110,6 +129,22 @@ class Client {
     }
     const total = this.mirror.cards.size;
     if (total !== 106) fail(`${this.name} tracks ${total} cards`);
+  }
+
+  // Judgement: only your own hand and the cards played are face up.
+  checkHiddenJudgement() {
+    const { state, you } = this.mirror;
+    for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a set-aside card`);
+    for (const p of state.players) {
+      for (const c of p.hand) {
+        if (p.id === you && c.hidden) fail(`${this.name} can't see their own card`);
+        if (p.id !== you && (!c.hidden || c.key)) fail(`${this.name} can see ${p.name}'s hand`);
+      }
+      for (const c of p.tricks) if (c.hidden) fail(`${this.name} is missing a won card`);
+    }
+    for (const t of state.trick) if (t.card.hidden) fail(`${this.name} is missing a played card`);
+    const total = this.mirror.cards.size;
+    if (total !== 52) fail(`${this.name} tracks ${total} cards`);
   }
 }
 
@@ -129,7 +164,17 @@ async function playRound(clients, addBots = 0) {
   if (results.some((r) => r.winnerId !== results[0].winnerId)) fail('clients disagree on the winner');
   if (!winner) fail('no winner');
   if (clients.some((c) => !c.requests)) fail('a player was never asked anything');
-  console.log(`  ${game.seats.map((x) => x.name).join(', ')}: ${winner.name} won (${results[0].stats}); requests ${clients.map((c) => c.requests).join('/')}`);
+  let how = results[0].stats;
+  if (game.kind === 'judgement') {
+    const ids = results[0].winnerIds;
+    if (!ids?.includes(results[0].winnerId)) fail('Judgement winners missing');
+    if (clients.some((c) => c.rounds.length !== game.seats.length)) fail('round scores missing');
+    if (clients.some((c) => !c.turns.includes('trump') || !c.turns.includes('bid') || !c.turns.includes('play'))) fail('turn kinds missing');
+    const scores = clients[0].rounds.at(-1).results.map((r) => r.score);
+    how = `${ids.length > 1 ? 'shared, ' : ''}scores ${scores.join('/')}`;
+  }
+  console.log(`  ${game.kind}: ${game.seats.map((x) => x.name).join(', ')}: ${winner.name} won (${how}); requests ${clients.map((c) => c.requests).join('/')}`);
+  return game;
 }
 
 let reshuffles = 0;
@@ -227,6 +272,27 @@ console.log(`  reconnect: Bob resumed his seat and answered ${bob2.requests} req
 for (let i = 0; i < 8 && !reshuffles; i++) await playRound([alice, bob2, cara], 2);
 if (!reshuffles) fail('no deck reshuffle happened, so hidden aliases were not exercised');
 console.log(`  ${reshuffles} reshuffle log lines seen across clients`);
+
+// Judgement: only the host picks the game, and only in the lobby.
+const clients = [alice, bob2, cara];
+bob2.send('game', { game: 'judgement' });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.game !== 'deal') fail('non-host changed the game');
+const toJudgement = alice.next('room', (m) => m.room.game === 'judgement');
+alice.send('game', { game: 'judgement' });
+await toJudgement;
+if ((await playRound(clients)).kind !== 'judgement') fail('the game did not switch');
+await playRound(clients, 2);
+// A room can be created for Judgement straight away.
+const dan = new Client('Dan');
+await dan.connect();
+const danRoom = dan.next('room');
+dan.send('create', { name: 'Dan', clientId: dan.clientId, game: 'judgement' });
+if ((await danRoom).room.game !== 'judgement') fail('new room ignored its game');
+const danGame = dan.next('game');
+dan.send('addBot');
+await playRound([dan]);
+if ((await danGame).kind !== 'judgement') fail('wrong game in a new Judgement room');
 
 console.log('PASS');
 process.exit(0);

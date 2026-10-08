@@ -171,8 +171,22 @@ export function cueMoves(moves, completed) {
 
 // Sounds for game events, read from their log lines (the same solo and online).
 export function cueLog(text, kind) {
-  if (/shuffled into a new deck/.test(text)) sound.play('shuffle');
+  if (/shuffled into a new deck| the den\.$/.test(text)) sound.play('shuffle');
   else if (kind !== 'action') return;
+  else if (/ as trumps\.$/.test(text)) sound.play('set');
   else if (/Just Say No/.test(text)) sound.play('no');
   else if (/ rent |Birthday|Debt Collector/.test(text)) sound.play('charge');
+}
+
+// The same for a Judgement table: dealing, playing to the trick and taking it.
+export function cueTricks(moves) {
+  const counts = new Map();
+  let taken = false;
+  for (const { from, to } of moves) {
+    if (from.zone === 'deck' && held(to)) counts.set('draw', (counts.get('draw') ?? 0) + 1);
+    else if (to.zone === 'trick') counts.set('place', 1);
+    else if (to.zone === 'won' && from.zone === 'trick') taken = true;
+  }
+  for (const [cue, n] of counts) sound.play(cue, n);
+  if (taken) sound.play('play');
 }

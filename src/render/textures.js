@@ -469,6 +469,442 @@ function drawBack(ctx) {
   ctx.restore();
 }
 
+// ---------- playing cards (Judgement) ----------
+
+// The back of a playing card, passed wherever a card face would be.
+export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back' };
+
+const SUIT_RED = '#c8102e';
+const SUIT_BLACK = '#1b1b24';
+const suitColor = (suit) => (suit === 'hearts' || suit === 'diamonds' ? SUIT_RED : SUIT_BLACK);
+const RANK_TEXT = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
+
+// A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
+// same everywhere (font glyphs vary). color: other than the suit's own.
+function drawSuit(ctx, suit, x, y, size, flip = false, color = suitColor(suit)) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size, flip ? -size : size);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (suit === 'hearts') {
+    ctx.moveTo(0, 0.5);
+    ctx.bezierCurveTo(-0.15, 0.35, -0.5, 0.12, -0.5, -0.17);
+    ctx.bezierCurveTo(-0.5, -0.38, -0.35, -0.5, -0.25, -0.5);
+    ctx.bezierCurveTo(-0.1, -0.5, 0, -0.4, 0, -0.28);
+    ctx.bezierCurveTo(0, -0.4, 0.1, -0.5, 0.25, -0.5);
+    ctx.bezierCurveTo(0.35, -0.5, 0.5, -0.38, 0.5, -0.17);
+    ctx.bezierCurveTo(0.5, 0.12, 0.15, 0.35, 0, 0.5);
+  } else if (suit === 'diamonds') {
+    ctx.moveTo(0, -0.5);
+    ctx.quadraticCurveTo(0.14, -0.2, 0.4, 0);
+    ctx.quadraticCurveTo(0.14, 0.2, 0, 0.5);
+    ctx.quadraticCurveTo(-0.14, 0.2, -0.4, 0);
+    ctx.quadraticCurveTo(-0.14, -0.2, 0, -0.5);
+  } else if (suit === 'spades') {
+    ctx.moveTo(0, -0.5);
+    ctx.bezierCurveTo(-0.15, -0.32, -0.5, -0.12, -0.5, 0.1);
+    ctx.bezierCurveTo(-0.5, 0.3, -0.34, 0.38, -0.22, 0.38);
+    ctx.bezierCurveTo(-0.12, 0.38, -0.05, 0.33, -0.03, 0.27);
+    ctx.lineTo(-0.15, 0.5);
+    ctx.lineTo(0.15, 0.5);
+    ctx.lineTo(0.03, 0.27);
+    ctx.bezierCurveTo(0.05, 0.33, 0.12, 0.38, 0.22, 0.38);
+    ctx.bezierCurveTo(0.34, 0.38, 0.5, 0.3, 0.5, 0.1);
+    ctx.bezierCurveTo(0.5, -0.12, 0.15, -0.32, 0, -0.5);
+  } else {
+    for (const [cx, cy] of [[0, -0.25], [-0.25, 0.07], [0.25, 0.07]]) {
+      ctx.moveTo(cx + 0.23, cy);
+      ctx.arc(cx, cy, 0.23, 0, Math.PI * 2);
+    }
+    ctx.moveTo(0.12, 0);
+    ctx.arc(0, 0, 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-0.04, 0.05);
+    ctx.lineTo(-0.15, 0.5);
+    ctx.lineTo(0.15, 0.5);
+    ctx.lineTo(0.04, 0.05);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Rank over suit in the top-left corner, and the same upside-down bottom-right.
+function cornerIndex(ctx, card) {
+  const text = RANK_TEXT[card.rank] ?? String(card.rank);
+  for (const turn of [0, Math.PI]) {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(turn);
+    ctx.translate(-TEX_W / 2, -TEX_H / 2);
+    ctx.fillStyle = suitColor(card.suit);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    fitFont(ctx, text, 84, 92, '800');
+    ctx.fillText(text, 62, 112);
+    drawSuit(ctx, card.suit, 62, 160, 58);
+    ctx.restore();
+  }
+}
+
+// Pip positions as (column, row) over the middle of the card; rows below the
+// centre are drawn upside-down like a real deck.
+const PIPS = {
+  2: [[1, 0], [1, 1]],
+  3: [[1, 0], [1, 0.5], [1, 1]],
+  4: [[0, 0], [2, 0], [0, 1], [2, 1]],
+  5: [[0, 0], [2, 0], [1, 0.5], [0, 1], [2, 1]],
+  6: [[0, 0], [2, 0], [0, 0.5], [2, 0.5], [0, 1], [2, 1]],
+  7: [[0, 0], [2, 0], [1, 0.25], [0, 0.5], [2, 0.5], [0, 1], [2, 1]],
+  8: [[0, 0], [2, 0], [1, 0.25], [0, 0.5], [2, 0.5], [1, 0.75], [0, 1], [2, 1]],
+  9: [[0, 0], [2, 0], [0, 1 / 3], [2, 1 / 3], [1, 0.5], [0, 2 / 3], [2, 2 / 3], [0, 1], [2, 1]],
+  10: [[0, 0], [2, 0], [1, 1 / 6], [0, 1 / 3], [2, 1 / 3], [0, 2 / 3], [2, 2 / 3], [1, 5 / 6], [0, 1], [2, 1]],
+};
+
+// Court cards: a double-headed figure in the classic red, blue and gold, the robe in
+// the suit's colour. Each half is drawn upright, then the same again turned round.
+const COURT_BLUE = '#2456a6';
+const COURT_GOLD = '#f2b632';
+const SKIN = '#f8d9b4';
+const INK = '#1b1b24';
+const PEARL = '#fffaf0';
+// Hair and eyebrows: the jack's brown, the queen's golden, the king's white.
+const HAIR = { 11: ['#7a4a26', '#4a2a12'], 12: ['#e0a63a', '#8a5a1e'], 13: ['#ece6da', '#8f897f'] };
+
+function drawFigure(ctx, card, robe, trim) {
+  const rank = card.rank;
+  const [hair, brow] = HAIR[rank];
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  // Fills the current path and outlines it in ink.
+  const paint = (fill, width = 2.5) => {
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = width;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+  };
+  const ellipse = (x, y, rx, ry, fill, width = 2.5) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    paint(fill, width);
+  };
+  const shape = (points, fill, width = 2.5) => {
+    ctx.beginPath();
+    points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    paint(fill, width);
+  };
+  // A staff: ink edges, then its colour down the middle.
+  const rod = (x0, y0, x1, y1, color, width) => {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineWidth = width + 4;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.lineWidth = width;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  };
+  const line = (color, width) => {
+    ctx.lineWidth = width;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  };
+
+  // The queen's long hair falls behind her shoulders.
+  if (rank === 12) {
+    ctx.beginPath();
+    ctx.moveTo(-28, -172);
+    ctx.bezierCurveTo(-52, -150, -44, -112, -58, -88);
+    ctx.quadraticCurveTo(-30, -96, -20, -110);
+    ctx.lineTo(20, -110);
+    ctx.quadraticCurveTo(30, -96, 58, -88);
+    ctx.bezierCurveTo(44, -112, 52, -150, 28, -172);
+    ctx.closePath();
+    paint(hair);
+  }
+
+  // Shoulders, and the gold-edged front of the robe with the suit on it.
+  ctx.beginPath();
+  ctx.moveTo(-88, 4);
+  ctx.lineTo(-88, -52);
+  ctx.bezierCurveTo(-88, -84, -60, -100, -24, -104);
+  ctx.lineTo(24, -104);
+  ctx.bezierCurveTo(60, -100, 88, -84, 88, -52);
+  ctx.lineTo(88, 4);
+  ctx.closePath();
+  paint(robe, 3);
+  shape([[-27, -104], [-34, 4], [34, 4], [27, -104]], COURT_GOLD);
+  shape([[-20, -104], [-26, 4], [26, 4], [20, -104]], trim, 1.5);
+  drawSuit(ctx, card.suit, 0, -70, 22, false, PEARL);
+  drawSuit(ctx, card.suit, 0, -32, 22, false, PEARL);
+
+  // Neck and collar: ermine for the king, pearls for the queen.
+  ctx.beginPath();
+  ctx.rect(-11, -124, 22, 22);
+  paint(SKIN, 2);
+  if (rank === 13) {
+    ellipse(0, -102, 46, 13, PEARL);
+    ctx.fillStyle = INK;
+    for (const x of [-32, -16, 0, 16, 32]) {
+      ctx.beginPath();
+      ctx.ellipse(x, -100 - (Math.abs(x) > 20 ? 2 : 0), 2.5, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (rank === 12) {
+    ellipse(0, -102, 40, 11, COURT_GOLD);
+    for (let i = -3; i <= 3; i++) {
+      const x = i * 10;
+      ellipse(x, -102 + 11 * Math.sqrt(1 - (x / 40) ** 2) - 2, 3, 3, PEARL, 1.2);
+    }
+  } else {
+    ellipse(0, -102, 36, 10, trim);
+    ellipse(0, -103, 24, 5, COURT_GOLD, 1.5);
+  }
+
+  // Hair behind the head: the king's white, the jack's bob.
+  if (rank === 13) ellipse(0, -148, 33, 30, hair);
+  else if (rank === 11) {
+    ctx.beginPath();
+    ctx.roundRect(-34, -176, 68, 56, 20);
+    paint(hair);
+  }
+
+  // The face.
+  ellipse(0, -148, 27, 33, SKIN);
+  ctx.fillStyle = 'rgba(232, 120, 120, 0.3)';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(s * 15, -137, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const s of [-1, 1]) {
+    ellipse(s * 10, -150, 6, 3.6, '#fff', 1.5);
+    ctx.beginPath();
+    ctx.arc(s * 9.5, -150, 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(s * 16, -157);
+    ctx.quadraticCurveTo(s * 10, -162, s * 4, -158);
+    line(brow, 2.4);
+  }
+  ctx.beginPath();
+  ctx.moveTo(1, -152);
+  ctx.quadraticCurveTo(-5, -139, 2, -138);
+  line('#b9805a', 2);
+  if (rank === 12) ellipse(0, -128, 5.5, 2.8, SUIT_RED, 1);
+  else if (rank === 11) {
+    ctx.beginPath();
+    ctx.arc(0, -132, 7, 0.2 * Math.PI, 0.8 * Math.PI);
+    line('#9a3b2b', 2.2);
+  } else {
+    // The king's beard and moustache, over a glimpse of mouth.
+    ctx.beginPath();
+    ctx.moveTo(-5, -126);
+    ctx.lineTo(5, -126);
+    line('#9a3b2b', 2);
+    ctx.beginPath();
+    ctx.moveTo(-26, -140);
+    ctx.bezierCurveTo(-30, -112, -14, -96, 0, -94);
+    ctx.bezierCurveTo(14, -96, 30, -112, 26, -140);
+    ctx.bezierCurveTo(18, -126, 8, -124, 0, -124);
+    ctx.bezierCurveTo(-8, -124, -18, -126, -26, -140);
+    ctx.closePath();
+    paint(hair);
+    ctx.beginPath();
+    ctx.moveTo(0, -133);
+    ctx.bezierCurveTo(-8, -138, -18, -136, -22, -128);
+    ctx.bezierCurveTo(-14, -131, -6, -129, 0, -129);
+    ctx.bezierCurveTo(6, -129, 14, -131, 22, -128);
+    ctx.bezierCurveTo(18, -136, 8, -138, 0, -133);
+    ctx.closePath();
+    paint(hair, 2);
+  }
+
+  // Hair over the forehead.
+  ctx.beginPath();
+  ctx.moveTo(-27, -146);
+  ctx.bezierCurveTo(-30, -176, -14, -184, 0, -183);
+  ctx.bezierCurveTo(14, -184, 30, -176, 27, -146);
+  ctx.bezierCurveTo(22, -160, 12, -168, 0, -166);
+  ctx.bezierCurveTo(-12, -168, -22, -160, -27, -146);
+  ctx.closePath();
+  paint(hair, 2);
+
+  // Headwear.
+  if (rank === 13) {
+    ellipse(0, -190, 24, 16, robe);
+    shape([[-30, -174], [-34, -212], [-17, -194], [0, -218], [17, -194], [34, -212], [30, -174]], COURT_GOLD);
+    ctx.beginPath();
+    ctx.rect(-31, -186, 62, 13);
+    paint(COURT_GOLD);
+    ellipse(0, -179.5, 4, 4, trim, 1.5);
+    for (const s of [-1, 1]) ellipse(s * 18, -179.5, 3, 3, robe, 1.5);
+    for (const [x, y] of [[-34, -212], [0, -218], [34, -212]]) ellipse(x, y, 4, 4, COURT_GOLD, 1.5);
+  } else if (rank === 12) {
+    shape([[-24, -188], [-27, -205], [-12, -196], [0, -214], [12, -196], [27, -205], [24, -188]], COURT_GOLD);
+    ctx.beginPath();
+    ctx.rect(-24, -190, 48, 11);
+    paint(COURT_GOLD);
+    ellipse(0, -184.5, 3.5, 3.5, trim, 1.5);
+    for (const [x, y] of [[-27, -205], [0, -214], [27, -205]]) ellipse(x, y, 3.5, 3.5, PEARL, 1.5);
+  } else {
+    // A feathered cap.
+    ctx.beginPath();
+    ctx.moveTo(-14, -192);
+    ctx.bezierCurveTo(-30, -226, -56, -236, -66, -228);
+    ctx.bezierCurveTo(-52, -222, -36, -208, -22, -186);
+    ctx.closePath();
+    paint(PEARL, 2);
+    ctx.beginPath();
+    ctx.moveTo(-17, -190);
+    ctx.quadraticCurveTo(-40, -222, -63, -228);
+    line(INK, 1.5);
+    ctx.beginPath();
+    ctx.moveTo(-30, -178);
+    ctx.bezierCurveTo(-32, -214, 32, -214, 30, -178);
+    ctx.closePath();
+    paint(robe);
+    ctx.beginPath();
+    ctx.rect(-30, -188, 60, 8);
+    paint(COURT_GOLD, 2);
+    ellipse(0, -178, 42, 8, trim);
+  }
+
+  // What they hold, in front: a sceptre, a flower, a halberd.
+  if (rank === 13) {
+    rod(58, -40, 58, -196, COURT_GOLD, 5);
+    ellipse(58, -203, 9, 9, COURT_GOLD, 2);
+    rod(58, -212, 58, -226, COURT_GOLD, 3);
+    rod(51, -219, 65, -219, COURT_GOLD, 3);
+    ellipse(58, -50, 13, 6, COURT_GOLD, 2);
+    ellipse(58, -62, 9, 9, SKIN, 2);
+  } else if (rank === 12) {
+    rod(54, -62, 61, -118, '#2c8a4b', 3);
+    ctx.beginPath();
+    ctx.moveTo(57, -90);
+    ctx.quadraticCurveTo(74, -98, 78, -88);
+    ctx.quadraticCurveTo(68, -82, 57, -90);
+    ctx.closePath();
+    paint('#3fa45f', 1.5);
+    for (let i = 0; i < 5; i++) {
+      const a = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+      ellipse(61 + 8 * Math.cos(a), -127 + 8 * Math.sin(a), 7, 7, '#e94b6a', 1.5);
+    }
+    ellipse(61, -127, 4, 4, COURT_GOLD, 1.5);
+    ellipse(54, -49, 13, 6, COURT_GOLD, 2);
+    ellipse(54, -60, 9, 9, SKIN, 2);
+  } else {
+    rod(62, -30, 62, -198, '#8a5a2b', 4);
+    shape([[62, -232], [55, -204], [62, -196], [69, -204]], '#d5dbe2', 2);
+    ctx.beginPath();
+    ctx.moveTo(64, -196);
+    ctx.quadraticCurveTo(84, -200, 86, -180);
+    ctx.quadraticCurveTo(76, -186, 64, -184);
+    ctx.closePath();
+    paint('#d5dbe2', 2);
+    ellipse(62, -54, 13, 6, COURT_GOLD, 2);
+    ellipse(62, -66, 9, 9, SKIN, 2);
+  }
+}
+
+function drawCourt(ctx, card) {
+  const red = suitColor(card.suit) === SUIT_RED;
+  const robe = red ? SUIT_RED : COURT_BLUE;
+  const trim = red ? COURT_BLUE : SUIT_RED;
+  const x = 106, y = 34, w = TEX_W - 212, h = TEX_H - 68;
+  rr(ctx, x, y, w, h, 12);
+  ctx.fillStyle = '#fbf4e2';
+  ctx.fill();
+  for (const turn of [0, Math.PI]) {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(turn);
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, h / 2);
+    ctx.clip();
+    // A little larger than drawn, filling the frame.
+    ctx.translate(0, 10);
+    ctx.scale(1.1, 1.1);
+    drawFigure(ctx, card, robe, trim);
+    ctx.restore();
+  }
+  // A gold band between the halves, then the frame.
+  ctx.fillStyle = INK;
+  ctx.fillRect(x, TEX_H / 2 - 6, w, 12);
+  ctx.fillStyle = COURT_GOLD;
+  ctx.fillRect(x, TEX_H / 2 - 4, w, 8);
+  rr(ctx, x, y, w, h, 12);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = suitColor(card.suit);
+  ctx.stroke();
+}
+
+function drawPlaying(ctx, card) {
+  base(ctx, '#fffdf8');
+  rr(ctx, 10, 10, TEX_W - 20, TEX_H - 20, TEX_RADIUS - 8);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#d9d4c7';
+  ctx.stroke();
+  cornerIndex(ctx, card);
+  if (card.rank === 14) {
+    drawSuit(ctx, card.suit, TEX_W / 2, TEX_H / 2, 190);
+  } else if (card.rank > 10) {
+    drawCourt(ctx, card);
+  } else {
+    const cols = [148, 200, 252];
+    const top = 128, bottom = TEX_H - 128;
+    for (const [c, r] of PIPS[card.rank]) drawSuit(ctx, card.suit, cols[c], top + r * (bottom - top), 64, r > 0.5);
+  }
+}
+
+function drawPlayingBack(ctx) {
+  base(ctx, '#1d3461');
+  rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#fff';
+  ctx.stroke();
+  // diamond lattice
+  ctx.save();
+  rr(ctx, 26, 26, TEX_W - 52, TEX_H - 52, 16);
+  ctx.clip();
+  ctx.strokeStyle = '#ffffff22';
+  ctx.lineWidth = 4;
+  for (let i = -TEX_H; i < TEX_W + TEX_H; i += 34) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i - TEX_H, TEX_H);
+    ctx.moveTo(i - TEX_H, 0);
+    ctx.lineTo(i, TEX_H);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(TEX_W / 2, TEX_H / 2);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 150, 92, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#f5c542';
+  ctx.stroke();
+  drawSuit(ctx, 'spades', -66, -38, 34);
+  drawSuit(ctx, 'hearts', -22, -38, 34);
+  drawSuit(ctx, 'clubs', 22, -38, 34);
+  drawSuit(ctx, 'diamonds', 66, -38, 34);
+  ctx.fillStyle = '#1d3461';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fitFont(ctx, 'JUDGEMENT', 250, 44, '900');
+  ctx.fillText('JUDGEMENT', 0, 22);
+  ctx.restore();
+}
+
 export function cardCanvas(card) {
   const key = card ? card.key : 'back';
   let canvas = cache.get(key);
@@ -476,6 +912,8 @@ export function cardCanvas(card) {
   canvas = makeCanvas();
   const ctx = canvas.getContext('2d');
   if (!card) drawBack(ctx);
+  else if (card.type === 'playing') drawPlaying(ctx, card);
+  else if (card.type === 'playing-back') drawPlayingBack(ctx);
   else if (card.type === 'money') drawMoney(ctx, card);
   else if (card.type === 'property') drawProperty(ctx, card);
   else if (card.type === 'wild') drawWild(ctx, card);

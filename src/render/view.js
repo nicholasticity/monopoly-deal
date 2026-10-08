@@ -144,11 +144,21 @@ export class TableView {
     this.root.addEventListener('pointerover', (e) => e.pointerType !== 'touch' && this.setHover(cardAt(e), e));
     this.root.addEventListener('pointerleave', (e) => e.pointerType !== 'touch' && this.setHover(null, e));
     // Touch has no hover: a tap shows the card (preview, raised hand card) until the
-    // next tap somewhere else.
-    document.addEventListener('pointerdown', (e) => e.pointerType === 'touch' && this.setHover(cardAt(e), e), true);
+    // next tap somewhere else. A tap on a card that's already up is "armed": the click
+    // handler hears whether it was (a mouse click always is).
+    this.touchAt = 0;
+    this.armed = false;
+    document.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      const obj = cardAt(e);
+      this.touchAt = Date.now();
+      this.armed = !!obj && obj.card.id === this.hoverId;
+      this.setHover(obj, e);
+    }, true);
     this.root.addEventListener('click', (e) => {
       const obj = cardAt(e);
-      if (obj?.zone) this.handlers.click(obj.card, obj.zone, e.clientX, e.clientY);
+      const armed = Date.now() - this.touchAt > 800 || this.armed;
+      if (obj?.zone) this.handlers.click(obj.card, obj.zone, e.clientX, e.clientY, armed);
     });
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
@@ -170,10 +180,24 @@ export class TableView {
     this.rings.clear();
     this.seat = Math.max(0, game.state.players.findIndex((p) => p.isHuman));
     this.buildPanels(game);
-    // Show the HUD's pile counts first: on tall screens the piles are placed on them.
-    this.handlers.piles(game.state.deck.length, game.state.discard.length);
+    this.showPiles(game.state);
     this.size = null;
     this.resize();
+  }
+
+  // One table is on show at a time (main.js); a hidden one keeps its cards.
+  setShown(on) {
+    this.root.hidden = !on;
+    if (!on) return;
+    // Header measurements taken while hidden are all zero.
+    for (const p of this.panels) p.bankKey = p.wonKey = '';
+    this.size = null;
+    this.resize();
+  }
+
+  // Show the HUD's pile counts first: on tall screens the piles are placed on them.
+  showPiles(state) {
+    this.handlers.piles(state.deck.length, state.discard.length);
   }
 
   // A panel per player: a header (avatar, name, bank total, sets, cards in hand) over
@@ -236,8 +260,13 @@ export class TableView {
     this.size = { w, h };
     this.inset = this.insets();
     this.fit();
-    // The HUD keeps the status row and menus clear of the hand.
-    document.documentElement.style.setProperty('--hand-h', `${Math.round(this.geo.hand.visible)}px`);
+    // The HUD keeps the status row and menus clear of the hand (of the table on show).
+    // Docked prompts sit above geo.dock, if the table has one (it can keep your panel clear).
+    if (!this.root.hidden) {
+      const vars = document.documentElement.style;
+      vars.setProperty('--hand-h', `${Math.round(this.geo.hand.visible)}px`);
+      vars.setProperty('--dock-h', `${Math.round(this.geo.dock ?? this.geo.hand.visible)}px`);
+    }
     if (snap) this.snap(() => this.layout());
     else this.layout();
   }
@@ -366,7 +395,11 @@ export class TableView {
     this.layoutShowcase(state.showcase);
     const me = state.players[this.seat];
     this.root.classList.toggle('my-turn', !!me?.isHuman && state.current === this.seat && state.phase !== 'over');
+    this.finishLayout();
+  }
 
+  // After every card is placed: clear away what's gone and report what moved.
+  finishLayout() {
     // Online, a reshuffle swaps the discard pile for freshly numbered deck cards.
     for (const [id, obj] of this.cards) {
       if (this.seen.has(id)) continue;
@@ -661,3 +694,6 @@ export class TableView {
     return { x: rect.left + obj.pos.x, y: rect.top + obj.pos.y };
   }
 }
+
+// Shared with the Judgement table (judgement-view.js).
+export { W0, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc, sleep };

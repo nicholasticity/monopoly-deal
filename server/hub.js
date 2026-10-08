@@ -140,7 +140,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'create': {
             if (!allowEntry(ip)) return conn.send({ type: 'error', message: 'Too many attempts. Wait a minute and try again.', fatal: true });
             if (rooms.size >= MAX_ROOMS) return conn.send({ type: 'error', message: 'The server is full right now. Try again later.', fatal: true });
-            const fresh = new Room(newCode(), closeRoom, { timeScale });
+            const fresh = new Room(newCode(), closeRoom, { timeScale, game: msg.game });
             rooms.set(fresh.code, fresh);
             log(`[rooms] opened ${fresh.code} (${rooms.size} open)`);
             enter(fresh, msg);
@@ -167,6 +167,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'addBot': return room.addBot(member);
           case 'kick': return room.kick(member, msg.id);
           case 'speed': return room.setSpeed(member, msg.speed);
+          case 'game': return room.setGame(member, msg.game);
           case 'start': return room.start(member);
           case 'stop': return room.stop(member);
           case 'voice': return room.setVoice(member, msg.on, msg.muted);

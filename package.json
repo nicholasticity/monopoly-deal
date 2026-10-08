@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "simulate": "node scripts/simulate.mjs",
+    "simulate:judgement": "node scripts/simulate-judgement.mjs",
     "start": "node server/index.js",
     "test:online": "node scripts/online-smoke.mjs"
   },

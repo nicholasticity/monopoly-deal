@@ -55,6 +55,32 @@ export class Viewer {
       return a;
     };
     const shown = (card) => (card ? ref(card, true) : null);
+    if (game.kind === 'judgement') {
+      // Only your own hand is private; cards played to a trick stay face up.
+      return {
+        players: state.players.map((p) => ({
+          id: p.id,
+          hand: p.hand.map((c) => ref(c, p.id === this.seat)),
+          tricks: p.tricks.map(shown),
+          bid: p.bid,
+          won: p.won,
+          score: p.score,
+          history: p.history,
+        })),
+        deck: state.deck.map((c) => ref(c, false)),
+        trick: state.trick.map((t) => ({ playerId: t.playerId, card: shown(t.card) })),
+        trump: state.trump,
+        den: state.den,
+        round: state.round,
+        rounds: state.rounds,
+        handSize: state.handSize,
+        current: state.current,
+        leader: state.leader,
+        phase: state.phase,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     return {
       players: state.players.map((p) => ({
         id: p.id,
