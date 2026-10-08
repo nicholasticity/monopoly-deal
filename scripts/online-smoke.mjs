@@ -36,6 +36,7 @@ class Client {
   }
 
   connect() {
+    everyone.add(this);
     this.ws = new WebSocket(url);
     this.ws.on('message', (data) => this.onMessage(JSON.parse(data)));
     return new Promise((r) => this.ws.once('open', r));
@@ -73,6 +74,9 @@ class Client {
         break;
       case 'log':
         if (msg.text.includes('shuffled into a new deck')) reshuffles++;
+        break;
+      case 'waiting':
+        if (msg.kind === 'justsayno' && msg.playerId !== this.mirror?.you) this.sawResponse(msg.playerId);
         break;
       case 'game':
         this.kind = msg.kind;
@@ -114,6 +118,15 @@ class Client {
       case 'play': return this.jai.choosePlay(g, me);
     }
     fail(`unknown request ${kind}`);
+  }
+
+  // Another player is responding to an action: tally whether they really hold a Just
+  // Say No (from their own client), since everyone should see it either way.
+  sawResponse(seat) {
+    const target = [...everyone].find((c) => c !== this && c.code === this.code && c.ws.readyState === 1 && c.mirror?.you === seat);
+    if (!target) return;
+    const { players } = target.mirror.state;
+    responses[players[seat].hand.some((c) => c.action === 'justsayno') ? 'holding' : 'without']++;
   }
 
   checkHidden() {
@@ -178,6 +191,8 @@ async function playRound(clients, addBots = 0) {
 }
 
 let reshuffles = 0;
+const everyone = new Set();
+const responses = { holding: 0, without: 0 };
 const alice = new Client('Alice');
 const bob = new Client('Bob');
 const cara = new Client('Cara');
@@ -272,6 +287,9 @@ console.log(`  reconnect: Bob resumed his seat and answered ${bob2.requests} req
 for (let i = 0; i < 8 && !reshuffles; i++) await playRound([alice, bob2, cara], 2);
 if (!reshuffles) fail('no deck reshuffle happened, so hidden aliases were not exercised');
 console.log(`  ${reshuffles} reshuffle log lines seen across clients`);
+// Players without a Just Say No still seem to respond, so others can't tell who has one.
+if (!responses.without) fail('nobody saw a player without a Just Say No respond to an action');
+console.log(`  Just Say No moments seen by others: ${responses.holding} holding one, ${responses.without} without`);
 
 // Judgement: only the host picks the game, and only in the lobby.
 const clients = [alice, bob2, cara];

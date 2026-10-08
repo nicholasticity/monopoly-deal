@@ -28,6 +28,11 @@ export class AIController {
     return decideJustSayNo(game, me, ctx);
   }
 
+  // Holding no Just Say No: the same pause, so it doesn't give the hand away.
+  async passJustSayNo() {
+    await this.wait(0.7);
+  }
+
   async chooseDiscards(game, me, count) {
     await this.wait(0.4);
     return chooseDiscards(me, count).map((c) => c.id);

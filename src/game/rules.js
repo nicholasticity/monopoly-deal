@@ -3,6 +3,8 @@ import { COLORS, COLOR_ORDER } from './cards.js';
 
 export const HAND_LIMIT = 7;
 export const PLAYS_PER_TURN = 3;
+// Which of the turn's plays the current player is choosing or making (1-3), or 0.
+export const playNumber = (state) => (state.phase === 'play' ? state.play || 0 : 0);
 export const SETS_TO_WIN = 3;
 export const HOUSE_BONUS = 3;
 export const HOTEL_BONUS = 4;

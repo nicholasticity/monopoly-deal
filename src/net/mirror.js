@@ -22,6 +22,7 @@ export class MirrorGame {
       showcase: [],
       current: 0,
       playsLeft: 0,
+      play: 0,
       turn: 0,
       winner: null,
       phase: 'setup',
@@ -78,6 +79,7 @@ export class MirrorGame {
     state.showcase = snap.showcase.map(ref);
     state.current = snap.current;
     state.playsLeft = snap.playsLeft;
+    state.play = snap.play ?? 0;
     state.turn = snap.turn;
     state.phase = snap.phase;
     state.winner = snap.winner == null ? null : state.players[snap.winner];

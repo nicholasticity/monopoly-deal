@@ -40,6 +40,7 @@ export class Game {
       showcase: [],
       current: firstPlayer ?? Math.floor(rng() * players.length),
       playsLeft: 0,
+      play: 0,
       turn: 0,
       winner: null,
       phase: 'setup',
@@ -128,6 +129,7 @@ export class Game {
     const me = this.current;
     state.turn++;
     state.playsLeft = R.PLAYS_PER_TURN;
+    state.play = 0;
     state.phase = 'draw';
     this.emit('turn', { player: me });
     this.log(you(me) ? 'Your turn' : `${me.name}'s turn`, 'turn');
@@ -139,7 +141,9 @@ export class Game {
     let invalid = 0;
     let freeMoves = 0;
     while (state.playsLeft > 0 && !state.winner) {
-      this.emit('state');
+      // Everyone sees which play this is (Double The Rent uses up more than one).
+      state.play = R.PLAYS_PER_TURN - state.playsLeft + 1;
+      await this.sync(0);
       const action = await this.ask(me.controller.chooseTurnAction(this, me));
       if (!action || action.kind === 'end') break;
       const err = R.validateAction(this, me, action);
@@ -341,8 +345,14 @@ export class Game {
     let other = actor;
     for (;;) {
       const jsn = responder.hand.find((c) => c.action === 'justsayno');
-      if (!jsn) return proceed;
-      const use = await this.ask(responder.controller.chooseJustSayNo(this, responder, { ...ctx, actor, target, blocking: proceed }));
+      const args = { ...ctx, actor, target, blocking: proceed };
+      // With no Just Say No there's nothing to decide, but the moment to respond
+      // looks the same (controllers may pause), so nobody can tell who holds one.
+      if (!jsn) {
+        await this.ask(responder.controller.passJustSayNo?.(this, responder, args));
+        return proceed;
+      }
+      const use = await this.ask(responder.controller.chooseJustSayNo(this, responder, args));
       if (!use) return proceed;
       R.takeCard(responder, jsn.id);
       this.log(`${responder.name} ${verb(responder, 'says', 'say')} "Just Say No!"`, 'action');

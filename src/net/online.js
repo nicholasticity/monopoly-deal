@@ -4,6 +4,7 @@ import { Connection } from './connection.js';
 import { MirrorGame } from './mirror.js';
 import { JudgementMirror } from './judgement-mirror.js';
 import { HumanController } from '../ui/human.js';
+import { playNumber, PLAYS_PER_TURN } from '../game/rules.js';
 import { JudgementHuman, judgementStatus, gameInfo, gameResult, roundBoard, turnToast } from '../ui/judgement.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
@@ -17,7 +18,7 @@ function el(tag, cls, text) {
   e.textContent = text;
   return e;
 }
-const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'deciding whether to Just Say No', discard: 'discarding' };
+const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'responding', discard: 'discarding' };
 // The countdown only shows once a decision is running short.
 const CLOCK_FROM_S = 30;
 // Set while this tab is in voice chat, so a reload rejoins it.
@@ -508,6 +509,8 @@ export class OnlineSession {
       return;
     }
     const plays = `${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`;
+    const play = playNumber(state);
+    const onPlay = (i) => `${nameOf(i)} is on play ${play} of ${PLAYS_PER_TURN}`;
     let text;
     const mine = w ? w.playerId === this.seat : !!this.mirror.current?.isHuman;
     if (w && w.playerId === this.seat) {
@@ -518,11 +521,11 @@ export class OnlineSession {
         discard: '<b>Too many cards</b> · discard down to 7',
       }[w.kind];
     } else if (w) {
-      text = `${watching}${nameOf(w.playerId)} is ${DOING[w.kind]}…`;
+      text = `${watching}${w.kind === 'turn' && play ? onPlay(w.playerId) : `${nameOf(w.playerId)} is ${DOING[w.kind]}…`}`;
     } else if (this.mirror.current?.isHuman) {
       text = `<b>Your turn</b> · ${plays}`;
     } else {
-      text = `${watching}${nameOf(state.current)} is playing…`;
+      text = `${watching}${play ? onPlay(state.current) : `${nameOf(state.current)} is playing…`}`;
     }
     this.hud.setStatus(text + clock, mine);
   }

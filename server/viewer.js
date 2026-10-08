@@ -99,6 +99,7 @@ export class Viewer {
       showcase: state.showcase.map(shown),
       current: state.current,
       playsLeft: state.playsLeft,
+      play: state.play,
       turn: state.turn,
       phase: state.phase,
       winner: state.winner ? state.winner.id : null,

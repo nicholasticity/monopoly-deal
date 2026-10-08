@@ -82,7 +82,8 @@ function updateStatus() {
   } else if (p.isHuman) {
     hud.setStatus(`<b>Your turn</b> · ${state.playsLeft} play${state.playsLeft === 1 ? '' : 's'} left`, true);
   } else {
-    hud.setStatus(`<b>${p.name}</b> is playing…`);
+    const play = R.playNumber(state);
+    hud.setStatus(play ? `<b>${p.name}</b> is on play ${play} of ${R.PLAYS_PER_TURN}` : `<b>${p.name}</b> is playing…`);
   }
 }
 

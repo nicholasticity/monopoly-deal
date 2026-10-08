@@ -466,6 +466,18 @@ export class Room {
     });
   }
 
+  // Shows everyone else a decision `m` isn't really being asked: the same status and
+  // clock as a real one, for about as long as a person takes to answer.
+  async pretend(m, kind) {
+    if (m.away || this.status !== 'playing') return m.ai.passJustSayNo?.();
+    const send = (msg) => {
+      for (const x of this.humans) if (x !== m) x.conn?.send(msg);
+    };
+    send({ type: 'waiting', playerId: m.seat, kind, remaining: TIMEOUTS[kind] * 1000 });
+    await sleep((1500 + Math.random() * 2500) * this.timeScale);
+    send(this.waitingMessage());
+  }
+
   sendRequest(m) {
     const req = m.pending;
     m.conn?.send({ type: 'request', reqId: req.id, kind: req.kind, args: req.args, remaining: req.deadline - Date.now() });
@@ -571,6 +583,11 @@ class SeatController {
       pileId: ctx.pile ? ctx.pile.id : null,
     };
     return this.room.ask(this.m, 'justsayno', args, () => this.m.ai.chooseJustSayNo(game, me, ctx), (x) => x === true);
+  }
+
+  // No Just Say No to play, so nothing to ask; the others still see them respond.
+  passJustSayNo() {
+    return this.room.pretend(this.m, 'justsayno');
   }
 
   chooseDiscards(game, me, count) {

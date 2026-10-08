@@ -509,11 +509,14 @@ export class TableView {
     const pips = Array.from({ length: R.SETS_TO_WIN }, (_, j) => `<i class="${j < sets ? 'on' : ''}"></i>`).join('');
     const you = mine && p.isHuman && p.name.trim().toLowerCase() !== 'you' ? '<span class="you">You</span>' : '';
     const hand = mine && p.isHuman ? '' : `<span class="chip" title="Cards in hand"><i class="mini-card"></i>${p.hand.length}</span>`;
+    // Which of their three plays the player whose turn it is is on (yours is in the turn controls).
+    const on = state.current === i && !(mine && p.isHuman) ? R.playNumber(state) : 0;
+    const play = on ? `<span class="chip play" title="Play ${on} of ${R.PLAYS_PER_TURN} this turn">Play ${on}/${R.PLAYS_PER_TURN}</span>` : '';
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
     const bills = p.bank.map((c) => c.value).sort((a, b) => b - a);
     const bankTitle = bills.length ? `Bank: ${bills.map((v) => `$${v}M`).join(' + ')}` : 'Bank';
-    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips"><span class="chip money" title="${bankTitle}">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
+    const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}<span class="chips">${play}<span class="chip money" title="${bankTitle}">$${R.bankTotal(p)}M</span><span class="chip sets" title="Complete sets">${pips}</span>${hand}</span>`;
     if (html !== panel.html) {
       panel.head.innerHTML = html;
       panel.html = html;
