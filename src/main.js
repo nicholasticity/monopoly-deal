@@ -170,6 +170,8 @@ async function startFlow(notice = null, home = false) {
   hud.setTurnControls(false);
   hud.setStatus('');
   hud.setGameInfo('');
+  hud.clearToasts();
+  for (const v of Object.values(views)) v.detach();
   if (home) useGame(await hud.showHome(kind));
   const opts = await hud.showStart({ ...settings, notice });
   if (opts.mode === 'home') return startFlow(null, true);

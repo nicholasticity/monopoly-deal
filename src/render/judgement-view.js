@@ -58,6 +58,13 @@ export class JudgementView extends TableView {
     });
   }
 
+  detach() {
+    for (const t of this.tags) t.remove();
+    this.tags = [];
+    this.trumpEl.classList.add('hidden');
+    super.detach();
+  }
+
   // Only cards in the local hand respond to the pointer.
   place(obj, x, y, w, opts) {
     super.place(obj, x, y, w, opts);

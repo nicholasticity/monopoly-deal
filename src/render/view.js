@@ -172,17 +172,32 @@ export class TableView {
 
   // The local player (isHuman) sits at the bottom; the others follow in turn order.
   attach(game) {
+    this.clear();
     this.game = game;
-    this.hoverId = null;
-    for (const obj of this.cards.values()) obj.el.remove();
-    this.cards.clear();
-    for (const ring of this.rings.values()) ring.remove();
-    this.rings.clear();
     this.seat = Math.max(0, game.state.players.findIndex((p) => p.isHuman));
     this.buildPanels(game);
     this.showPiles(game.state);
     this.size = null;
     this.resize();
+  }
+
+  // Empties the table once a game is over or left, so it doesn't look like it could go on.
+  detach() {
+    this.clear();
+    this.game = null;
+    for (const p of this.panels) p.el.remove();
+    this.panels = [];
+    this.root.classList.remove('my-turn');
+    this.handlers.piles(null, null);
+    this.resize();
+  }
+
+  clear() {
+    this.hoverId = null;
+    for (const obj of this.cards.values()) obj.el.remove();
+    this.cards.clear();
+    for (const ring of this.rings.values()) ring.remove();
+    this.rings.clear();
   }
 
   // One table is on show at a time (main.js); a hidden one keeps its cards.

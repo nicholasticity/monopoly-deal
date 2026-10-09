@@ -266,6 +266,10 @@ export class Hud {
     setTimeout(() => t.remove(), ms + 500);
   }
 
+  clearToasts() {
+    this.toastsEl.replaceChildren();
+  }
+
   // The top bar also holds the pile counts in portrait: when the buttons leave no room,
   // the logo gives way (first DEAL or the suits, then the rest).
   fitTopbar() {
@@ -274,9 +278,11 @@ export class Hud {
     for (const cls of ['tight', 'tighter']) if (bar.scrollWidth > bar.clientWidth) bar.classList.add(cls);
   }
 
-  // Cards left in the deck and on the discard pile (shown in the top bar in portrait).
+  // Cards left in the deck and on the discard pile (shown in the top bar in portrait);
+  // null hides them between games.
   setPiles(deck, discard) {
-    this.pilesEl.classList.remove('idle');
+    this.pilesEl.classList.toggle('idle', deck == null);
+    if (deck == null) return;
     for (const [pile, n] of [[this.piles.deck, deck], [this.piles.discard, discard]]) {
       const b = pile.querySelector('b');
       if (b.textContent !== String(n)) b.textContent = n;
