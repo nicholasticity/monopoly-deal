@@ -1357,5 +1357,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 .bmini-grid i.x, .tile-bingo i.x { background: #a5afaa; color: rgba(29, 42, 40, 0.5); text-decoration: line-through 2px #c8102e; }
 .bmini-grid i.gold, .tile-bingo i.gold { background: #f0c75a; text-decoration: none; }
-.tile-fan .tile-bingo { position: absolute; left: 12px; top: 8px; padding: 4px; border-radius: 6px; background: #0f6b62; grid-template-columns: repeat(5, 14px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); transform: rotate(-6deg); }
+.tile-fan .tile-bingo { position: absolute; left: 50%; top: 50%; padding: 4px; border-radius: 6px; background: #0f6b62; grid-template-columns: repeat(5, 14px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); transform: translate(-50%, -50%) rotate(-6deg); }
 .tile-fan .tile-bingo i { height: 14px; font-size: 0.5rem; }
+@media (max-width: 640px), (max-height: 540px) {
+  .tile-fan .tile-bingo { grid-template-columns: repeat(5, 12px); padding: 3px; }
+  .tile-fan .tile-bingo i { height: 12px; font-size: 0.45rem; }
+}
