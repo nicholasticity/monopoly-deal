@@ -1,8 +1,9 @@
-# Monopoly Deal & Judgement
+# Monopoly Deal, Judgement & Bingo
 
-Two card games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**
-and the trick-taking game **Judgement**. Pick one on the home screen, then play against 1–4
-computer opponents on a 2D card table, or **online with friends**: create a room, send the
+Three games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+the trick-taking game **Judgement**, and pen-and-paper **Bingo** (the 5×5, 1–25 kind). Pick
+one on the home screen, then play against 1–4 computer opponents on a 2D table, or
+**online with friends**: create a room, send the
 invite link, and play in your browsers (2–5 players, bots fill empty seats).
 
 ## Running
@@ -23,7 +24,8 @@ Other scripts:
 | `npm run preview`  | Serve the production build locally (online rooms included)    |
 | `npm run simulate` | Play 300 headless AI-vs-AI games to sanity-check the rules     |
 | `npm run simulate:judgement` | The same for Judgement (200 games): how often bids are made, missed or overshot |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of both over WebSocket |
+| `npm run simulate:bingo` | The same for Bingo: game length, shared wins, and smart callers against random ones |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all three over WebSocket |
 
 ## Playing online with friends
 
@@ -35,20 +37,21 @@ Other scripts:
    speed and press **Start game** once there are at least 2 players. Up to 5 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal and Judgement in the lobby between games. An invite link skips the game picker, because
+Deal, Judgement and Bingo in the lobby between games. An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
 
-- Every player sees only their own hand; the server runs the game and never sends anyone
-  else's hidden cards to your browser.
+- Every player sees only their own hand (or Bingo grid); the server runs the game and never
+  sends anyone else's hidden cards to your browser.
 - **Chat** with the button in the top bar (or press Enter). Messages that arrive while it's
   closed pop up briefly.
 - **Talk** with 🎙️ (in the lobby or the top bar): everyone who has joined voice chat hears
   each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
   **M** to mute. See [Voice chat](#voice-chat).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
-  30 s for a Just Say No. In Judgement you have 45 s to call trumps, bid or play a card. The
+  30 s for a Just Say No. In Judgement you have 45 s to call trumps, bid or play a card; in
+  Bingo, 60 s to arrange your grid and 30 s to call a number. The
   clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
   row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
@@ -198,6 +201,24 @@ stays in view, and the bid panel shows what your bid would score. Each player's 
 their total and the tricks they've won out of their bid. The round counter in the top bar
 (with the trump suit) opens the scores so far.
 
+### Bingo
+
+The pen-and-paper version: no caller, no tickets, everyone calls in turn.
+
+- Everyone gets a 5×5 grid with the numbers 1–25 in a random order, and arranges it at the
+  same time: tap two squares to swap them, or **Shuffle**, then **Ready**. Nobody else sees
+  your grid.
+- Then, in turn, each player **calls** a number that hasn't been called yet. Every player
+  crosses it off their own grid (the app does this for you).
+- Each full row, column or diagonal crossed off is a line, and lights the next letter of
+  **B-I-N-G-O**. The first to five lines wins. If two or more get there on the same call,
+  they share the win.
+
+Tap a number on your grid to call it (on a phone, tap to pick it and tap again to call it).
+The number just called shows in the middle in its caller's colour, with the earlier calls
+beside it. Each player's bar shows the letters they've lit, and at the end everyone's grid
+is shown.
+
 ## Code layout
 
 ```
@@ -213,14 +234,20 @@ src/
     rules.js     dealing, bids, following suit, trick winners, scoring
     engine.js    rounds and tricks; asks controllers for trumps, bids and cards
     ai.js        computer opponents
+  bingo/     Bingo's rules, engine and AI
+    rules.js     grids, lines, B-I-N-G-O letters
+    engine.js    arranging, then calls in turn; asks controllers for grids and numbers
+    ai.js        computer opponents (call the number that helps their own lines most)
   render/    the tables (DOM + CSS)
     view.js      player panels, card layout and animation
     judgement-view.js  the Judgement table, built on view.js
+    bingo-view.js      the Bingo table: player bars, the calls and your grid
     textures.js  card faces (both decks) drawn on canvas
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions
     judgement.js Judgement's prompts, status line and score tables
+    bingo.js     Bingo's grid arranging and calling, status line and result
     lobby.js     online room lobby
     chat.js      room chat panel
   net/       online client
@@ -228,6 +255,7 @@ src/
     online.js      one online session: lobby, game, prompts, chat, voice
     mirror.js      read-only copy of the server's game for the view and HUD
     judgement-mirror.js  the same for a Judgement game
+    bingo-mirror.js      and for a Bingo game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
   main.js    wires it all together
 server/
@@ -238,18 +266,20 @@ server/
 scripts/
   simulate.mjs     headless AI games
   simulate-judgement.mjs  the same for Judgement
+  simulate-bingo.mjs      and for Bingo
   online-smoke.mjs headless multiplayer games over real sockets
 ```
 
 The engine talks to players only through a controller interface (`chooseTurnAction`,
 `choosePayment`, `chooseJustSayNo`, `chooseDiscards`), so humans and the AI are
 interchangeable, and the engine runs headless without a view. Judgement's engine works the
-same way, with `chooseTrump`, `chooseBid` and `choosePlay`.
+same way, with `chooseTrump`, `chooseBid` and `choosePlay`, and so does Bingo's, with
+`arrangeGrid` (asked of everyone at once) and `chooseCall`.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
 to that player's browser as a `request` and waits for the `response`, falling back to the AI
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`, `BingoHuman`)
 used for solo play.

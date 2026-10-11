@@ -16,6 +16,7 @@ const SUIT_LOGO = '&#x2660;&#xFE0E;<i class="hearts">&#x2665;&#xFE0E;</i><i clas
 const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
   judgement: `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${SUIT_LOGO}</span>`,
+  bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
 };
 
 function el(tag, cls, html) {
@@ -23,6 +24,15 @@ function el(tag, cls, html) {
   if (cls) e.className = cls;
   if (html != null) e.innerHTML = html;
   return e;
+}
+
+// A little crossed-off grid for Bingo's tile on the home screen.
+function miniBingo() {
+  const grid = el('span', 'tile-bingo');
+  const nums = [7, 19, 3, 24, 11, 15, 1, 22, 9, 5, 20, 13, 25, 2, 17, 4, 23, 8, 14, 21, 12, 6, 18, 10, 16];
+  const crossed = new Set([0, 6, 12, 18, 24, 3, 21]);
+  grid.innerHTML = nums.map((n, i) => `<i class="${crossed.has(i) ? 'x' : ''}${i % 6 === 0 ? ' gold' : ''}">${n}</i>`).join('');
+  return grid;
 }
 
 export function thumb(card, { flipped = isFlipped(card) } = {}) {
@@ -100,7 +110,7 @@ export class Hud {
     this.game = kind;
     this.brandEl.innerHTML = BRANDS[kind];
     this.title = document.title = GAMES[kind].name;
-    this.hudEl.classList.toggle('judgement', kind === 'judgement');
+    for (const k of ['judgement', 'bingo']) this.hudEl.classList.toggle(k, kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
     this.pilesEl.classList.add('idle');
     this.setGameInfo('');
@@ -553,7 +563,7 @@ export class Hud {
     return new Promise((resolve) => {
       this.closeAll();
       const body = el('div', 'home');
-      body.appendChild(el('p', 'tagline', 'Pick a game. Both play against the computer or online with friends.'));
+      body.appendChild(el('p', 'tagline', 'Pick a game. Each one plays against the computer or online with friends.'));
       const deal = buildDeck();
       const playing = playingDeck();
       const looks = {
@@ -563,7 +573,8 @@ export class Hud {
       for (const [kind, info] of Object.entries(GAMES)) {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
         const fan = tile.appendChild(el('span', 'tile-fan'));
-        for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
+        if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
+        else fan.appendChild(miniBingo());
         tile.appendChild(el('span', 'start-logo', BRANDS[kind]));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
         tile.appendChild(el('span', 'tile-meta muted', '2–5 players'));
@@ -592,7 +603,7 @@ export class Hud {
         <div class="start-solo">
           <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${[1, 2, 3, 4].map((n) => `<button data-v="${n}" class="${n === defaults.opponents ? 'on' : ''}">${n}</button>`).join('')}</div></div>
           <div class="opt-row"><span>Game speed</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
-          <button class="primary big" id="opt-start">Deal the cards</button>
+          <button class="primary big" id="opt-start">${this.game === 'bingo' ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
           <button class="primary big" id="opt-create">Create a room</button>
@@ -730,7 +741,7 @@ export class Hud {
 
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = this.game === 'judgement' ? JUDGEMENT_RULES : DEAL_RULES;
+    body.innerHTML = { judgement: JUDGEMENT_RULES, bingo: BINGO_RULES }[this.game] ?? DEAL_RULES;
     this.overlay({ title: 'How to play', body, wide: true });
   }
 }
@@ -767,3 +778,14 @@ const JUDGEMENT_RULES = `
         <li>As many extra tricks as you bid, or more: <b>−(10 × bid + extras)</b>. Bid 3 and take 6: −33.</li>
       </ul>
       <p class="muted">Tip: cards you can't play are dimmed. The round counter in the top bar shows everyone's scores.</p>`;
+
+const BINGO_RULES = `
+      <p><b>Goal:</b> be the first to cross off <b>five lines</b> on your grid: one letter of <b>B-I-N-G-O</b> for each.</p>
+      <ul>
+        <li>Everyone gets a 5×5 grid holding the numbers 1 to 25. Before play starts, arrange yours: tap two squares to swap them, or shuffle. Nobody else sees your grid.</li>
+        <li>Players take turns to <b>call</b> a number that hasn't been called yet. Tap it on your grid (on a phone: tap to pick it, tap again to call it).</li>
+        <li>Every called number is crossed off on <i>every</i> grid, so a call helps the others too.</li>
+        <li>A full row, column or diagonal (5 crossed-off numbers) is a <b>line</b>. There are 12 lines in all, and one number can finish more than one.</li>
+        <li>The first to 5 lines wins. If a call takes several players to 5 at once, they share the win.</li>
+      </ul>
+      <p class="muted">Tip: call the numbers that finish your own lines, and think about where they sit when you arrange: a number in the middle is on four lines.</p>`;

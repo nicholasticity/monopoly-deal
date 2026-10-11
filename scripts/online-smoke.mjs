@@ -1,7 +1,7 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state, Monopoly Deal and then Judgement. Also checks that no client
-// ever sees a hidden card.
+// (redacted) state: Monopoly Deal, then Judgement, then Bingo. Also checks that no
+// client ever sees a hidden card (or someone else's Bingo grid).
 // Usage: node scripts/online-smoke.mjs
 import http from 'node:http';
 import { WebSocket } from 'ws';
@@ -10,6 +10,11 @@ import { MirrorGame } from '../src/net/mirror.js';
 import { JudgementMirror } from '../src/net/judgement-mirror.js';
 import { AIController } from '../src/game/ai.js';
 import { JudgementAI } from '../src/judgement/ai.js';
+import { BingoMirror } from '../src/net/bingo-mirror.js';
+import { BingoAI } from '../src/bingo/ai.js';
+import { completedLines, TO_WIN } from '../src/bingo/rules.js';
+
+const MIRRORS = { deal: MirrorGame, judgement: JudgementMirror, bingo: BingoMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -28,6 +33,7 @@ class Client {
     this.clientId = `${name}-${Math.random().toString(36).slice(2)}`;
     this.ai = new AIController();
     this.jai = new JudgementAI();
+    this.bai = new BingoAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -80,7 +86,7 @@ class Client {
         break;
       case 'game':
         this.kind = msg.kind;
-        this.mirror = msg.kind === 'judgement' ? new JudgementMirror(msg.seats, msg.you) : new MirrorGame(msg.seats, msg.you);
+        this.mirror = new MIRRORS[msg.kind](msg.seats, msg.you);
         this.turns = [];
         this.rounds = [];
         break;
@@ -116,6 +122,8 @@ class Client {
       case 'trump': return this.jai.chooseTrump(g, me);
       case 'bid': return this.jai.chooseBid(g, me, args);
       case 'play': return this.jai.choosePlay(g, me);
+      case 'arrange': return this.bai.arrangeGrid(g, me, args);
+      case 'call': return this.bai.chooseCall(g, me);
     }
     fail(`unknown request ${kind}`);
   }
@@ -131,6 +139,7 @@ class Client {
 
   checkHidden() {
     if (this.kind === 'judgement') return this.checkHiddenJudgement();
+    if (this.kind === 'bingo') return this.checkHiddenBingo();
     const { state, you } = this.mirror;
     for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a deck card`);
     for (const p of state.players) {
@@ -159,6 +168,17 @@ class Client {
     const total = this.mirror.cards.size;
     if (total !== 52) fail(`${this.name} tracks ${total} cards`);
   }
+
+  // Bingo: only your own grid, until the game is over and every grid is shown.
+  checkHiddenBingo() {
+    const { state, you } = this.mirror;
+    const over = state.phase === 'over';
+    for (const p of state.players) {
+      if (p.id === you && state.phase !== 'setup' && !p.grid) fail(`${this.name} can't see their own grid`);
+      if (p.id !== you && !over && p.grid) fail(`${this.name} can see ${p.name}'s grid`);
+      if (over && !p.grid) fail(`${this.name} can't see ${p.name}'s grid after the game`);
+    }
+  }
 }
 
 // Messages from one socket are handled in order, so the bots exist before 'start'.
@@ -185,6 +205,18 @@ async function playRound(clients, addBots = 0) {
     if (clients.some((c) => !c.turns.includes('trump') || !c.turns.includes('bid') || !c.turns.includes('play'))) fail('turn kinds missing');
     const scores = clients[0].rounds.at(-1).results.map((r) => r.score);
     how = `${ids.length > 1 ? 'shared, ' : ''}scores ${scores.join('/')}`;
+  }
+  if (game.kind === 'bingo') {
+    const ids = results[0].winnerIds;
+    if (!ids?.includes(results[0].winnerId)) fail('Bingo winners missing');
+    if (clients.some((c) => !c.turns.includes('arrange') || !c.turns.includes('call'))) fail('turn kinds missing');
+    // Every winner really has five lines on the numbers called, and nobody else does.
+    const { players, called } = clients[0].mirror.state;
+    for (const p of players) {
+      const done = completedLines(p.grid, called).length >= TO_WIN;
+      if (done !== ids.includes(p.id)) fail(`${p.name}'s grid doesn't match the result`);
+    }
+    how = `${ids.length > 1 ? 'shared, ' : ''}${called.length} calls`;
   }
   console.log(`  ${game.kind}: ${game.seats.map((x) => x.name).join(', ')}: ${winner.name} won (${how}); requests ${clients.map((c) => c.requests).join('/')}`);
   return game;
@@ -311,6 +343,20 @@ const danGame = dan.next('game');
 dan.send('addBot');
 await playRound([dan]);
 if ((await danGame).kind !== 'judgement') fail('wrong game in a new Judgement room');
+
+// Bingo: everyone arranges at once, then calls in turn.
+const toBingo = alice.next('room', (m) => m.room.game === 'bingo');
+alice.send('game', { game: 'bingo' });
+await toBingo;
+// The two bots from the Judgement rounds are still seated; then just the three of them.
+for (let i = 0; i < 4; i++) {
+  if (i === 2) {
+    const noBots = alice.next('room', (m) => !m.room.members.some((x) => x.kind === 'bot'));
+    for (const m of alice.room.members.filter((x) => x.kind === 'bot')) alice.send('kick', { id: m.id });
+    await noBots;
+  }
+  if ((await playRound(clients)).kind !== 'bingo') fail('the game did not switch to Bingo');
+}
 
 console.log('PASS');
 process.exit(0);

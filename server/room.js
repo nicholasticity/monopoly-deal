@@ -6,6 +6,9 @@ import { AIController } from '../src/game/ai.js';
 import * as R from '../src/game/rules.js';
 import { JudgementGame } from '../src/judgement/engine.js';
 import { JudgementAI } from '../src/judgement/ai.js';
+import { BingoGame } from '../src/bingo/engine.js';
+import { BingoAI } from '../src/bingo/ai.js';
+import { validGrid } from '../src/bingo/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEEDS, MAX_PLAYERS, TIMEOUTS } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 
@@ -21,6 +24,10 @@ const EMPTY_ROOM_MS = 5 * 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
+// Each game's engine and bot.
+const ENGINES = { deal: [Game, AIController], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI] };
+// Decisions everyone makes at the same time (Bingo grids): each player sees only their own clock.
+const TOGETHER = new Set(['arrange']);
 
 // Names end up in the HTML of other players' screens, so keep them plain.
 export function cleanName(raw) {
@@ -137,7 +144,7 @@ export class Room {
       this.sendGame(m);
       this.sendState(m);
       if (m.pending) this.sendRequest(m);
-      conn.send(this.waitingMessage());
+      conn.send(this.waitingMessage(m));
       if (wasAway) this.system(`${m.name} is back.`);
     }
     this.broadcastRoom();
@@ -314,8 +321,7 @@ export class Room {
     const seated = this.members.slice(0, MAX_PLAYERS);
     if (seated.length < 2) return;
     const speed = SPEEDS[this.speed];
-    const judgement = this.kind === 'judgement';
-    const Bot = judgement ? JudgementAI : AIController;
+    const [Engine, Bot] = ENGINES[this.kind];
     const players = seated.map((s, i) => {
       s.seat = i;
       s.away = false;
@@ -331,7 +337,7 @@ export class Room {
     this.gameNo++;
     // The server has no renderer; the "view" just paces the game so clients can animate.
     const view = { sync: (g, ms) => sleep(ms * speed.pace * this.timeScale) };
-    const game = judgement ? new JudgementGame({ players, view }) : new Game({ players, view });
+    const game = new Engine({ players, view });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -411,7 +417,7 @@ export class Room {
         break;
       case 'gameover': {
         const w = data.winner;
-        if (game.kind === 'judgement') {
+        if (game.kind === 'judgement' || game.kind === 'bingo') {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -459,9 +465,13 @@ export class Room {
         this.broadcastRoom();
       }, ms);
       m.pending = req;
-      this.waitingFor = { playerId: m.seat, kind, deadline: req.deadline };
       this.sendState(m);
       this.sendRequest(m);
+      if (TOGETHER.has(kind)) {
+        m.conn?.send(this.waitingMessage(m));
+        return;
+      }
+      this.waitingFor = { playerId: m.seat, kind, deadline: req.deadline };
       this.broadcast(this.waitingMessage());
     });
   }
@@ -483,8 +493,10 @@ export class Room {
     m.conn?.send({ type: 'request', reqId: req.id, kind: req.kind, args: req.args, remaining: req.deadline - Date.now() });
   }
 
-  waitingMessage() {
-    const w = this.waitingFor;
+  // m: who it's for; while everyone decides at once, each sees their own decision.
+  waitingMessage(m = null) {
+    const own = m?.pending && TOGETHER.has(m.pending.kind) ? m.pending : null;
+    const w = own ? { playerId: m.seat, kind: own.kind, deadline: own.deadline } : this.waitingFor;
     return w ? { type: 'waiting', playerId: w.playerId, kind: w.kind, remaining: w.deadline - Date.now() } : { type: 'waiting', playerId: null };
   }
 
@@ -504,8 +516,11 @@ export class Room {
   settle(m, req, value) {
     clearTimeout(req.timer);
     m.pending = null;
-    this.waitingFor = null;
-    this.broadcast(this.waitingMessage());
+    if (TOGETHER.has(req.kind)) m.conn?.send(this.waitingMessage(m));
+    else {
+      this.waitingFor = null;
+      this.broadcast(this.waitingMessage());
+    }
     req.resolve(value);
   }
 
@@ -605,6 +620,15 @@ class SeatController {
 
   choosePlay(game, me) {
     return this.room.ask(this.m, 'play', {}, () => this.m.ai.choosePlay(game, me), (v) => this.viewer.real(v));
+  }
+
+  // Bingo. The engine checks the call and has the bot decide if it won't do.
+  arrangeGrid(game, me, args) {
+    return this.room.ask(this.m, 'arrange', args, () => this.m.ai.arrangeGrid(game, me, args), (v) => (validGrid(v) ? v : null));
+  }
+
+  chooseCall(game, me) {
+    return this.room.ask(this.m, 'call', {}, () => this.m.ai.chooseCall(game, me), (v) => (Number.isInteger(v) ? v : null));
   }
 
   // Rebuild a client's action from known fields only; the engine validates the rest.

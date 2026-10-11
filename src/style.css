@@ -1161,3 +1161,201 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   .lobby-head-btns { flex-wrap: wrap; }
   .lobby-head-btns button { padding: 7px 10px; font-size: 0.88rem; white-space: nowrap; }
 }
+
+/* ---------- Bingo ---------- */
+/* Its brand: a deep teal, with the numbers in place of DEAL. */
+.logo.bingo { background: #0f6b62; letter-spacing: 0.08em; }
+.deal.bingo-mark { color: var(--gold); font-variant-numeric: tabular-nums; }
+#hud.bingo #piles, #hud.bingo #turn-controls, #hud.bingo #hint { display: none !important; }
+.board.bingo { background: radial-gradient(ellipse at 50% 45%, #1f4a49 0%, #142f2e 55%, #081413 100%); }
+/* Each player's B-I-N-G-O so far, in their header bar. */
+.chip.word { gap: 1px; padding: 2px 7px; font-weight: 800; letter-spacing: 0.02em; }
+.chip.word i { font-style: normal; color: rgba(255, 255, 255, 0.22); }
+.chip.word i.on { color: var(--gold); text-shadow: 0 0 6px rgba(255, 215, 94, 0.6); }
+.chip.ready { color: var(--muted); font-weight: 700; }
+.chip.ready.on { color: #9ee6a8; }
+
+/* Your grid. --cell is one square's width (bingo-view.js). */
+.bingo-grid {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: calc(var(--cell) * 0.06);
+  padding: calc(var(--cell) * 0.04);
+  border-radius: calc(var(--cell) * 0.16);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.bcell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--cell) * 0.12);
+  background: linear-gradient(180deg, #f7f3e6, #e4dcc4);
+  color: #1d2a28;
+  font-family: inherit;
+  font-size: calc(var(--cell) * 0.4);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  transition: background 0.25s, color 0.25s, transform 0.15s, box-shadow 0.2s;
+  cursor: default;
+}
+.bcell:disabled { opacity: 1; }
+.bingo-grid.blank .bcell { background: rgba(255, 255, 255, 0.08); box-shadow: none; }
+/* Crossed off: greyed, with a pen cross over it. */
+.bcell.crossed { background: linear-gradient(180deg, #b9c2bd, #9aa5a0); color: rgba(29, 42, 40, 0.75); }
+.bcell.crossed::before, .bcell.crossed::after {
+  content: '';
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 50%;
+  height: max(2px, calc(var(--cell) * 0.055));
+  margin-top: calc(var(--cell) * -0.027);
+  border-radius: 2px;
+  background: #c8102e;
+  opacity: 0.55;
+  transform: rotate(45deg);
+}
+.bcell.crossed::after { transform: rotate(-45deg); }
+.bcell.gold { background: linear-gradient(180deg, #ffe596, #e8bb45); color: rgba(60, 40, 0, 0.75); }
+/* A finished line is struck through instead. */
+.bcell.gold::before, .bcell.gold::after { display: none; }
+.bcell.last { animation: bcell-pop 0.5s ease-out; }
+@keyframes bcell-pop { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+/* Your call: the numbers still open light up; arranging: every square is movable. */
+.bingo-grid.calling .bcell.open, .bingo-grid.arranging .bcell { cursor: pointer; }
+.bingo-grid.calling { box-shadow: 0 0 0 2px rgba(255, 215, 94, 0.55), 0 0 26px rgba(255, 215, 94, 0.25); }
+@media (hover: hover) {
+  .bingo-grid.calling .bcell.open:hover, .bingo-grid.arranging .bcell:hover { transform: translateY(-2px); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); }
+}
+.bingo-grid.arranging .bcell { background: linear-gradient(180deg, #fffdf6, #efe7cf); }
+.bcell.selected {
+  background: linear-gradient(180deg, #ffe596, #f2c14e) !important;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 16px rgba(255, 215, 94, 0.7);
+  transform: scale(1.06);
+  z-index: 1;
+}
+/* A stroke through each finished line. */
+.bline {
+  position: absolute;
+  display: none;
+  height: max(3px, calc(var(--cell) * 0.08));
+  margin-top: calc(var(--cell) * -0.04);
+  border-radius: 99px;
+  background: rgba(200, 16, 46, 0.75);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  z-index: 2;
+}
+.bline.on { display: block; animation: bline-draw 0.45s ease-out; }
+@keyframes bline-draw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* B-I-N-G-O over the grid: a letter lights up for each line. */
+.bingo-letters { position: absolute; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; pointer-events: none; }
+.bingo-letter {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.2);
+  font-size: calc(var(--cell) * 0.46);
+  font-weight: 900;
+  line-height: 1;
+  transition: color 0.3s, text-shadow 0.3s, transform 0.3s;
+}
+.bingo-letter.on { color: var(--gold); text-shadow: 0 0 12px rgba(255, 215, 94, 0.7); transform: scale(1.1); }
+
+/* The number just called, and the ones before it (newest first, coloured by caller). */
+.bingo-call { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; pointer-events: none; }
+.bingo-call.row { flex-direction: row; gap: 14px; }
+.bingo-ball {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--ball);
+  height: var(--ball);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #fffdf4 0 52%, var(--c) 53%);
+  color: #1d2a28;
+  font-size: calc(var(--ball) * 0.36);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), inset 0 -4px 10px rgba(0, 0, 0, 0.2);
+}
+.bingo-ball.empty { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.3); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12); }
+.bingo-ball.pop { animation: ball-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes ball-pop { from { transform: scale(0.4); opacity: 0.3; } to { transform: scale(1); opacity: 1; } }
+.call-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-height: 100%; overflow: hidden; }
+.bingo-call:not(.row) .call-side { align-items: center; text-align: center; }
+.call-who { font-size: 0.9rem; color: #dfe5e0; }
+.call-who b { color: var(--gold); }
+.call-history { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; }
+.bingo-call:not(.row) .call-history { justify-content: center; }
+.call-history i {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 3px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid var(--c);
+  color: #fff;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.board.small .call-who { font-size: 0.8rem; }
+.board.small .call-history i { min-width: 21px; height: 19px; font-size: 0.66rem; }
+
+/* The arrange prompt, where the calls go once play starts. */
+.bingo-prompt { position: absolute; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.bprompt {
+  width: min(100%, 420px);
+  max-height: 100%;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 215, 94, 0.45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+.bprompt h2 { margin: 0 0 4px; color: var(--gold); font-size: 1.05rem; }
+.bprompt p { margin: 0 0 10px; color: #dfe5e0; font-size: 0.88rem; }
+.bprompt-buttons { display: flex; gap: 10px; }
+.bprompt-buttons button { flex: 1; padding: 9px; font-size: 1rem; }
+.board.small .bprompt { padding: 9px 12px; }
+.board.small .bprompt p { margin-bottom: 7px; font-size: 0.8rem; }
+.board.small .bprompt-buttons button { padding: 7px; font-size: 0.92rem; }
+
+/* Everyone's grid at the end, and the home screen's tile. */
+.bminis { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 6px 0 12px; }
+.bmini { padding: 6px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 3px solid var(--c); }
+.bmini.won { border-color: var(--gold); border-top-color: var(--c); box-shadow: 0 0 14px rgba(255, 215, 94, 0.25); }
+.bmini-name { max-width: 120px; overflow: hidden; font-size: 0.78rem; font-weight: 700; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.bmini-word { display: flex; justify-content: center; gap: 2px; margin: 2px 0 4px; font-size: 0.74rem; }
+.bmini-word b { color: rgba(255, 255, 255, 0.22); }
+.bmini-word b.on { color: var(--gold); }
+.bmini-grid, .tile-bingo { display: grid; grid-template-columns: repeat(5, 20px); gap: 2px; }
+.bmini-grid i, .tile-bingo i {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  border-radius: 3px;
+  background: #ece6d2;
+  color: #1d2a28;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+.bmini-grid i.x, .tile-bingo i.x { background: #a5afaa; color: rgba(29, 42, 40, 0.5); text-decoration: line-through 2px #c8102e; }
+.bmini-grid i.gold, .tile-bingo i.gold { background: #f0c75a; text-decoration: none; }
+.tile-fan .tile-bingo { position: absolute; left: 12px; top: 8px; padding: 4px; border-radius: 6px; background: #0f6b62; grid-template-columns: repeat(5, 14px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); transform: rotate(-6deg); }
+.tile-fan .tile-bingo i { height: 14px; font-size: 0.5rem; }

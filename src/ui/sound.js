@@ -172,7 +172,10 @@ export function cueMoves(moves, completed) {
 // Sounds for game events, read from their log lines (the same solo and online).
 export function cueLog(text, kind) {
   if (/shuffled into a new deck| the den\.$/.test(text)) sound.play('shuffle');
+  // Bingo: a finished line, and each number called.
+  else if (kind === 'line') sound.play('set');
   else if (kind !== 'action') return;
+  else if (/ calls? \d+\.$/.test(text)) sound.play('place');
   else if (/ as trumps\.$/.test(text)) sound.play('set');
   else if (/Just Say No/.test(text)) sound.play('no');
   else if (/ rent |Birthday|Debt Collector/.test(text)) sound.play('charge');

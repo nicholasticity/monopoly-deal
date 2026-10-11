@@ -1,13 +1,17 @@
 import './style.css';
 import { TableView } from './render/view.js';
 import { JudgementView } from './render/judgement-view.js';
+import { BingoView } from './render/bingo-view.js';
 import { Hud } from './ui/hud.js';
 import { HumanController } from './ui/human.js';
 import { JudgementHuman, judgementStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/judgement.js';
+import * as BingoUI from './ui/bingo.js';
 import { AIController } from './game/ai.js';
 import { Game, GameAborted } from './game/engine.js';
 import { JudgementGame } from './judgement/engine.js';
 import { JudgementAI } from './judgement/ai.js';
+import { BingoGame } from './bingo/engine.js';
+import { BingoAI } from './bingo/ai.js';
 import * as R from './game/rules.js';
 import { BOT_NAMES, SPEEDS, GAMES, DEFAULT_GAME } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
@@ -16,7 +20,7 @@ import { cueMoves, cueLog, cueTricks } from './ui/sound.js';
 const hud = new Hud();
 // A table for each game on the one stage; only the current game's is on show.
 const stage = document.getElementById('stage');
-const views = { deal: new TableView(stage), judgement: new JudgementView(stage) };
+const views = { deal: new TableView(stage), judgement: new JudgementView(stage), bingo: new BingoView(stage) };
 let kind = null;
 let view = null;
 // Solo play runs the engine here; online play mirrors the server's game.
@@ -39,6 +43,7 @@ views.deal.on('hover', (card, zone, side) => hud.preview(card, zone, side));
 views.deal.on('moves', cueMoves);
 views.deal.on('piles', (deck, discard) => hud.setPiles(deck, discard));
 views.judgement.on('moves', cueTricks);
+views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
 
 // Puts a game's table on show (and its name in the top bar). Returns its view.
 function useGame(k) {
@@ -68,6 +73,11 @@ hud.onMuteKey = () => online?.toggleMute();
 function updateStatus() {
   if (!game) return;
   const { state } = game;
+  if (game.kind === 'bingo') {
+    const { text, mine } = BingoUI.bingoStatus(state, 0);
+    hud.setStatus(text, mine);
+    return;
+  }
   if (game.kind === 'judgement') {
     const { text, mine } = judgementStatus(state, 0);
     hud.setStatus(text, mine);
@@ -89,12 +99,15 @@ function updateStatus() {
 
 function newGame(opts) {
   const speed = SPEEDS[opts.speed];
-  const judgement = kind === 'judgement';
-  human = judgement ? new JudgementHuman(hud) : new HumanController(hud);
-  const Bot = judgement ? JudgementAI : AIController;
+  const [Engine, Bot, Human] = {
+    deal: [Game, AIController, HumanController],
+    judgement: [JudgementGame, JudgementAI, JudgementHuman],
+    bingo: [BingoGame, BingoAI, BingoUI.BingoHuman],
+  }[kind];
+  human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: speed.delay }) });
-  game = judgement ? new JudgementGame({ players, view }) : new Game({ players, view });
+  game = new Engine({ players, view });
   view.pace = speed.pace;
   hud.clearLog();
   hud.setTurnControls(false);
@@ -106,7 +119,9 @@ function newGame(opts) {
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
     // Judgement: no chime for every card you play.
-    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? turnToast(data.what) : undefined, { quiet: data.what === 'play' });
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? (kind === 'bingo' ? BingoUI.turnToast : turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
+    // Bingo: players get ready one by one while everyone arranges.
+    else if (type === 'state' && current.kind === 'bingo') view.layout();
     else if (type === 'gameover') onGameOver(data.winner);
     updateStatus();
   });
@@ -123,6 +138,8 @@ async function onGameOver(winner) {
   const finished = game;
   if (finished.kind === 'judgement') {
     await hud.showResult(gameResult(finished.state, 0));
+  } else if (finished.kind === 'bingo') {
+    await hud.showResult(BingoUI.gameResult(finished.state, 0));
   } else {
     const sets = winner.piles.filter(R.isComplete).map((p) => p.color);
     const stats = `Finished on turn ${finished.state.turn} with ${[...new Set(sets)].length} complete sets.`;

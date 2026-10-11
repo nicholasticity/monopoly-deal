@@ -55,6 +55,25 @@ export class Viewer {
       return a;
     };
     const shown = (card) => (card ? ref(card, true) : null);
+    if (game.kind === 'bingo') {
+      // Only your own grid, until the game is over; everyone sees how many lines.
+      const open = state.phase === 'over';
+      return {
+        players: state.players.map((p) => ({
+          id: p.id,
+          grid: open || p.id === this.seat ? p.grid : null,
+          ready: p.ready,
+          lines: p.lines,
+        })),
+        called: state.called,
+        callers: state.callers,
+        first: state.first,
+        current: state.current,
+        phase: state.phase,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'judgement') {
       // Only your own hand is private; cards played to a trick stay face up.
       return {

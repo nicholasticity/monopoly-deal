@@ -3,9 +3,11 @@
 import { Connection } from './connection.js';
 import { MirrorGame } from './mirror.js';
 import { JudgementMirror } from './judgement-mirror.js';
+import { BingoMirror } from './bingo-mirror.js';
 import { HumanController } from '../ui/human.js';
 import { playNumber, PLAYS_PER_TURN } from '../game/rules.js';
 import { JudgementHuman, judgementStatus, gameInfo, gameResult, roundBoard, turnToast } from '../ui/judgement.js';
+import * as BingoUI from '../ui/bingo.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { cueLog } from '../ui/sound.js';
@@ -162,7 +164,7 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? turnToast(msg.what) : undefined);
+        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? (this.kind === 'bingo' ? BingoUI.turnToast : turnToast)(msg.what) : undefined);
         break;
       case 'round':
         this.onRound(msg);
@@ -260,7 +262,8 @@ export class OnlineSession {
       this.gameNo = msg.gameNo;
       this.seat = msg.you;
       this.setKind(msg.kind);
-      this.mirror = this.kind === 'judgement' ? new JudgementMirror(msg.seats, msg.you) : new MirrorGame(msg.seats, msg.you);
+      const Mirror = { judgement: JudgementMirror, bingo: BingoMirror }[this.kind] ?? MirrorGame;
+      this.mirror = new Mirror(msg.seats, msg.you);
       this.needsAttach = true;
       this.waiting = null;
       this.hud.closeAll();
@@ -306,7 +309,8 @@ export class OnlineSession {
     if (this.req?.id === msg.reqId) return;
     this.dropRequest();
     const g = this.mirror;
-    const human = g.kind === 'judgement' ? new JudgementHuman(this.hud) : new HumanController(this.hud);
+    const Human = { judgement: JudgementHuman, bingo: BingoUI.BingoHuman }[g.kind] ?? HumanController;
+    const human = new Human(this.hud, this.view);
     const req = { id: msg.reqId, kind: msg.kind };
     this.req = req;
     this.human = human;
@@ -335,6 +339,12 @@ export class OnlineSession {
       case 'play':
         value = await human.choosePlay(g, me);
         break;
+      case 'arrange':
+        value = await human.arrangeGrid(g, me, a);
+        break;
+      case 'call':
+        value = await human.chooseCall(g, me);
+        break;
       default:
         return;
     }
@@ -348,6 +358,7 @@ export class OnlineSession {
   dropRequest() {
     if (!this.req) return;
     this.req = null;
+    this.human?.cancel?.();
     this.human = null;
     this.hud.closeAll();
     this.hud.setTurnControls(false);
@@ -373,10 +384,11 @@ export class OnlineSession {
     const winner = state?.players[msg.winnerId];
     if (!winner) return;
     this.gameoverOpen = true;
-    if (this.mirror.kind === 'judgement') {
+    if (this.mirror.kind === 'judgement' || this.mirror.kind === 'bingo') {
       state.winners = msg.winnerIds.map((id) => state.players[id]);
       state.phase = 'over';
-      await this.hud.showResult({ ...gameResult(state, this.seat), buttonLabel: 'Back to lobby' });
+      const result = (this.mirror.kind === 'bingo' ? BingoUI.gameResult : gameResult)(state, this.seat);
+      await this.hud.showResult({ ...result, buttonLabel: 'Back to lobby' });
     } else {
       await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
     }
@@ -493,6 +505,11 @@ export class OnlineSession {
     const secs = w ? Math.max(0, Math.ceil((w.deadline - Date.now()) / 1000)) : null;
     const clock = secs != null && secs <= CLOCK_FROM_S ? ` <span class="clock${secs <= 10 ? ' low' : ''}">⏱ ${secs}s</span>` : '';
     const watching = this.seat < 0 ? 'Watching · ' : '';
+    if (this.mirror.kind === 'bingo') {
+      const { text, mine } = BingoUI.bingoStatus(state, this.seat);
+      this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
+      return;
+    }
     if (this.mirror.kind === 'judgement') {
       const { text, mine } = judgementStatus(state, this.seat);
       this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
