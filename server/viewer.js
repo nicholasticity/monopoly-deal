@@ -55,6 +55,29 @@ export class Viewer {
       return a;
     };
     const shown = (card) => (card ? ref(card, true) : null);
+    if (game.kind === 'wordle') {
+      // While a word is on, only your own letters: everyone else's guesses are just
+      // their marks. The word and every guess show once it's over.
+      const open = state.phase === 'reveal' || state.phase === 'over';
+      return {
+        players: state.players.map((p) => ({
+          id: p.id,
+          score: p.score,
+          guesses: p.guesses.map((g) => ({ word: open || p.id === this.seat ? g.word : null, mark: g.mark })),
+          solved: p.solved,
+          done: p.done,
+        })),
+        round: state.round,
+        rounds: state.rounds,
+        phase: state.phase,
+        answer: open ? state.answer : null,
+        remaining: Math.max(0, state.endsAt - Date.now()),
+        roundWinner: state.roundWinner?.id ?? null,
+        history: state.history,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'bingo') {
       // Only your own grid, until the game is over; everyone sees how many lines.
       const open = state.phase === 'over';

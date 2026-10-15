@@ -52,6 +52,10 @@ const EFFECTS = {
   set: (s, t) => {
     [72, 76, 79, 84, 88].forEach((m, i) => s.tone(t + i * 0.06, note(m), { type: 'triangle', dur: 0.4, gain: 0.1 }));
   },
+  // Wordle: a guess's squares turning over, one after another.
+  flip: (s, t) => {
+    for (let i = 0; i < 5; i++) s.noise(t + i * 0.12, { dur: 0.07, gain: 0.2, type: 'bandpass', freq: 1700, to: 800, q: 1.2 });
+  },
   // The discard pile riffled into a new deck.
   shuffle: (s, t) => {
     for (let i = 0; i < 12; i++) s.noise(t + i * 0.032 + Math.random() * 0.01, { dur: 0.03, gain: 0.16, freq: 2800, q: 1.5 });

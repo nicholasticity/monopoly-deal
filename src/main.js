@@ -2,25 +2,30 @@ import './style.css';
 import { TableView } from './render/view.js';
 import { JudgementView } from './render/judgement-view.js';
 import { BingoView } from './render/bingo-view.js';
+import { WordleView } from './render/wordle-view.js';
 import { Hud } from './ui/hud.js';
 import { HumanController } from './ui/human.js';
 import { JudgementHuman, judgementStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/judgement.js';
 import * as BingoUI from './ui/bingo.js';
+import * as WordleUI from './ui/wordle.js';
 import { AIController } from './game/ai.js';
 import { Game, GameAborted } from './game/engine.js';
 import { JudgementGame } from './judgement/engine.js';
 import { JudgementAI } from './judgement/ai.js';
 import { BingoGame } from './bingo/engine.js';
 import { BingoAI } from './bingo/ai.js';
+import { WordleGame } from './wordle/engine.js';
+import { WordleAI } from './wordle/ai.js';
+import { DEFAULT_WORDS } from './wordle/rules.js';
 import * as R from './game/rules.js';
 import { BOT_NAMES, SPEEDS, GAMES, DEFAULT_GAME } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
-import { cueMoves, cueLog, cueTricks } from './ui/sound.js';
+import { cueMoves, cueLog, cueTricks, sound } from './ui/sound.js';
 
 const hud = new Hud();
 // A table for each game on the one stage; only the current game's is on show.
 const stage = document.getElementById('stage');
-const views = { deal: new TableView(stage), judgement: new JudgementView(stage), bingo: new BingoView(stage) };
+const views = { deal: new TableView(stage), judgement: new JudgementView(stage), bingo: new BingoView(stage), wordle: new WordleView(stage) };
 let kind = null;
 let view = null;
 // Solo play runs the engine here; online play mirrors the server's game.
@@ -28,7 +33,7 @@ let game = null;
 let human = null;
 let online = null;
 const lastGame = localStorage.getItem('md-game');
-let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, speed: 'normal', code: '' };
+let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, speed: 'normal', words: DEFAULT_WORDS, code: '' };
 
 const activeHuman = () => (online ? online.human : human);
 
@@ -44,6 +49,8 @@ views.deal.on('moves', cueMoves);
 views.deal.on('piles', (deck, discard) => hud.setPiles(deck, discard));
 views.judgement.on('moves', cueTricks);
 views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
+views.wordle.on('submit', (word) => !!activeHuman()?.submit?.(word));
+views.wordle.on('marked', () => sound.play('flip'));
 
 // Puts a game's table on show (and its name in the top bar). Returns its view.
 function useGame(k) {
@@ -64,6 +71,7 @@ hud.onEndTurn = () => activeHuman()?.endTurn();
 hud.onGameInfo = () => {
   const g = online?.mirror ?? game;
   if (g?.kind === 'judgement') hud.overlay({ title: 'Scores', body: scoreTable(g.state, online ? online.seat : 0) });
+  if (g?.kind === 'wordle') hud.overlay({ title: 'Scores', body: WordleUI.scoreTable(g.state, online ? online.seat : 0) });
 };
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
 hud.onStopGame = () => online?.confirmStop();
@@ -73,6 +81,12 @@ hud.onMuteKey = () => online?.toggleMute();
 function updateStatus() {
   if (!game) return;
   const { state } = game;
+  if (game.kind === 'wordle') {
+    const { text, mine } = WordleUI.wordleStatus(state, 0);
+    hud.setStatus(text, mine);
+    hud.setGameInfo(WordleUI.gameInfo(state), 'Scores');
+    return;
+  }
   if (game.kind === 'bingo') {
     const { text, mine } = BingoUI.bingoStatus(state, 0);
     hud.setStatus(text, mine);
@@ -103,12 +117,14 @@ function newGame(opts) {
     deal: [Game, AIController, HumanController],
     judgement: [JudgementGame, JudgementAI, JudgementHuman],
     bingo: [BingoGame, BingoAI, BingoUI.BingoHuman],
+    wordle: [WordleGame, WordleAI, WordleUI.WordleHuman],
   }[kind];
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: speed.delay }) });
-  game = new Engine({ players, view });
-  view.pace = speed.pace;
+  game = new Engine({ players, view, words: opts.words });
+  // In Wordle the speed is only how fast the bots think; the pauses stay put.
+  view.pace = kind === 'wordle' ? 1 : speed.pace;
   hud.clearLog();
   hud.setTurnControls(false);
   const current = game;
@@ -119,9 +135,10 @@ function newGame(opts) {
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
     // Judgement: no chime for every card you play.
-    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? (kind === 'bingo' ? BingoUI.turnToast : turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
-    // Bingo: players get ready one by one while everyone arranges.
-    else if (type === 'state' && current.kind === 'bingo') view.layout();
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
+    // Bingo: players get ready one by one while everyone arranges. Wordle: guesses
+    // come in from everyone at once.
+    else if (type === 'state' && (current.kind === 'bingo' || current.kind === 'wordle')) view.layout();
     else if (type === 'gameover') onGameOver(data.winner);
     updateStatus();
   });
@@ -140,6 +157,8 @@ async function onGameOver(winner) {
     await hud.showResult(gameResult(finished.state, 0));
   } else if (finished.kind === 'bingo') {
     await hud.showResult(BingoUI.gameResult(finished.state, 0));
+  } else if (finished.kind === 'wordle') {
+    await hud.showResult(WordleUI.gameResult(finished.state, 0));
   } else {
     const sets = winner.piles.filter(R.isComplete).map((p) => p.color);
     const stats = `Finished on turn ${finished.state.turn} with ${[...new Set(sets)].length} complete sets.`;

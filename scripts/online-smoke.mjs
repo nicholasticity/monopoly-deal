@@ -13,8 +13,11 @@ import { JudgementAI } from '../src/judgement/ai.js';
 import { BingoMirror } from '../src/net/bingo-mirror.js';
 import { BingoAI } from '../src/bingo/ai.js';
 import { completedLines, TO_WIN } from '../src/bingo/rules.js';
+import { WordleMirror } from '../src/net/wordle-mirror.js';
+import { WordleAI } from '../src/wordle/ai.js';
+import { mark as markGuess, MAX_GUESSES } from '../src/wordle/rules.js';
 
-const MIRRORS = { deal: MirrorGame, judgement: JudgementMirror, bingo: BingoMirror };
+const MIRRORS = { deal: MirrorGame, judgement: JudgementMirror, bingo: BingoMirror, wordle: WordleMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -34,6 +37,7 @@ class Client {
     this.ai = new AIController();
     this.jai = new JudgementAI();
     this.bai = new BingoAI();
+    this.wai = new WordleAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -124,6 +128,7 @@ class Client {
       case 'play': return this.jai.choosePlay(g, me);
       case 'arrange': return this.bai.arrangeGrid(g, me, args);
       case 'call': return this.bai.chooseCall(g, me);
+      case 'guess': return this.wai.chooseGuess(g, me);
     }
     fail(`unknown request ${kind}`);
   }
@@ -140,6 +145,7 @@ class Client {
   checkHidden() {
     if (this.kind === 'judgement') return this.checkHiddenJudgement();
     if (this.kind === 'bingo') return this.checkHiddenBingo();
+    if (this.kind === 'wordle') return this.checkHiddenWordle();
     const { state, you } = this.mirror;
     for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a deck card`);
     for (const p of state.players) {
@@ -177,6 +183,25 @@ class Client {
       if (p.id === you && state.phase !== 'setup' && !p.grid) fail(`${this.name} can't see their own grid`);
       if (p.id !== you && !over && p.grid) fail(`${this.name} can see ${p.name}'s grid`);
       if (over && !p.grid) fail(`${this.name} can't see ${p.name}'s grid after the game`);
+    }
+  }
+
+  // Wordle: while a word is on, your own letters and only the others' marks, and not
+  // the word itself; once it's over, everything.
+  checkHiddenWordle() {
+    const { state, you } = this.mirror;
+    const open = state.phase === 'reveal' || state.phase === 'over';
+    if (state.phase === 'guess' && state.answer) fail(`${this.name} was sent the word`);
+    if (state.phase === 'reveal' && !state.answer) fail(`${this.name} wasn't shown the word`);
+    for (const p of state.players) {
+      if (p.guesses.length > MAX_GUESSES) fail(`${p.name} has too many guesses`);
+      for (const g of p.guesses) {
+        if (!/^[gyb]{5}$/.test(g.mark)) fail(`${this.name} got a bad mark`);
+        if (p.id === you || open) {
+          if (!g.word) fail(`${this.name} can't see a guess they should`);
+          if (open && state.answer && markGuess(g.word, state.answer) !== g.mark) fail('a guess was marked wrong');
+        } else if (g.word) fail(`${this.name} can see ${p.name}'s letters`);
+      }
     }
   }
 }
@@ -217,6 +242,18 @@ async function playRound(clients, addBots = 0) {
       if (done !== ids.includes(p.id)) fail(`${p.name}'s grid doesn't match the result`);
     }
     how = `${ids.length > 1 ? 'shared, ' : ''}${called.length} calls`;
+  }
+  if (game.kind === 'wordle') {
+    const ids = results[0].winnerIds;
+    if (!ids?.includes(results[0].winnerId)) fail('Wordle winners missing');
+    if (clients.some((c) => !c.turns.includes('guess'))) fail('turn kinds missing');
+    const { players, history, rounds } = clients[0].mirror.state;
+    if (history.length !== rounds) fail(`played ${history.length} of ${rounds} words`);
+    // Scores add up to the words won, and the winners have the most.
+    for (const p of players) if (p.score !== history.filter((h) => h.winner === p.id).length) fail(`${p.name}'s score is off`);
+    const best = Math.max(...players.map((p) => p.score));
+    if (players.some((p) => (p.score === best) !== ids.includes(p.id))) fail('wrong Wordle winners');
+    how = `${ids.length > 1 ? 'shared, ' : ''}scores ${players.map((p) => p.score).join('/')} over ${rounds} words`;
   }
   console.log(`  ${game.kind}: ${game.seats.map((x) => x.name).join(', ')}: ${winner.name} won (${how}); requests ${clients.map((c) => c.requests).join('/')}`);
   return game;
@@ -357,6 +394,20 @@ for (let i = 0; i < 4; i++) {
   }
   if ((await playRound(clients)).kind !== 'bingo') fail('the game did not switch to Bingo');
 }
+
+// Wordle: everyone races on the same word. Only the host sets how many words.
+const toWordle = alice.next('room', (m) => m.room.game === 'wordle');
+alice.send('game', { game: 'wordle' });
+await toWordle;
+bob2.send('words', { words: 20 });
+alice.send('words', { words: 7 });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.words !== 10) fail('the word count changed when it should not have');
+const fiveWords = alice.next('room', (m) => m.room.words === 5);
+alice.send('words', { words: 5 });
+await fiveWords;
+await playRound(clients);
+await playRound(clients, 2);
 
 console.log('PASS');
 process.exit(0);

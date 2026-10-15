@@ -1,8 +1,9 @@
-# Monopoly Deal, Judgement & Bingo
+# Monopoly Deal, Judgement, Bingo & Wordle
 
-Three games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
-the trick-taking game **Judgement**, and pen-and-paper **Bingo** (the 5×5, 1–25 kind). Pick
-one on the home screen, then play against 1–4 computer opponents on a 2D table, or
+Four games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+the trick-taking game **Judgement**, pen-and-paper **Bingo** (the 5×5, 1–25 kind) and a
+**Wordle** race. Pick one on the home screen, then play against 1–4 computer opponents on a
+2D table, or
 **online with friends**: create a room, send the
 invite link, and play in your browsers (2–5 players, bots fill empty seats).
 
@@ -25,7 +26,8 @@ Other scripts:
 | `npm run simulate` | Play 300 headless AI-vs-AI games to sanity-check the rules     |
 | `npm run simulate:judgement` | The same for Judgement (200 games): how often bids are made, missed or overshot |
 | `npm run simulate:bingo` | The same for Bingo: game length, shared wins, and smart callers against random ones |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all three over WebSocket |
+| `npm run simulate:wordle` | Checks Wordle's marking and word lists, how many guesses the bots take, and races bots through whole games |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all four over WebSocket |
 
 ## Playing online with friends
 
@@ -37,21 +39,24 @@ Other scripts:
    speed and press **Start game** once there are at least 2 players. Up to 5 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal, Judgement and Bingo in the lobby between games. An invite link skips the game picker, because
+Deal, Judgement, Bingo and Wordle in the lobby between games (and for Wordle, pick 5, 10 or
+20 words). An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
 
-- Every player sees only their own hand (or Bingo grid); the server runs the game and never
-  sends anyone else's hidden cards to your browser.
+- Every player sees only their own hand (or Bingo grid, or Wordle letters); the server runs
+  the game and never sends anyone else's hidden cards to your browser.
 - **Chat** with the button in the top bar (or press Enter). Messages that arrive while it's
   closed pop up briefly.
 - **Talk** with 🎙️ (in the lobby or the top bar): everyone who has joined voice chat hears
   each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
-  **M** to mute. See [Voice chat](#voice-chat).
+  **M** to mute. See [Voice chat](#voice-chat). (In Wordle, Enter and M are for your guess:
+  use the buttons instead.)
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Judgement you have 45 s to call trumps, bid or play a card; in
-  Bingo, 60 s to arrange your grid and 30 s to call a number. The
+  Bingo, 60 s to arrange your grid and 30 s to call a number. A Wordle word stays open for
+  3 minutes at most, with its own clock in your bar. The
   clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
   row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
@@ -219,6 +224,26 @@ The number just called shows in the middle in its caller's colour, with the earl
 beside it. Each player's bar shows the letters they've lit, and at the end everyone's grid
 is shown.
 
+### Wordle
+
+A race: everyone guesses the same word at the same time.
+
+- A game is 5, 10 or 20 words (pick on the start screen, or in the lobby online).
+- Each word is a secret five-letter word, and everyone gets six guesses. Every guess has to
+  be a real word. Each letter is marked **green** (right letter, right place), **yellow** (in
+  the word, somewhere else) or grey (not in it, or not as many times as you used it).
+- The first to get the word scores a point, and the word ends for everyone. If nobody gets
+  it in six guesses each, or within 3 minutes, nobody scores.
+- The most points after the last word wins; a tie is a shared win.
+
+Type on your keyboard or the one on screen, and press **Enter**. Each opponent's bar shows
+their guesses as coloured squares, without the letters until the word is over. The clock in
+your bar counts down the time left, and the word counter in the top bar opens the scores.
+The game speed sets how quickly the bots think (about 50 s a word at normal). The secret
+words are about 950 common words picked by hand; any of 12,500 words is accepted as a guess
+(from the MIT-licensed [word-list](https://github.com/sindresorhus/word-list) package; see
+`scripts/build-wordle-guesses.mjs`).
+
 ## Code layout
 
 ```
@@ -238,16 +263,24 @@ src/
     rules.js     grids, lines, B-I-N-G-O letters
     engine.js    arranging, then calls in turn; asks controllers for grids and numbers
     ai.js        computer opponents (call the number that helps their own lines most)
+  wordle/    Wordle's rules, engine and AI
+    answers.js   the secret words, picked by hand
+    guesses.js   every other word accepted as a guess (generated)
+    rules.js     marking a guess, the keyboard's colours, game lengths
+    engine.js    each word a race: asks everyone for guesses at once
+    ai.js        computer opponents (guess a word that fits, at a person's pace)
   render/    the tables (DOM + CSS)
     view.js      player panels, card layout and animation
     judgement-view.js  the Judgement table, built on view.js
     bingo-view.js      the Bingo table: player bars, the calls and your grid
+    wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
     textures.js  card faces (both decks) drawn on canvas
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions
     judgement.js Judgement's prompts, status line and score tables
     bingo.js     Bingo's grid arranging and calling, status line and result
+    wordle.js    Wordle's guesses, status line, scores and result
     lobby.js     online room lobby
     chat.js      room chat panel
   net/       online client
@@ -256,6 +289,7 @@ src/
     mirror.js      read-only copy of the server's game for the view and HUD
     judgement-mirror.js  the same for a Judgement game
     bingo-mirror.js      and for a Bingo game
+    wordle-mirror.js     and for a Wordle game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
   main.js    wires it all together
 server/
@@ -267,6 +301,8 @@ scripts/
   simulate.mjs     headless AI games
   simulate-judgement.mjs  the same for Judgement
   simulate-bingo.mjs      and for Bingo
+  simulate-wordle.mjs     and for Wordle
+  build-wordle-guesses.mjs  regenerates src/wordle/guesses.js from the word-list package
   online-smoke.mjs headless multiplayer games over real sockets
 ```
 
@@ -274,12 +310,13 @@ The engine talks to players only through a controller interface (`chooseTurnActi
 `choosePayment`, `chooseJustSayNo`, `chooseDiscards`), so humans and the AI are
 interchangeable, and the engine runs headless without a view. Judgement's engine works the
 same way, with `chooseTrump`, `chooseBid` and `choosePlay`, and so does Bingo's, with
-`arrangeGrid` (asked of everyone at once) and `chooseCall`.
+`arrangeGrid` (asked of everyone at once) and `chooseCall`. Wordle's asks everyone for
+`chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
 to that player's browser as a `request` and waits for the `response`, falling back to the AI
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`, `BingoHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`, `BingoHuman`, `WordleHuman`)
 used for solo play.

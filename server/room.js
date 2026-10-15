@@ -9,6 +9,9 @@ import { JudgementAI } from '../src/judgement/ai.js';
 import { BingoGame } from '../src/bingo/engine.js';
 import { BingoAI } from '../src/bingo/ai.js';
 import { validGrid } from '../src/bingo/rules.js';
+import { WordleGame } from '../src/wordle/engine.js';
+import { WordleAI } from '../src/wordle/ai.js';
+import { DEFAULT_WORDS, WORD_COUNTS } from '../src/wordle/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEEDS, MAX_PLAYERS, TIMEOUTS } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 
@@ -25,9 +28,10 @@ const EMPTY_ROOM_MS = 5 * 60_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
-const ENGINES = { deal: [Game, AIController], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI] };
-// Decisions everyone makes at the same time (Bingo grids): each player sees only their own clock.
-const TOGETHER = new Set(['arrange']);
+const ENGINES = { deal: [Game, AIController], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI] };
+// Decisions everyone makes at the same time (Bingo grids, Wordle guesses): each player
+// sees only their own clock.
+const TOGETHER = new Set(['arrange', 'guess']);
 
 // Names end up in the HTML of other players' screens, so keep them plain.
 export function cleanName(raw) {
@@ -51,6 +55,8 @@ export class Room {
     this.hostId = null;
     this.kind = GAMES[game] ? game : DEFAULT_GAME;
     this.speed = 'normal';
+    // Wordle: how many words a game is.
+    this.words = DEFAULT_WORDS;
     this.status = 'lobby';
     this.game = null;
     this.chat = [];
@@ -260,6 +266,12 @@ export class Room {
     this.broadcastRoom();
   }
 
+  setWords(m, n) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !WORD_COUNTS.includes(n)) return;
+    this.words = n;
+    this.broadcastRoom();
+  }
+
   setGame(m, kind) {
     if (!this.isHost(m) || this.status !== 'lobby' || !GAMES[kind] || kind === this.kind) return;
     this.kind = kind;
@@ -336,8 +348,10 @@ export class Room {
     this.waitingFor = null;
     this.gameNo++;
     // The server has no renderer; the "view" just paces the game so clients can animate.
-    const view = { sync: (g, ms) => sleep(ms * speed.pace * this.timeScale) };
-    const game = new Engine({ players, view });
+    // In Wordle the speed is only how fast the bots think; the pauses stay put.
+    const pace = this.kind === 'wordle' ? 1 : speed.pace;
+    const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
+    const game = new Engine({ players, view, words: this.words });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -417,7 +431,7 @@ export class Room {
         break;
       case 'gameover': {
         const w = data.winner;
-        if (game.kind === 'judgement' || game.kind === 'bingo') {
+        if (['judgement', 'bingo', 'wordle'].includes(game.kind)) {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -524,6 +538,15 @@ export class Room {
     req.resolve(value);
   }
 
+  // The engine no longer needs this answer (a Wordle word is over): close the prompt
+  // without anyone answering it.
+  withdraw(m, kind) {
+    const req = m.pending;
+    if (!req || req.kind !== kind) return;
+    m.conn?.send({ type: 'cancel', reqId: req.id });
+    this.settle(m, req, null);
+  }
+
   // Let the bot answer whatever this player is being asked.
   delegate(m) {
     const req = m.pending;
@@ -543,6 +566,7 @@ export class Room {
       status: this.status,
       game: this.kind,
       speed: this.speed,
+      words: this.words,
       max: MAX_PLAYERS,
       members: this.members.map((m) => ({
         id: m.id,
@@ -629,6 +653,15 @@ class SeatController {
 
   chooseCall(game, me) {
     return this.room.ask(this.m, 'call', {}, () => this.m.ai.chooseCall(game, me), (v) => (Number.isInteger(v) ? v : null));
+  }
+
+  // Wordle. The engine checks the word; a non-word counts as a miss.
+  chooseGuess(game, me) {
+    return this.room.ask(this.m, 'guess', { round: game.state.round }, () => this.m.ai.chooseGuess(game, me), (v) => (typeof v === 'string' ? v.slice(0, 5) : null));
+  }
+
+  stopGuess() {
+    this.room.withdraw(this.m, 'guess');
   }
 
   // Rebuild a client's action from known fields only; the engine validates the rest.

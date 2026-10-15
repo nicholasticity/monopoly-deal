@@ -631,6 +631,10 @@ body:has(.peek-back:not(.hidden)) #status { visibility: hidden; }
 .seg { display: flex; gap: 4px; background: rgba(255, 255, 255, 0.05); padding: 3px; border-radius: 10px; }
 .seg button { padding: 6px 13px; background: transparent; text-transform: capitalize; }
 .seg button.on { background: var(--gold); color: #2a1d00; font-weight: 700; }
+/* The lobby's game picker wraps onto two rows on narrow screens. */
+.opt-row:has(.seg.games) { gap: 12px; }
+.seg.games { flex-wrap: wrap; justify-content: flex-end; }
+.seg.games button { white-space: nowrap; }
 .gameover { text-align: center; }
 .trophy { font-size: 4rem; }
 .muted { color: var(--muted); }
@@ -1362,4 +1366,164 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 @media (max-width: 640px), (max-height: 540px) {
   .tile-fan .tile-bingo { grid-template-columns: repeat(5, 12px); padding: 3px; }
   .tile-fan .tile-bingo i { height: 12px; font-size: 0.45rem; }
+}
+
+/* ---------- Wordle ---------- */
+:root { --wg: #4a9a55; --wy: #c9a93a; --wb: #3d4441; }
+.logo.wordle { background: #2f6b3a; letter-spacing: 0.08em; }
+.deal.wordle-mark { display: inline-flex; gap: 3px; }
+.deal.wordle-mark i { width: 0.62em; height: 0.62em; border-radius: 2px; background: var(--wb); }
+.deal.wordle-mark i.g { background: var(--wg); }
+.deal.wordle-mark i.y { background: var(--wy); }
+#hud.wordle #piles, #hud.wordle #turn-controls, #hud.wordle #hint { display: none !important; }
+.board.wordle { background: radial-gradient(ellipse at 50% 42%, #24352c 0%, #172219 55%, #0a0f0b 100%); }
+
+/* Opponents' bars: name and score, then their guesses as squares. --mini: one square (wordle-view.js). */
+.seat-panel.wbar { display: flex; align-items: center; }
+.seat-panel.wbar .seat-head { flex: 1; min-width: 0; height: 100%; }
+.wmini { flex: none; display: grid; gap: 1px; margin-right: var(--inner); }
+.wmini b { display: flex; gap: 1px; }
+.wmini i { width: var(--mini); height: var(--mini); border-radius: 1px; background: rgba(255, 255, 255, 0.08); }
+.wmini i.g { background: var(--wg); }
+.wmini i.y { background: var(--wy); }
+.wmini i.b { background: #59605d; }
+.chip.score { font-weight: 800; color: var(--gold); }
+.chip.got { background: var(--wg); color: #fff; font-weight: 800; }
+.chip.out { color: var(--muted); }
+.chip.wclock { font-weight: 700; }
+.chip.wclock.low { background: rgba(200, 16, 46, 0.8); color: #fff; }
+.seat-panel.winner .chip.score { color: #2a1d00; background: var(--gold); }
+
+/* Your guesses. --tile: one square's width. */
+.wordle-board { position: absolute; display: grid; grid-template-rows: repeat(6, var(--tile)); gap: var(--tgap); pointer-events: none; perspective: 600px; }
+.wrow { display: grid; grid-template-columns: repeat(5, var(--tile)); gap: var(--tgap); }
+.wtile {
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.13);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font-size: calc(var(--tile) * 0.54);
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.wrow.current .wtile { border-color: rgba(255, 255, 255, 0.24); }
+.wtile.filled { border-color: rgba(255, 255, 255, 0.55); animation: wtype 0.1s ease-out; }
+.wrow.sent .wtile { border-color: rgba(255, 215, 94, 0.7); }
+.wtile.g, .wtile.y, .wtile.b { border-color: transparent; }
+.wtile.g { background: var(--wg); }
+.wtile.y { background: var(--wy); }
+.wtile.b { background: var(--wb); }
+/* A marked guess turns over a square at a time, showing its colour on the way back. */
+.wtile.rev { animation: wflip 0.5s ease both calc(var(--i) * 120ms); }
+.wrow.won .wtile.rev { animation: wflip 0.5s ease both calc(var(--i) * 120ms), wbounce 0.45s ease calc(var(--i) * 90ms + 1050ms); }
+.wrow.shake { animation: wshake 0.4s; }
+@keyframes wtype { from { transform: scale(1.12); } }
+@keyframes wflip {
+  0% { transform: rotateX(0); background: rgba(0, 0, 0, 0.18); border-color: rgba(255, 255, 255, 0.55); }
+  50% { transform: rotateX(90deg); background: rgba(0, 0, 0, 0.18); border-color: rgba(255, 255, 255, 0.55); }
+  100% { transform: rotateX(0); }
+}
+@keyframes wbounce { 40% { transform: translateY(-28%); } 70% { transform: translateY(6%); } }
+@keyframes wshake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+/* "Not in word list", over the top of your guesses. */
+.wordle-note { position: absolute; z-index: 5; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.wordle-note span { padding: 6px 14px; border-radius: 8px; background: #f3f1ea; color: #15120a; font-size: 0.88rem; font-weight: 800; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); animation: pop 0.15s ease-out; }
+
+/* Between words: the answer over your guesses. */
+.wordle-reveal {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 16px;
+  background: rgba(10, 15, 11, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+  animation: pop 0.25s ease-out;
+}
+.wanswer { display: flex; gap: 6px; perspective: 600px; }
+.wanswer i {
+  display: grid;
+  place-items: center;
+  width: calc(var(--tile) * 0.8);
+  height: calc(var(--tile) * 0.8);
+  border-radius: 6px;
+  background: var(--wg);
+  color: #fff;
+  font-size: calc(var(--tile) * 0.44);
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+  animation: wflip 0.5s ease both calc(var(--i) * 100ms);
+}
+.wanswer.missed i { background: #6b5a2a; }
+.wcaption { font-size: 1.05rem; }
+.wcaption b { color: var(--gold); }
+
+/* The keyboard. */
+.wordle-keys { position: absolute; display: flex; flex-direction: column; gap: var(--key-gap); pointer-events: auto; }
+.krow { display: flex; justify-content: center; gap: var(--key-gap); }
+.krow:nth-child(2) { padding: 0 4.5%; }
+.key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--key-h);
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: #6f7773;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.2s, opacity 0.2s;
+}
+.key.wide { flex: 1.55 1 0; font-size: 0.78rem; letter-spacing: 0.02em; }
+.key:hover { filter: brightness(1.12); }
+.key:active { transform: translateY(1px); }
+/* Letters light up once your guess has turned over. */
+.key.g, .key.y, .key.b { transition-delay: 1.05s; }
+.key.g { background: var(--wg); }
+.key.y { background: var(--wy); }
+.key.b { background: #343a37; color: rgba(255, 255, 255, 0.6); }
+.wordle-keys.off .key { opacity: 0.5; cursor: default; }
+.board.small .key { font-size: 0.95rem; }
+.board.small .key.wide { font-size: 0.66rem; }
+
+/* Scores and the words so far (top bar button and game over). */
+.wscores { display: flex; flex-direction: column; gap: 14px; align-items: stretch; text-align: left; margin: 4px 0 14px; }
+.wtable { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.wtable th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; padding: 0 8px 6px; text-align: left; }
+.wtable td { padding: 6px 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.wtable .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
+.wtable tr.me td { background: rgba(255, 255, 255, 0.05); }
+.wtable tr.won td { color: var(--gold); }
+.wtable .dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--c); }
+.wwords { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 14px; margin: 0; padding: 0; list-style: none; max-height: 40vh; overflow: auto; font-size: 0.86rem; }
+.wwords li { display: flex; align-items: baseline; gap: 8px; }
+.wwords .n { min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.wwords b { letter-spacing: 0.06em; color: #8fd59a; }
+.wwords b.missed { color: var(--muted); text-decoration: line-through; }
+.rules b.wg { color: #7fd38c; }
+.rules b.wy { color: #e6c55a; }
+
+/* Home screen tile. */
+.tile-wordle { display: flex; flex-direction: column; gap: 2px; }
+.tile-wordle b { display: flex; gap: 2px; }
+.tile-wordle i { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 2px; background: var(--wb); color: #fff; font-size: 0.5rem; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.tile-wordle i.g { background: var(--wg); }
+.tile-wordle i.y { background: var(--wy); }
+.tile-fan .tile-wordle { position: absolute; left: 50%; top: 50%; padding: 5px; border-radius: 6px; background: #1b261f; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); transform: translate(-50%, -50%) rotate(-5deg); }
+@media (max-width: 640px), (max-height: 540px) {
+  .tile-wordle i { width: 13px; height: 13px; }
 }

@@ -1,5 +1,6 @@
 // Pre-game room screen: invite link, seats, host controls and chat.
 import { SPEEDS, GAMES } from '../game/settings.js';
+import { WORD_COUNTS } from '../wordle/rules.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -30,7 +31,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), speed(s), game(kind), start, leave, rules, voice(button) }
+  // actions: { addBot, kick(id), speed(s), words(n), game(kind), start, leave, rules, voice(button) }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -79,7 +80,7 @@ export class Lobby {
     this.addBotBtn = el('button', 'ghost add-bot', '+ Add a bot');
     this.addBotBtn.addEventListener('click', () => this.actions.addBot());
     const gameRow = el('div', 'opt-row');
-    this.gameSeg = el('div', 'seg');
+    this.gameSeg = el('div', 'seg games');
     for (const [kind, g] of Object.entries(GAMES)) {
       const b = el('button', null, g.name);
       b.dataset.v = kind;
@@ -95,11 +96,22 @@ export class Lobby {
       b.addEventListener('click', () => this.isHost && this.actions.speed(s));
       this.speedSeg.appendChild(b);
     }
-    speedRow.append(el('span', null, 'Game speed'), this.speedSeg);
+    this.speedLabel = el('span', null, 'Game speed');
+    speedRow.append(this.speedLabel, this.speedSeg);
+    // Wordle: how many words a game is.
+    this.wordsRow = el('div', 'opt-row');
+    this.wordsSeg = el('div', 'seg');
+    for (const n of WORD_COUNTS) {
+      const b = el('button', null, String(n));
+      b.dataset.v = String(n);
+      b.addEventListener('click', () => this.isHost && this.actions.words(n));
+      this.wordsSeg.appendChild(b);
+    }
+    this.wordsRow.append(el('span', null, 'Words'), this.wordsSeg);
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, speedRow, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, this.wordsRow, speedRow, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -174,7 +186,10 @@ export class Lobby {
     for (let i = players; i < room.max; i++) this.listEl.appendChild(el('div', 'seat empty', host ? 'Empty seat — invite a friend or add a bot' : 'Empty seat'));
 
     this.addBotBtn.style.display = host && room.status === 'lobby' && players < room.max ? '' : 'none';
-    for (const [seg, value] of [[this.gameSeg, room.game], [this.speedSeg, room.speed]]) {
+    const wordle = room.game === 'wordle';
+    this.wordsRow.style.display = wordle ? '' : 'none';
+    this.speedLabel.textContent = wordle ? 'Bot speed' : 'Game speed';
+    for (const [seg, value] of [[this.gameSeg, room.game], [this.speedSeg, room.speed], [this.wordsSeg, String(room.words)]]) {
       for (const b of seg.children) {
         b.classList.toggle('on', b.dataset.v === value);
         b.disabled = (!host || room.status !== 'lobby') && b.dataset.v !== value;

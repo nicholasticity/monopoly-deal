@@ -4,6 +4,7 @@ import { ACTIONS, buildDeck } from '../game/cards.js';
 import * as R from '../game/rules.js';
 import { buildDeck as playingDeck } from '../judgement/cards.js';
 import { GAMES } from '../game/settings.js';
+import { WORD_COUNTS } from '../wordle/rules.js';
 import { sound } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -17,6 +18,7 @@ const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
   judgement: `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${SUIT_LOGO}</span>`,
   bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
+  wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
 };
 
 function el(tag, cls, html) {
@@ -33,6 +35,14 @@ function miniBingo() {
   const crossed = new Set([0, 6, 12, 18, 24, 3, 21]);
   grid.innerHTML = nums.map((n, i) => `<i class="${crossed.has(i) ? 'x' : ''}${i % 6 === 0 ? ' gold' : ''}">${n}</i>`).join('');
   return grid;
+}
+
+// Three marked guesses for Wordle's tile on the home screen.
+function miniWordle() {
+  const board = el('span', 'tile-wordle');
+  const rows = [['crane', 'bybbg'], ['route', 'gbbbg'], ['ridge', 'ggggg']];
+  board.innerHTML = rows.map(([word, mark]) => `<b>${[...word].map((c, i) => `<i class="${mark[i]}">${c}</i>`).join('')}</b>`).join('');
+  return board;
 }
 
 export function thumb(card, { flipped = isFlipped(card) } = {}) {
@@ -93,9 +103,11 @@ export class Hud {
     $('#btn-log').addEventListener('click', () => this.logEl.classList.toggle('open'));
     this.chatBtn.addEventListener('click', () => this.setChatDock(!this.chatDock.classList.contains('open')));
     document.addEventListener('keydown', (e) => {
-      // Typing in the chat or a name field isn't a shortcut.
+      // Typing in the chat or a name field isn't a shortcut, and in Wordle letters and
+      // Enter are for your guess.
       if (e.target.closest?.('input, textarea')) return;
       if (e.key === 'Escape' && this.cancelTop) this.cancelTop();
+      else if (this.game === 'wordle') return;
       else if ((e.key === 'e' || e.key === 'E') && !this.cancelTop && this.controlsEl.classList.contains('show')) this.onEndTurn();
       else if ((e.key === 'm' || e.key === 'M') && this.online) this.onMuteKey();
       else if (e.key === 'Enter' && this.online && !this.chatBtn.classList.contains('hidden') && e.target === document.body) {
@@ -110,7 +122,7 @@ export class Hud {
     this.game = kind;
     this.brandEl.innerHTML = BRANDS[kind];
     this.title = document.title = GAMES[kind].name;
-    for (const k of ['judgement', 'bingo']) this.hudEl.classList.toggle(k, kind === k);
+    for (const k of ['judgement', 'bingo', 'wordle']) this.hudEl.classList.toggle(k, kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
     this.pilesEl.classList.add('idle');
     this.setGameInfo('');
@@ -574,7 +586,7 @@ export class Hud {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
         const fan = tile.appendChild(el('span', 'tile-fan'));
         if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
-        else fan.appendChild(miniBingo());
+        else fan.appendChild(kind === 'wordle' ? miniWordle() : miniBingo());
         tile.appendChild(el('span', 'start-logo', BRANDS[kind]));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
         tile.appendChild(el('span', 'tile-meta muted', '2–5 players'));
@@ -602,8 +614,9 @@ export class Hud {
         <label>Your name <input id="opt-name" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
         <div class="start-solo">
           <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${[1, 2, 3, 4].map((n) => `<button data-v="${n}" class="${n === defaults.opponents ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-          <div class="opt-row"><span>Game speed</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
-          <button class="primary big" id="opt-start">${this.game === 'bingo' ? 'Start the game' : 'Deal the cards'}</button>
+          <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+          <div class="opt-row"><span>${this.game === 'wordle' ? 'Bot speed' : 'Game speed'}</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
+          <button class="primary big" id="opt-start">${this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
           <button class="primary big" id="opt-create">Create a room</button>
@@ -627,6 +640,8 @@ export class Hud {
       };
       const opp = seg('#opt-opp');
       const speed = seg('#opt-speed');
+      const words = seg('#opt-words');
+      $b('#opt-words-row').hidden = this.game !== 'wordle';
       const mode = seg('#opt-mode');
       const nameInput = $b('#opt-name');
       const codeInput = $b('#opt-code');
@@ -653,7 +668,7 @@ export class Hud {
 
       const finish = (choice) => {
         close();
-        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), speed: speed(), code: codeInput.value, ...choice });
+        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), speed: speed(), words: Number(words()), code: codeInput.value, ...choice });
       };
       const onlineName = () => {
         const name = nameInput.value.trim();
@@ -741,7 +756,7 @@ export class Hud {
 
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = { judgement: JUDGEMENT_RULES, bingo: BINGO_RULES }[this.game] ?? DEAL_RULES;
+    body.innerHTML = { judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES }[this.game] ?? DEAL_RULES;
     this.overlay({ title: 'How to play', body, wide: true });
   }
 }
@@ -789,3 +804,15 @@ const BINGO_RULES = `
         <li>The first to 5 lines wins. If a call takes several players to 5 at once, they share the win.</li>
       </ul>
       <p class="muted">Tip: call the numbers that finish your own lines, and think about where they sit when you arrange: a number in the middle is on four lines.</p>`;
+
+const WORDLE_RULES = `
+      <p><b>Goal:</b> guess the most words <b>first</b>. A game is 5, 10 or 20 words.</p>
+      <ul>
+        <li>Everyone guesses the <i>same</i> secret five-letter word at the same time, with six guesses each.</li>
+        <li>Type a word and press <b>Enter</b> (or use the keyboard on screen). It has to be a real word.</li>
+        <li>Each letter is marked: <b class="wg">green</b> is in the word in that spot, <b class="wy">yellow</b> is in the word somewhere else, and grey isn't in it (or not as many times as you used it).</li>
+        <li>The first to get the word scores a point, and the word ends for everyone. If nobody gets it in six guesses, or within three minutes, nobody scores.</li>
+        <li>You see the others' coloured squares as they guess, but not their letters until the word is over.</li>
+        <li>The most points after the last word wins; a tie is a shared win.</li>
+      </ul>
+      <p class="muted">Tip: speed matters as much as guessing well. The word counter in the top bar shows the scores so far.</p>`;

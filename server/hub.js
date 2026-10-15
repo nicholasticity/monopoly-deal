@@ -167,6 +167,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'addBot': return room.addBot(member);
           case 'kick': return room.kick(member, msg.id);
           case 'speed': return room.setSpeed(member, msg.speed);
+          case 'words': return room.setWords(member, msg.words);
           case 'game': return room.setGame(member, msg.game);
           case 'start': return room.start(member);
           case 'stop': return room.stop(member);
