@@ -79,3 +79,20 @@ const avg = stats.turns.reduce((a, b) => a + b, 0) / Math.max(1, stats.turns.len
 console.log(`games=${games} finished=${stats.finished} stalled=${stats.stalled} avgTurns=${avg.toFixed(1)} maxTurns=${Math.max(...stats.turns)}`);
 console.log('finished by player count:', stats.byPlayers);
 console.log('action plays:', Object.entries(stats.events).sort((a, b) => b[1] - a[1]).slice(0, 14));
+
+// Identical bots should win about equally often from every seat. Seat 0 is the human's
+// in solo play, so a bot habit that picks on one seat (like breaking ties in seat
+// order) shows up here as that seat winning less.
+const FAIR_GAMES = 4000;
+const wins = [0, 0, 0, 0];
+for (let g = 0; g < FAIR_GAMES; g++) {
+  const players = wins.map((_, i) => ({ name: `AI${i}`, controller: new AIController() }));
+  const game = new Game({ players, rng: mulberry32(50_000 + g) });
+  wins[(await game.run()).id]++;
+}
+const shares = wins.map((w) => w / FAIR_GAMES);
+console.log(`wins by seat over ${FAIR_GAMES} 4-player games:`, shares.map((s) => `${(s * 100).toFixed(1)}%`).join(' '));
+if (shares.some((s) => s < 0.2 || s > 0.3)) {
+  console.error('FAIL: one seat wins far more or less often than the others');
+  process.exit(1);
+}

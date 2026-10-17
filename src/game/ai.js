@@ -4,6 +4,19 @@ import * as R from './rules.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The other players in a random order. Equally good targets keep the first one listed,
+// so in seat order every bot would always pick on the lowest seat (the human's, solo).
+// The game's own rng keeps seeded simulations repeatable (online mirrors have none).
+function opponents(game, me) {
+  const opps = R.others(game, me);
+  const rng = game.rng ?? Math.random;
+  for (let i = opps.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [opps[i], opps[j]] = [opps[j], opps[i]];
+  }
+  return opps;
+}
+
 export class AIController {
   constructor({ delay = 0 } = {}) {
     this.delay = delay;
@@ -96,7 +109,7 @@ function rentOptions(game, me, card) {
   const out = [];
   const doubles = me.hand.filter((c) => c.action === 'doublerent');
   const plays = game.state.playsLeft;
-  const opps = R.others(game, me);
+  const opps = opponents(game, me);
   for (const color of R.rentColors(me, card)) {
     const base = R.rentFor(me, color);
     const groups = card.anyColor ? opps.map((o) => [o]) : [opps];
@@ -122,7 +135,7 @@ function rentOptions(game, me, card) {
 function candidatesFor(game, me, card) {
   const out = [];
   const plays = game.state.playsLeft;
-  const opps = R.others(game, me);
+  const opps = opponents(game, me);
   const bankFallback = (base) => ({ score: R.bankTotal(me) < 4 ? base + card.value : 0, action: { kind: 'bank', cardId: card.id } });
 
   if (card.type === 'money') {
