@@ -60,7 +60,9 @@ While you play:
   clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
   row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
-  than 15 s a bot covers for you until you return. Leaving the room hands your cards to a bot
+  than 15 s a bot covers for you until you return. Coming back from another tab, browser or
+  device? Join the room with the same name and you take your seat back (as long as your old
+  connection is gone). Leaving the room hands your cards to a bot
   for the rest of that game.
 - Friends who join mid-game watch and are dealt in next game. The host can end a game early
   with **End game**; when a game finishes everyone goes back to the lobby for a rematch.
@@ -137,7 +139,8 @@ connection details and never carries any audio.
   hidden cards.
 - There are no accounts and nothing is stored: names, chat and rooms live in memory only.
   Anyone with a room's code can join it, so share codes only with friends; the host can
-  remove anyone.
+  remove anyone. The same goes for a seat whose player has lost their connection: anyone
+  who joins under that name takes it over.
 - Names and chat are cleaned and shown as plain text. Chat is rate-limited, messages are
   capped in size, and each address is limited in open connections (16), messages and how
   many rooms it can create or try to join per minute (30), which stops room-code guessing.

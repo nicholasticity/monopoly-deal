@@ -352,8 +352,36 @@ await Promise.all(over);
 if (!bob2.requests) fail('reconnected player never got a request');
 console.log(`  reconnect: Bob resumed his seat and answered ${bob2.requests} requests`);
 
+// Claim: Cara drops and comes back from another device (a new client id) under the
+// same name. A name whose player is still connected claims nothing.
+const over2 = [alice, bob2].map((c) => c.next('gameover', () => true, 120_000));
+const caraPlaying = cara.next('request');
+alice.send('start');
+await caraPlaying;
+const caraGone = alice.next('room', (m) => !m.room.members.find((x) => x.id === cara.memberId).connected);
+cara.ws.terminate();
+await caraGone;
+const eve = new Client('Eve');
+await eve.connect();
+const eveJoined = eve.next('joined');
+eve.send('join', { code: alice.code, name: 'ALICE', clientId: eve.clientId });
+if ((await eveJoined).you === alice.memberId) fail('a connected player’s seat was claimed');
+eve.send('leave');
+const cara2 = new Client('Cara');
+await cara2.connect();
+const claimed = cara2.next('joined');
+const reclaimGame = cara2.next('game');
+// Cara's game over too, so the next round doesn't hear this one's.
+over2.push(cara2.next('gameover', () => true, 120_000));
+cara2.send('join', { code: alice.code, name: 'cara', clientId: cara2.clientId });
+if ((await claimed).you !== cara.memberId) fail('the same name did not claim the dropped seat');
+if ((await reclaimGame).you < 0) fail('the claimed seat came back as a spectator');
+await Promise.all(over2);
+if (!cara2.requests) fail('the player who claimed a seat never got a request');
+console.log(`  claim: Cara took her seat back from a new device and answered ${cara2.requests} requests`);
+
 // Long games run the deck dry; keep playing until a reshuffle has been seen.
-for (let i = 0; i < 8 && !reshuffles; i++) await playRound([alice, bob2, cara], 2);
+for (let i = 0; i < 8 && !reshuffles; i++) await playRound([alice, bob2, cara2], 2);
 if (!reshuffles) fail('no deck reshuffle happened, so hidden aliases were not exercised');
 console.log(`  ${reshuffles} reshuffle log lines seen across clients`);
 // Players without a Just Say No still seem to respond, so others can't tell who has one.
@@ -361,7 +389,7 @@ if (!responses.without) fail('nobody saw a player without a Just Say No respond 
 console.log(`  Just Say No moments seen by others: ${responses.holding} holding one, ${responses.without} without`);
 
 // Judgement: only the host picks the game, and only in the lobby.
-const clients = [alice, bob2, cara];
+const clients = [alice, bob2, cara2];
 bob2.send('game', { game: 'judgement' });
 await new Promise((r) => setTimeout(r, 200));
 if (alice.room.game !== 'deal') fail('non-host changed the game');

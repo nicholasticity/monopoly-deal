@@ -95,6 +95,15 @@ export class Room {
       this.attach(existing, conn);
       return existing;
     }
+    // Back from another tab or device (a new client id): the same name takes back a
+    // place whose player has lost their connection. One still connected keeps theirs.
+    const name = cleanName(rawName);
+    const claim = this.members.find((m) => m.kind === 'human' && !m.left && !m.conn && m.name.toLowerCase() === name.toLowerCase());
+    if (claim) {
+      claim.clientId = clientId;
+      this.attach(claim, conn);
+      return claim;
+    }
     if (this.humans.filter((m) => !m.left).length >= MAX_PLAYERS || this.members.length >= MAX_MEMBERS) return 'That room is full.';
     // A new player bumps a bot from the lobby if the table is full.
     if (this.status === 'lobby' && this.members.length >= MAX_PLAYERS) {
@@ -106,7 +115,7 @@ export class Room {
       id: ++this.seq,
       clientId,
       kind: 'human',
-      name: this.uniqueName(cleanName(rawName)),
+      name: this.uniqueName(name),
       conn: null,
       seat: -1,
       away: false,
