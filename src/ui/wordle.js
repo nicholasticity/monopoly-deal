@@ -60,24 +60,29 @@ export class WordleHuman {
 // The top bar's button: which word this is.
 export const gameInfo = (state) => (state.round ? `Word ${state.round}/${state.rounds}` : '');
 
-// Everyone's score, best first, and every word so far with who got it.
+// Everyone's score, best first, and every word so far with who got it. On your own,
+// just the words and how many guesses each took.
 export function scoreTable(state, seat = -1) {
   const wrap = el('div', 'wscores');
+  const alone = state.players.length === 1;
   const players = [...state.players].sort((a, b) => b.score - a.score || a.id - b.id);
   const best = Math.max(...players.map((p) => p.score));
   const rows = players
     .map((p) => `<tr class="${p.id === seat ? 'me' : ''}${state.phase === 'over' && p.score === best ? ' won' : ''}"><td><span class="dot" style="--c: ${AVATARS[p.id % AVATARS.length]}"></span>${esc(p.name)}</td><td class="num">${p.score}</td></tr>`)
     .join('');
-  wrap.innerHTML = `<table class="wtable"><thead><tr><th>Player</th><th class="num">Words</th></tr></thead><tbody>${rows}</tbody></table>`;
+  if (!alone) wrap.innerHTML = `<table class="wtable"><thead><tr><th>Player</th><th class="num">Words</th></tr></thead><tbody>${rows}</tbody></table>`;
   if (state.history.length) {
     const list = state.history
       .map((h, i) => {
         const w = h.winner == null ? null : state.players[h.winner];
-        const who = w ? `${w.id === seat ? 'You' : esc(w.name)} · ${h.tries[h.winner]}/${MAX_GUESSES}` : 'nobody';
+        const tries = w && `${h.tries[h.winner]}/${MAX_GUESSES}`;
+        const who = alone ? tries || 'missed' : w ? `${w.id === seat ? 'You' : esc(w.name)} · ${tries}` : 'nobody';
         return `<li><span class="n">${i + 1}</span><b class="${w ? '' : 'missed'}">${esc(h.word.toUpperCase())}</b><span class="muted">${who}</span></li>`;
       })
       .join('');
     wrap.appendChild(el('ol', 'wwords', list));
+  } else if (alone) {
+    wrap.appendChild(el('p', 'muted', 'No words finished yet.'));
   }
   return wrap;
 }
@@ -91,6 +96,13 @@ export function gameResult(state, seat = -1) {
   const of = `${plural(best, 'word')} of ${state.rounds}`;
   let title;
   let text;
+  if (state.players.length === 1) {
+    // On your own: how many you got, not who won.
+    const got = `${best} of ${plural(state.rounds, 'word')}`;
+    const title = best === state.rounds ? 'Every word!' : best ? got : 'No words this time';
+    const text = best ? `You got ${got}.` : `You didn’t get any of the ${state.rounds} words.`;
+    return { won: best > 0, title, text, extra: scoreTable(state, seat) };
+  }
   if (!best) {
     title = 'Nobody scored';
     text = `Not one of the ${state.rounds} words was guessed.`;
@@ -111,6 +123,7 @@ export function wordleStatus(state, seat) {
   switch (state.phase) {
     case 'over': {
       const best = state.winners[0]?.score ?? 0;
+      if (state.players.length === 1) return { text: `You got ${best} of ${plural(state.rounds, 'word')}`, mine: false };
       if (!best) return { text: 'Nobody guessed a word', mine: false };
       const names = state.winners.map(name);
       return { text: `${nameList(names)} ${names.length > 1 ? 'shared the win' : 'won'} with ${plural(best, 'word')}`, mine: false };
@@ -118,7 +131,8 @@ export function wordleStatus(state, seat) {
     case 'reveal': {
       const w = state.roundWinner;
       const word = `<b>${esc((state.answer ?? '').toUpperCase())}</b>`;
-      return { text: w ? `${name(w)} got ${word} first` : `The word was ${word}`, mine: false };
+      const first = state.players.length > 1 ? ' first' : '';
+      return { text: w ? `${name(w)} got ${word}${first}` : `The word was ${word}`, mine: false };
     }
     case 'guess': {
       if (!me?.isHuman) {

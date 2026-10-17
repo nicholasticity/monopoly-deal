@@ -122,7 +122,9 @@ function newGame(opts) {
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: speed.delay }) });
-  game = new Engine({ players, view, words: opts.words });
+  // Wordle on your own has no clock: a word lasts until you get it or run out of guesses.
+  const untimed = kind === 'wordle' && !opts.opponents;
+  game = new Engine({ players, view, words: opts.words, ...(untimed && { roundMs: 0 }) });
   // In Wordle the speed is only how fast the bots think; the pauses stay put.
   view.pace = kind === 'wordle' ? 1 : speed.pace;
   hud.clearLog();

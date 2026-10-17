@@ -184,7 +184,8 @@ export class WordleView extends TableView {
     const ins = this.inset;
     const portrait = ins.portrait;
     const n = this.game?.state.players.length ?? 4;
-    const k = Math.max(1, n - 1);
+    // Opponents: none in a practice game, and then your bar goes up top.
+    const k = n - 1;
     const small = w < 700 || h < 540;
     const pad = small ? 8 : 14;
     const gap = small ? 8 : 12;
@@ -196,7 +197,7 @@ export class WordleView extends TableView {
 
     const x0 = pad;
     const W = w - 2 * pad;
-    const cols = portrait ? Math.min(k, 2) : k;
+    const cols = Math.max(1, portrait ? Math.min(k, 2) : k);
     const colW = Math.min((W - (cols - 1) * gap) / cols, portrait ? Infinity : BAR_MAX);
     const top = ins.top + 6;
     const bars = [];

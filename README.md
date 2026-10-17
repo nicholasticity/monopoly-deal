@@ -244,6 +244,8 @@ A race: everyone guesses the same word at the same time.
 - The first to get the word scores a point, and the word ends for everyone. If nobody gets
   it in six guesses each, or within 3 minutes, nobody scores.
 - The most points after the last word wins; a tie is a shared win.
+- To play on your own, pick **None** for opponents: no bots and no clock, so each word lasts
+  until you get it or use up your six guesses. The end shows how many words you got.
 
 Type on your keyboard or the one on screen, and press **Enter**. Each opponent's bar shows
 their guesses as coloured squares, without the letters until the word is over. The clock in

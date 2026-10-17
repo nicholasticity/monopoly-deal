@@ -106,6 +106,37 @@ for (let g = 0; g < games; g++) {
 }
 if (stats.stopped !== players(games)) fail(`stopGuess was called ${stats.stopped} times`);
 console.log(`${games} games, ${stats.words} words: ${pct(stats.solved / stats.words)} solved by someone, ${stats.timedOut} closed on the clock`);
+
+// On your own with no clock: a slow player still gets every guess (a word only ends
+// when it's solved or the guesses run out), and no word has a closing time.
+class Slow {
+  constructor() {
+    this.bot = new WordleAI({ rng: mulberry32(7) });
+  }
+
+  // Misses the first word on purpose (always a wrong word), then plays it straight.
+  async chooseGuess(game, me) {
+    await new Promise((r) => setTimeout(r, 40));
+    if (game.state.round === 1) return game.state.answer === 'crane' ? 'slate' : 'crane';
+    return this.bot.chooseGuess(game, me);
+  }
+}
+const solo = new WordleGame({ players: [{ name: 'You', controller: new Slow() }], rng: mulberry32(99), words: 5, roundMs: 0 });
+const closing = [];
+// Each word's end: was it solved, and how many guesses had been made.
+const ends = [];
+solo.on((type) => {
+  if (type !== 'state') return;
+  const { phase, endsAt, players: [me] } = solo.state;
+  if (phase === 'guess') closing.push(endsAt);
+  if (phase === 'reveal' && ends.length < solo.state.history.length) ends.push({ solved: me.solved, guesses: me.guesses.length });
+});
+await solo.run();
+if (closing.some((t) => t !== 0)) fail('a word on your own had a clock');
+if (ends.length !== 5 || solo.state.winners[0] !== solo.state.players[0]) fail('solo game went wrong');
+if (ends.some((e) => !e.solved && e.guesses !== R.MAX_GUESSES)) fail('a word on your own ended before the guesses ran out');
+const missed = ends.filter((e) => !e.solved).length;
+console.log(`on your own, untimed: ${solo.state.players[0].score} of 5 words, ${missed} missed after all ${R.MAX_GUESSES} guesses`);
 console.log('OK');
 
 // stopGuess calls expected: one per player per word.

@@ -607,6 +607,9 @@ export class Hud {
   showStart(defaults) {
     return new Promise((resolve) => {
       this.closeAll();
+      // Wordle can be played alone, with no bots and no clock; the other games need opponents.
+      const counts = this.game === 'wordle' ? [0, 1, 2, 3, 4] : [1, 2, 3, 4];
+      const opponents = counts.includes(defaults.opponents) ? defaults.opponents : 3;
       const body = el('div', 'start');
       body.innerHTML = `
         <button class="ghost back-home" id="opt-home" title="Choose another game">← Games</button>
@@ -617,9 +620,9 @@ export class Hud {
         <label>Your name <input id="opt-name" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
         <div class="opt-row" id="opt-deck-row"><span>Cards</span><div class="seg" id="opt-deck">${Object.entries(DECK_STYLES).map(([k, d]) => `<button data-v="${k}" class="${k === deckStyle() ? 'on' : ''}">${d.name}</button>`).join('')}</div></div>
         <div class="start-solo">
-          <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${[1, 2, 3, 4].map((n) => `<button data-v="${n}" class="${n === defaults.opponents ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+          <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${counts.map((n) => `<button data-v="${n}" class="${n === opponents ? 'on' : ''}"${n ? '' : ' title="Just you, with no clock"'}>${n || 'None'}</button>`).join('')}</div></div>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-          <div class="opt-row"><span>${this.game === 'wordle' ? 'Bot speed' : 'Game speed'}</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
+          <div class="opt-row" id="opt-speed-row"><span>${this.game === 'wordle' ? 'Bot speed' : 'Game speed'}</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
           <button class="primary big" id="opt-start">${this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
@@ -646,6 +649,10 @@ export class Hud {
       const speed = seg('#opt-speed');
       const words = seg('#opt-words');
       $b('#opt-words-row').hidden = this.game !== 'wordle';
+      // No bots, so nothing to set the speed of.
+      const showSpeed = () => ($b('#opt-speed-row').hidden = opp() === '0');
+      $b('#opt-opp').addEventListener('change', showSpeed);
+      showSpeed();
       // Judgement's deck style is this browser's own, solo or online, and shows at once.
       const deck = seg('#opt-deck');
       $b('#opt-deck-row').hidden = this.game !== 'judgement';

@@ -16,7 +16,8 @@ const guessCount = (n) => `${n} guess${n === 1 ? '' : 'es'}`;
 const MAX_MISSES = 3;
 
 export class WordleGame {
-  // rounds: how many words. roundMs: how long a word stays open (tests shorten it).
+  // rounds: how many words. roundMs: how long a word stays open (tests shorten it; 0:
+  // as long as it takes, for a game on your own).
   constructor({ players, view = null, rng = Math.random, words = R.DEFAULT_WORDS, roundMs = R.ROUND_SECONDS * 1000 }) {
     this.kind = 'wordle';
     this.view = view;
@@ -95,7 +96,8 @@ export class WordleGame {
     state.winner = state.winners[0];
     const names = listNames(state.winners.map((p) => p.name));
     const words = `${best} word${best === 1 ? '' : 's'}`;
-    this.log(`🏆 ${names} ${state.winners.length > 1 ? 'share the win' : verb(state.winner, 'wins', 'win')} with ${words}.`, 'win');
+    if (state.players.length === 1) this.log(`🏆 ${names} ${verb(state.winner, 'gets', 'get')} ${best} of ${state.rounds} words.`, 'win');
+    else this.log(`🏆 ${names} ${state.winners.length > 1 ? 'share the win' : verb(state.winner, 'wins', 'win')} with ${words}.`, 'win');
     await this.sync(200);
     this.emit('gameover', { winner: state.winner, winners: state.winners });
     return state.winner;
@@ -114,7 +116,7 @@ export class WordleGame {
       p.done = false;
     }
     state.phase = 'guess';
-    state.endsAt = Date.now() + this.roundMs;
+    state.endsAt = this.roundMs ? Date.now() + this.roundMs : 0;
     let over = false;
     let close;
     const closed = new Promise((resolve) => (close = resolve));
@@ -122,7 +124,7 @@ export class WordleGame {
       over = true;
       close();
     };
-    const timer = setTimeout(this.endWord, this.roundMs);
+    const timer = this.roundMs ? setTimeout(this.endWord, this.roundMs) : null;
     this.log(`Word ${r} of ${state.rounds}: go!`, 'turn');
     this.emit('state');
     for (const p of state.players) this.emit('turn', { player: p, what: 'guess' });
@@ -139,7 +141,7 @@ export class WordleGame {
     const w = state.roundWinner;
     state.history.push({ word: state.answer, winner: w?.id ?? null, tries: state.players.map((p) => (p.solved ? p.guesses.length : null)) });
     const word = state.answer.toUpperCase();
-    if (w) this.log(`${w.name} ${verb(w, 'gets', 'get')} ${word} in ${guessCount(w.guesses.length)}: a point.`, 'line');
+    if (w) this.log(`${w.name} ${verb(w, 'gets', 'get')} ${word} in ${guessCount(w.guesses.length)}${state.players.length > 1 ? ': a point' : ''}.`, 'line');
     else this.log(`Nobody got ${word}.`, 'info');
     await this.sync(2800);
   }
