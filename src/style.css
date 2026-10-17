@@ -628,6 +628,7 @@ body:has(.peek-back:not(.hidden)) #status { visibility: hidden; }
   width: 200px;
 }
 .opt-row { display: flex; justify-content: space-between; align-items: center; }
+.opt-row[hidden] { display: none; }
 .seg { display: flex; gap: 4px; background: rgba(255, 255, 255, 0.05); padding: 3px; border-radius: 10px; }
 .seg button { padding: 6px 13px; background: transparent; text-transform: capitalize; }
 .seg button.on { background: var(--gold); color: #2a1d00; font-weight: 700; }
@@ -885,6 +886,11 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deal.suits i.hearts, .suit.hearts { color: #ff6b7d; }
 .deal.suits i.clubs, .suit.clubs { color: #4fd17e; }
 .deal.suits i.diamonds, .suit.diamonds { color: #5aa9ff; }
+/* The fantasy deck (deck-style.js): violet moons, orange suns, green clovers, blue stars. */
+.deck-fantasy .deal.suits i.spades, .deck-fantasy .suit.spades { color: #b197fc; }
+.deck-fantasy .deal.suits i.hearts, .deck-fantasy .suit.hearts { color: #ff922b; }
+.deck-fantasy .deal.suits i.clubs, .deck-fantasy .suit.clubs { color: #69db7c; }
+.deck-fantasy .deal.suits i.diamonds, .deck-fantasy .suit.diamonds { color: #74c0fc; }
 
 /* ---------- Judgement table ---------- */
 .board[hidden] { display: none; }
@@ -938,6 +944,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .trump-mark.hearts { color: rgba(255, 90, 110, 0.12); }
 .trump-mark.clubs { color: rgba(80, 220, 130, 0.1); }
 .trump-mark.diamonds { color: rgba(80, 160, 255, 0.13); }
+.deck-fantasy .trump-mark.spades { color: rgba(177, 151, 252, 0.12); }
+.deck-fantasy .trump-mark.hearts { color: rgba(255, 146, 43, 0.12); }
+.deck-fantasy .trump-mark.clubs { color: rgba(105, 219, 124, 0.1); }
+.deck-fantasy .trump-mark.diamonds { color: rgba(116, 192, 252, 0.13); }
 
 /* Trumps and the round in the top bar; it opens the scores. */
 #game-info {
@@ -986,6 +996,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .suit-btn.hearts { color: #c8102e; }
 .suit-btn.clubs { color: #13803a; }
 .suit-btn.diamonds { color: #1a5fd0; }
+.deck-fantasy .suit-btn.spades { color: #5f3dc4; }
+.deck-fantasy .suit-btn.hearts { color: #e8590c; }
+.deck-fantasy .suit-btn.clubs { color: #2f9e44; }
+.deck-fantasy .suit-btn.diamonds { color: #1864ab; }
 .suit-btn:hover { background: #fff; border-color: var(--gold); }
 .suit-btn .sym { font-size: 2rem; line-height: 1; }
 .suit-btn .nm { font-size: 0.85rem; font-weight: 800; }

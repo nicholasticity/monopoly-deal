@@ -2,7 +2,8 @@
 import { cardImageURL, isFlipped, MONEY_COLORS } from '../render/textures.js';
 import { ACTIONS, buildDeck } from '../game/cards.js';
 import * as R from '../game/rules.js';
-import { buildDeck as playingDeck } from '../judgement/cards.js';
+import { buildDeck as playingDeck, SUIT_ORDER } from '../judgement/cards.js';
+import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, restyle } from '../render/deck-style.js';
 import { GAMES } from '../game/settings.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
 import { sound } from './sound.js';
@@ -11,15 +12,17 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-// Each game's name in the top bar and on its start screen. The suits use their text
-// forms, not emoji.
-const SUIT_LOGO = '&#x2660;&#xFE0E;<i class="hearts">&#x2665;&#xFE0E;</i><i class="clubs">&#x2663;&#xFE0E;</i><i class="diamonds">&#x2666;&#xFE0E;</i>';
+// Each game's name in the top bar and on its start screen. Judgement's has the four
+// suits of the deck style in place of DEAL, in their text forms, not emoji.
+const suitLogo = () => SUIT_ORDER.map((key) => `<i class="${key}">${suitLook(key).symbol}&#xFE0E;</i>`).join('');
 const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
-  judgement: `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${SUIT_LOGO}</span>`,
+  judgement: () => `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${suitLogo()}</span>`,
   bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
   wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
 };
+
+const brand = (kind) => (typeof BRANDS[kind] === 'function' ? BRANDS[kind]() : BRANDS[kind]);
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -120,7 +123,7 @@ export class Hud {
   // The game on the table: its name in the top bar and the tab, and the HUD pieces it uses.
   setGame(kind) {
     this.game = kind;
-    this.brandEl.innerHTML = BRANDS[kind];
+    this.brandEl.innerHTML = brand(kind);
     this.title = document.title = GAMES[kind].name;
     for (const k of ['judgement', 'bingo', 'wordle']) this.hudEl.classList.toggle(k, kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
@@ -273,7 +276,7 @@ export class Hud {
 
   log(text, kind = 'info') {
     const line = el('div', `log-line ${kind}`);
-    line.textContent = text;
+    line.textContent = this.game === 'judgement' ? restyle(text) : text;
     this.logEl.appendChild(line);
     while (this.logEl.childElementCount > 300) this.logEl.firstChild.remove();
     this.logEl.scrollTop = this.logEl.scrollHeight;
@@ -281,7 +284,7 @@ export class Hud {
 
   toast(text, kind = 'info', ms = 2800) {
     const t = el('div', `toast ${kind}`);
-    t.textContent = text;
+    t.textContent = this.game === 'judgement' ? restyle(text) : text;
     this.toastsEl.appendChild(t);
     while (this.toastsEl.childElementCount > 3) this.toastsEl.firstChild.remove();
     setTimeout(() => t.classList.add('out'), ms);
@@ -587,7 +590,7 @@ export class Hud {
         const fan = tile.appendChild(el('span', 'tile-fan'));
         if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
         else fan.appendChild(kind === 'wordle' ? miniWordle() : miniBingo());
-        tile.appendChild(el('span', 'start-logo', BRANDS[kind]));
+        tile.appendChild(el('span', 'start-logo', brand(kind)));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
         tile.appendChild(el('span', 'tile-meta muted', '2–5 players'));
         tile.addEventListener('click', () => {
@@ -607,11 +610,12 @@ export class Hud {
       const body = el('div', 'start');
       body.innerHTML = `
         <button class="ghost back-home" id="opt-home" title="Choose another game">← Games</button>
-        <div class="start-logo">${BRANDS[this.game]}</div>
+        <div class="start-logo">${brand(this.game)}</div>
         <p class="tagline">${esc(GAMES[this.game].tagline)}</p>
         <p class="note warn" id="opt-notice"></p>
         <div class="seg mode" id="opt-mode"><button data-v="solo">🤖 Vs computer</button><button data-v="online">🌐 Online with friends</button></div>
         <label>Your name <input id="opt-name" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
+        <div class="opt-row" id="opt-deck-row"><span>Cards</span><div class="seg" id="opt-deck">${Object.entries(DECK_STYLES).map(([k, d]) => `<button data-v="${k}" class="${k === deckStyle() ? 'on' : ''}">${d.name}</button>`).join('')}</div></div>
         <div class="start-solo">
           <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${[1, 2, 3, 4].map((n) => `<button data-v="${n}" class="${n === defaults.opponents ? 'on' : ''}">${n}</button>`).join('')}</div></div>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
@@ -642,6 +646,13 @@ export class Hud {
       const speed = seg('#opt-speed');
       const words = seg('#opt-words');
       $b('#opt-words-row').hidden = this.game !== 'wordle';
+      // Judgement's deck style is this browser's own, solo or online, and shows at once.
+      const deck = seg('#opt-deck');
+      $b('#opt-deck-row').hidden = this.game !== 'judgement';
+      $b('#opt-deck').addEventListener('change', () => {
+        setDeckStyle(deck());
+        $b('.start-logo').innerHTML = this.brandEl.innerHTML = brand(this.game);
+      });
       const mode = seg('#opt-mode');
       const nameInput = $b('#opt-name');
       const codeInput = $b('#opt-code');

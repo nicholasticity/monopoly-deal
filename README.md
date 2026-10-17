@@ -206,6 +206,12 @@ stays in view, and the bid panel shows what your bid would score. Each player's 
 their total and the tricks they've won out of their bid. The round counter in the top bar
 (with the trump suit) opens the scores so far.
 
+**Cards** on the start screen switches between the **Classic** deck and a **Fantasy** one,
+with Moons ☾, Suns ☀, Clovers ☘ and Stars ★ in place of spades, hearts, clubs and diamonds
+and the Elf (E), Wizard (W), Dragon (D) and Phoenix (P) in place of the jack, queen, king
+and ace. Only the look changes, not the game. The choice is saved in
+your browser, so online everyone plays with the deck they picked.
+
 ### Bingo
 
 The pen-and-paper version: no caller, no tickets, everyone calls in turn.
@@ -275,6 +281,7 @@ src/
     bingo-view.js      the Bingo table: player bars, the calls and your grid
     wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
     textures.js  card faces (both decks) drawn on canvas
+    deck-style.js  Judgement’s card style (classic or fantasy suits)
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions

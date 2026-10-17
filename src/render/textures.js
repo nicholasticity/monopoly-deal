@@ -1,5 +1,6 @@
-// Draws card faces onto 2D canvases. Cached per card key.
+// Draws card faces onto 2D canvases. Cached per card key (and deck style).
 import { COLORS, COLOR_ORDER, ACTIONS } from '../game/cards.js';
+import { deckStyle, rankText, rankName } from './deck-style.js';
 
 export const TEX_W = 400;
 export const TEX_H = 560;
@@ -477,12 +478,15 @@ export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back' };
 const SUIT_RED = '#c8102e';
 // Four colours, so spades and clubs (and hearts and diamonds) are easy to tell apart.
 const SUIT_INK = { spades: '#1b1b24', hearts: SUIT_RED, clubs: '#13803a', diamonds: '#1a5fd0' };
-const suitColor = (suit) => SUIT_INK[suit];
-const RANK_TEXT = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
+// The fantasy deck: violet moons, orange suns, green clovers and blue stars.
+const FANTASY_INK = { spades: '#5f3dc4', hearts: '#e8590c', clubs: '#2f9e44', diamonds: '#1864ab' };
+const fantasy = () => deckStyle() === 'fantasy';
+const suitColor = (suit) => (fantasy() ? FANTASY_INK : SUIT_INK)[suit];
 
 // A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
 // same everywhere (font glyphs vary). color: other than the suit's own.
 function drawSuit(ctx, suit, x, y, size, flip = false, color = suitColor(suit)) {
+  if (fantasy()) return drawFantasySuit(ctx, suit, x, y, size, flip, color);
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(size, flip ? -size : size);
@@ -532,9 +536,77 @@ function drawSuit(ctx, suit, x, y, size, flip = false, color = suitColor(suit)) 
   ctx.restore();
 }
 
+// The fantasy deck's suits, in the same box as the classic ones: a crescent moon for
+// spades, a sun for hearts, a clover for clubs and a star for diamonds.
+function drawFantasySuit(ctx, suit, x, y, size, flip, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size, flip ? -size : size);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (suit === 'spades') {
+    // A disc with a smaller one taken out of its right side, nudged to sit centred.
+    const outer = Math.atan2(0.4, 0.227);
+    const inner = Math.atan2(0.4, 0.007);
+    ctx.translate(0.12, 0);
+    ctx.arc(0, 0, 0.46, outer, -outer);
+    ctx.arc(0.22, 0, 0.4, -inner, inner, true);
+    ctx.closePath();
+  } else if (suit === 'hearts') {
+    // A disc ringed by eight pointed rays.
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4;
+      const side = Math.PI / 12;
+      ctx.moveTo(Math.cos(a - side) * 0.31, Math.sin(a - side) * 0.31);
+      ctx.lineTo(Math.cos(a) * 0.5, Math.sin(a) * 0.5);
+      ctx.lineTo(Math.cos(a + side) * 0.31, Math.sin(a + side) * 0.31);
+      ctx.closePath();
+    }
+    ctx.moveTo(0.26, 0);
+    ctx.arc(0, 0, 0.26, 0, Math.PI * 2);
+  } else if (suit === 'diamonds') {
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? 0.21 : 0.52;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      ctx.lineTo(Math.cos(a) * r, 0.06 + Math.sin(a) * r);
+    }
+    ctx.closePath();
+  } else {
+    // A clover: three heart-shaped leaflets round the middle, on a curved stem.
+    ctx.translate(0, -0.04);
+    for (const turn of [0, (2 * Math.PI) / 3, (-2 * Math.PI) / 3]) {
+      ctx.save();
+      ctx.rotate(turn);
+      ctx.translate(0, -0.2);
+      ctx.scale(0.42, 0.42);
+      ctx.moveTo(0, 0.5);
+      ctx.bezierCurveTo(-0.15, 0.35, -0.5, 0.12, -0.5, -0.17);
+      ctx.bezierCurveTo(-0.5, -0.38, -0.35, -0.5, -0.25, -0.5);
+      ctx.bezierCurveTo(-0.1, -0.5, 0, -0.4, 0, -0.28);
+      ctx.bezierCurveTo(0, -0.4, 0.1, -0.5, 0.25, -0.5);
+      ctx.bezierCurveTo(0.35, -0.5, 0.5, -0.38, 0.5, -0.17);
+      ctx.bezierCurveTo(0.5, 0.12, 0.15, 0.35, 0, 0.5);
+      ctx.closePath();
+      ctx.restore();
+    }
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(0.02, 0.3, 0.16, 0.52);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.07;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
 // Rank over suit in the top-left corner, and the same upside-down bottom-right.
 function cornerIndex(ctx, card) {
-  const text = RANK_TEXT[card.rank] ?? String(card.rank);
+  const text = rankText(card.rank);
   for (const turn of [0, Math.PI]) {
     ctx.save();
     ctx.translate(TEX_W / 2, TEX_H / 2);
@@ -851,6 +923,123 @@ function drawCourt(ctx, card) {
   ctx.stroke();
 }
 
+// Fantasy court cards (elf, wizard, dragon): a crown over the suit on a tinted
+// panel, with more points to the crown the higher the card (3, 4, 5).
+
+function drawCrown(ctx, cx, y, w, h, points) {
+  const steps = 2 * (points - 1);
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, y);
+  for (let i = 0; i <= steps; i++) ctx.lineTo(cx - w / 2 + (i * w) / steps, i % 2 ? y - h * 0.45 : y - h);
+  ctx.lineTo(cx + w / 2, y);
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = COURT_GOLD;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  rr(ctx, cx - w / 2, y, w, h * 0.24, 4);
+  ctx.fill();
+  ctx.stroke();
+  for (let i = 0; i <= steps; i += 2) {
+    ctx.beginPath();
+    ctx.arc(cx - w / 2 + (i * w) / steps, y - h, 7, 0, Math.PI * 2);
+    ctx.fillStyle = PEARL;
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function drawFantasyCourt(ctx, card) {
+  const color = suitColor(card.suit);
+  const x = 106, y = 34, w = TEX_W - 212, h = TEX_H - 68;
+  rr(ctx, x, y, w, h, 12);
+  ctx.fillStyle = '#fbf4e2';
+  ctx.fill();
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+  drawCrown(ctx, TEX_W / 2, 196, 150, 96, card.rank - 8);
+  drawSuit(ctx, card.suit, TEX_W / 2, 316, 150);
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const title = rankName(card.rank).toUpperCase();
+  fitFont(ctx, title, w - 40, 40, '900');
+  ctx.fillText(title, TEX_W / 2, 470);
+  rr(ctx, x, y, w, h, 12);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+}
+
+// Fantasy aces (the phoenix): the suit in a ring of dots, and the name below.
+function drawFantasyAce(ctx, card) {
+  const color = suitColor(card.suit);
+  ctx.save();
+  ctx.translate(TEX_W / 2, TEX_H / 2);
+  ctx.beginPath();
+  ctx.arc(0, 0, 128, 0, Math.PI * 2);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  for (let i = 0; i < 16; i++) {
+    const a = (i * Math.PI) / 8;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 146, Math.sin(a) * 146, i % 2 ? 4 : 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  drawSuit(ctx, card.suit, TEX_W / 2, TEX_H / 2, 170);
+  const title = rankName(card.rank).toUpperCase();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  fitFont(ctx, title, 180, 36, '900');
+  ctx.fillText(title, TEX_W / 2, 486);
+}
+
+// The fantasy back: a night sky with the four suits and the name in a gold medallion.
+function drawFantasyBack(ctx) {
+  base(ctx, '#2b1d4e');
+  rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = COURT_GOLD;
+  ctx.stroke();
+  // Scattered stars, the same on every card.
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  ctx.fillStyle = '#ffffff55';
+  for (let i = 0; i < 70; i++) {
+    ctx.beginPath();
+    ctx.arc(34 + rand() * (TEX_W - 68), 34 + rand() * (TEX_H - 68), 1.5 + rand() * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(TEX_W / 2, TEX_H / 2);
+  ctx.beginPath();
+  ctx.arc(0, 0, 120, 0, Math.PI * 2);
+  ctx.fillStyle = '#fffaf0';
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = COURT_GOLD;
+  ctx.stroke();
+  drawSuit(ctx, 'spades', -60, -40, 36);
+  drawSuit(ctx, 'hearts', -20, -40, 36);
+  drawSuit(ctx, 'clubs', 20, -40, 36);
+  drawSuit(ctx, 'diamonds', 60, -40, 36);
+  ctx.fillStyle = '#2b1d4e';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fitFont(ctx, 'JUDGEMENT', 200, 40, '900');
+  ctx.fillText('JUDGEMENT', 0, 22);
+  ctx.restore();
+}
+
 function drawPlaying(ctx, card) {
   base(ctx, '#fffdf8');
   rr(ctx, 10, 10, TEX_W - 20, TEX_H - 20, TEX_RADIUS - 8);
@@ -859,9 +1048,11 @@ function drawPlaying(ctx, card) {
   ctx.stroke();
   cornerIndex(ctx, card);
   if (card.rank === 14) {
-    drawSuit(ctx, card.suit, TEX_W / 2, TEX_H / 2, 190);
+    if (fantasy()) drawFantasyAce(ctx, card);
+    else drawSuit(ctx, card.suit, TEX_W / 2, TEX_H / 2, 190);
   } else if (card.rank > 10) {
-    drawCourt(ctx, card);
+    if (fantasy()) drawFantasyCourt(ctx, card);
+    else drawCourt(ctx, card);
   } else {
     const cols = [148, 200, 252];
     const top = 128, bottom = TEX_H - 128;
@@ -870,6 +1061,7 @@ function drawPlaying(ctx, card) {
 }
 
 function drawPlayingBack(ctx) {
+  if (fantasy()) return drawFantasyBack(ctx);
   base(ctx, '#1d3461');
   rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
   ctx.lineWidth = 6;
@@ -911,8 +1103,11 @@ function drawPlayingBack(ctx) {
   ctx.restore();
 }
 
+// Playing cards are drawn in the current deck style, so each style is cached apart.
+const cacheKey = (card) => (!card ? 'back' : card.type === 'playing' || card.type === 'playing-back' ? `${deckStyle()}:${card.key}` : card.key);
+
 export function cardCanvas(card) {
-  const key = card ? card.key : 'back';
+  const key = cacheKey(card);
   let canvas = cache.get(key);
   if (canvas) return canvas;
   canvas = makeCanvas();
@@ -931,7 +1126,7 @@ export function cardCanvas(card) {
 
 // An image URL for a card face (null: the back), ready straight away.
 export function cardImageURL(card) {
-  const key = card ? card.key : 'back';
+  const key = cacheKey(card);
   let url = urlCache.get(key);
   if (!url) {
     url = cardCanvas(card).toDataURL('image/png');
@@ -944,7 +1139,7 @@ export function cardImageURL(card) {
 // doesn't stall while dozens of cards are drawn.
 const blobCache = new Map();
 export function loadCardImage(card) {
-  const key = card ? card.key : 'back';
+  const key = cacheKey(card);
   let url = blobCache.get(key);
   if (!url) {
     const canvas = cardCanvas(card);

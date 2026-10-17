@@ -1,7 +1,8 @@
 // The human side of Judgement: calling trumps and bidding in a panel docked above the
 // hand (so the cards stay in view), playing by clicking a card, and the scores between
 // rounds. Also the score tables and status line, shared by solo and online play.
-import { SUITS, SUIT_ORDER, rankLabel } from '../judgement/cards.js';
+import { SUIT_ORDER } from '../judgement/cards.js';
+import { suitLook, rankText } from '../render/deck-style.js';
 import * as R from '../judgement/rules.js';
 import { AVATARS } from '../render/view.js';
 
@@ -12,7 +13,7 @@ export const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
 // A total: a real minus, but no plus.
 export const scoreText = (n) => (n < 0 ? `−${-n}` : `${n}`);
 // A suit symbol in its colour (text style, not emoji).
-export const suitMark = (key) => `<span class="suit ${key}">${SUITS[key].symbol}&#xFE0E;</span>`;
+export const suitMark = (key) => `<span class="suit ${key}">${suitLook(key).symbol}&#xFE0E;</span>`;
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -52,10 +53,10 @@ export class JudgementHuman {
       body.appendChild(el('p', 'modal-body', `You’ve seen ${me.hand.length} of your ${game.state.handSize} cards. The rest come after you call.`));
       const grid = el('div', 'suit-grid');
       for (const key of SUIT_ORDER) {
-        const suit = SUITS[key];
+        const suit = suitLook(key);
         const held = me.hand.filter((c) => c.suit === key).sort((a, b) => b.rank - a.rank);
         const b = el('button', `suit-btn ${key}`);
-        b.innerHTML = `<span class="sym">${suit.symbol}&#xFE0E;</span><span class="nm">${suit.name}</span><span class="held">${held.length ? `${held.map((c) => rankLabel(c.rank)).join(' ')}` : 'none'}</span>`;
+        b.innerHTML = `<span class="sym">${suit.symbol}&#xFE0E;</span><span class="nm">${suit.name}</span><span class="held">${held.length ? `${held.map((c) => rankText(c.rank)).join(' ')}` : 'none'}</span>`;
         b.addEventListener('click', () => {
           close();
           resolve(key);
@@ -76,7 +77,7 @@ export class JudgementHuman {
       const before = bidsSoFar(state);
       const total = before.reduce((s, p) => s + p.bid, 0);
       const info = el('div', 'bid-info');
-      info.innerHTML = `<span>${suitMark(state.trump)} ${SUITS[state.trump].name} are trumps · you hold ${trumps}</span>`
+      info.innerHTML = `<span>${suitMark(state.trump)} ${suitLook(state.trump).name} are trumps · you hold ${trumps}</span>`
         + `<span>${before.length ? `${before.map((p) => `${esc(p.name)} <b>${p.bid}</b>`).join(' · ')} — total <b>${total}</b> of ${state.handSize}` : `You bid first · ${state.handSize} tricks to play`}</span>`;
       body.appendChild(info);
       const grid = el('div', 'bid-grid');
@@ -121,8 +122,8 @@ export class JudgementHuman {
     if (!p || zone.zone !== 'hand' || zone.playerId !== p.me.id || !armed) return;
     const { state } = p.game;
     if (!R.legalCards(p.me.hand, state.trick).some((c) => c.id === card.id)) {
-      const led = SUITS[R.ledSuit(state.trick)];
-      this.hud.toast(`Follow suit: play a ${led.symbol}\uFE0E ${led.name.slice(0, -1)}.`, 'warn');
+      const led = suitLook(R.ledSuit(state.trick));
+      this.hud.toast(`Follow suit: play a ${led.symbol}\uFE0E ${led.one}.`, 'warn');
       return;
     }
     this.pending = null;

@@ -3,7 +3,8 @@
 // of whoever played it, and the local hand along the bottom.
 import { TableView, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc } from './view.js';
 import { cardImageURL, PLAYING_BACK } from './textures.js';
-import { SUITS, SUIT_ORDER } from '../judgement/cards.js';
+import { SUIT_ORDER } from '../judgement/cards.js';
+import { suitLook } from './deck-style.js';
 import { legalCards, trickWinner, bidState } from '../judgement/rules.js';
 
 // Phases where someone is deciding something.
@@ -37,6 +38,12 @@ export class JudgementView extends TableView {
     }
     this.trumpEl = div('trump-mark hidden', this.panelLayer);
     this.tags = [];
+  }
+
+  // The back is in the deck style picked before this game.
+  attach(game) {
+    this.backURL = cardImageURL(PLAYING_BACK);
+    super.attach(game);
   }
 
   // No deck and discard counts in the HUD.
@@ -305,7 +312,7 @@ export class JudgementView extends TableView {
 
   // A large faint trump suit behind the trick.
   layoutTrump(state) {
-    const suit = state.trump && SUITS[state.trump];
+    const suit = state.trump && suitLook(state.trump);
     this.trumpEl.classList.toggle('hidden', !suit);
     if (!suit) return;
     const { trick } = this.geo;
