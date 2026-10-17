@@ -14,7 +14,7 @@ const OPENERS = ['crane', 'slate', 'trace', 'stare', 'raise', 'arise', 'later', 
 const RARE = 0.6;
 
 export class WordleAI {
-  // delay: the game speed's thinking time (ms); a guess takes several of those.
+  // delay: the bots' thinking time per decision (ms); a guess takes several of those.
   constructor({ delay = 0, rng = Math.random } = {}) {
     this.delay = delay;
     this.rng = rng;
@@ -22,7 +22,7 @@ export class WordleAI {
 
   async chooseGuess(game, me) {
     const first = !me.guesses.length;
-    // Normal speed: a few seconds for the opener, 9–22 s for each guess after it.
+    // At Wordle's bot pace (850 ms): a few seconds for the opener, 9–22 s for each guess after it.
     if (this.delay) await sleep(this.delay * (first ? 3 + this.rng() * 4 : 10 + this.rng() * 16));
     return pickGuess(me.guesses, this.rng);
   }

@@ -18,7 +18,7 @@ import { WordleGame } from './wordle/engine.js';
 import { WordleAI } from './wordle/ai.js';
 import { DEFAULT_WORDS } from './wordle/rules.js';
 import * as R from './game/rules.js';
-import { BOT_NAMES, SPEEDS, GAMES, DEFAULT_GAME } from './game/settings.js';
+import { BOT_NAMES, SPEED, GAMES, DEFAULT_GAME, botDelay } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
 import { cueMoves, cueLog, cueTricks, sound } from './ui/sound.js';
 
@@ -33,7 +33,7 @@ let game = null;
 let human = null;
 let online = null;
 const lastGame = localStorage.getItem('md-game');
-let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, speed: 'normal', words: DEFAULT_WORDS, code: '' };
+let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, code: '' };
 
 const activeHuman = () => (online ? online.human : human);
 
@@ -112,7 +112,6 @@ function updateStatus() {
 }
 
 function newGame(opts) {
-  const speed = SPEEDS[opts.speed];
   const [Engine, Bot, Human] = {
     deal: [Game, AIController, HumanController],
     judgement: [JudgementGame, JudgementAI, JudgementHuman],
@@ -121,12 +120,12 @@ function newGame(opts) {
   }[kind];
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
-  for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: speed.delay }) });
+  for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: botDelay(kind) }) });
   // Wordle on your own has no clock: a word lasts until you get it or run out of guesses.
   const untimed = kind === 'wordle' && !opts.opponents;
   game = new Engine({ players, view, words: opts.words, ...(untimed && { roundMs: 0 }) });
   // In Wordle the speed is only how fast the bots think; the pauses stay put.
-  view.pace = kind === 'wordle' ? 1 : speed.pace;
+  view.pace = kind === 'wordle' ? 1 : SPEED.pace;
   hud.clearLog();
   hud.setTurnControls(false);
   const current = game;

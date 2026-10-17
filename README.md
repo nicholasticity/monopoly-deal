@@ -35,8 +35,8 @@ Other scripts:
    press **Create a room**.
 2. Send your friends the **invite link** from the lobby (or just the 4-letter room code — they
    pick *Online with friends*, type the code and press **Join room**).
-3. Everyone shows up in the lobby. The host (👑) can add bots, remove players, choose the game
-   speed and press **Start game** once there are at least 2 players. Up to 5 can play.
+3. Everyone shows up in the lobby. The host (👑) can add bots, remove players and press
+   **Start game** once there are at least 2 players. Up to 5 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
 Deal, Judgement, Bingo and Wordle in the lobby between games (and for Wordle, pick 5, 10 or
@@ -250,7 +250,7 @@ A race: everyone guesses the same word at the same time.
 Type on your keyboard or the one on screen, and press **Enter**. Each opponent's bar shows
 their guesses as coloured squares, without the letters until the word is over. The clock in
 your bar counts down the time left, and the word counter in the top bar opens the scores.
-The game speed sets how quickly the bots think (about 50 s a word at normal). The secret
+Bots take about 50 s to get a word, about a person's pace. The secret
 words are about 950 common words picked by hand; any of 12,500 words is accepted as a guess
 (from the MIT-licensed [word-list](https://github.com/sindresorhus/word-list) package; see
 `scripts/build-wordle-guesses.mjs`).
@@ -264,7 +264,7 @@ src/
     rules.js     set sizes, rent, payments, validation
     engine.js    async turn loop; asks controllers for every decision
     ai.js        computer opponents
-    settings.js  the games, speeds and online time limits
+    settings.js  the games, the game speed and online time limits
   judgement/ Judgement's rules, engine and AI, the same way
     cards.js     the 52-card deck
     rules.js     dealing, bids, following suit, trick winners, scoring

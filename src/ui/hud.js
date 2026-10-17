@@ -603,7 +603,7 @@ export class Hud {
     });
   }
 
-  // Resolves { mode: 'solo' | 'create' | 'join' | 'home', name, opponents, speed, code }.
+  // Resolves { mode: 'solo' | 'create' | 'join' | 'home', name, opponents, words, code }.
   showStart(defaults) {
     return new Promise((resolve) => {
       this.closeAll();
@@ -622,7 +622,6 @@ export class Hud {
         <div class="start-solo">
           <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${counts.map((n) => `<button data-v="${n}" class="${n === opponents ? 'on' : ''}"${n ? '' : ' title="Just you, with no clock"'}>${n || 'None'}</button>`).join('')}</div></div>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-          <div class="opt-row" id="opt-speed-row"><span>${this.game === 'wordle' ? 'Bot speed' : 'Game speed'}</span><div class="seg" id="opt-speed">${['slow', 'normal', 'fast'].map((s) => `<button data-v="${s}" class="${s === defaults.speed ? 'on' : ''}">${s}</button>`).join('')}</div></div>
           <button class="primary big" id="opt-start">${this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
@@ -646,13 +645,8 @@ export class Hud {
         return () => root.querySelector('.on').dataset.v;
       };
       const opp = seg('#opt-opp');
-      const speed = seg('#opt-speed');
       const words = seg('#opt-words');
       $b('#opt-words-row').hidden = this.game !== 'wordle';
-      // No bots, so nothing to set the speed of.
-      const showSpeed = () => ($b('#opt-speed-row').hidden = opp() === '0');
-      $b('#opt-opp').addEventListener('change', showSpeed);
-      showSpeed();
       // Judgement's deck style is this browser's own, solo or online, and shows at once.
       const deck = seg('#opt-deck');
       $b('#opt-deck-row').hidden = this.game !== 'judgement';
@@ -686,7 +680,7 @@ export class Hud {
 
       const finish = (choice) => {
         close();
-        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), speed: speed(), words: Number(words()), code: codeInput.value, ...choice });
+        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), code: codeInput.value, ...choice });
       };
       const onlineName = () => {
         const name = nameInput.value.trim();

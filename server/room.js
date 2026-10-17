@@ -12,7 +12,7 @@ import { validGrid } from '../src/bingo/rules.js';
 import { WordleGame } from '../src/wordle/engine.js';
 import { WordleAI } from '../src/wordle/ai.js';
 import { DEFAULT_WORDS, WORD_COUNTS } from '../src/wordle/rules.js';
-import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEEDS, MAX_PLAYERS, TIMEOUTS } from '../src/game/settings.js';
+import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEED, MAX_PLAYERS, TIMEOUTS, botDelay } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 
 const MAX_MEMBERS = MAX_PLAYERS + 3; // a few spectators may watch a running game
@@ -54,7 +54,6 @@ export class Room {
     this.members = [];
     this.hostId = null;
     this.kind = GAMES[game] ? game : DEFAULT_GAME;
-    this.speed = 'normal';
     // Wordle: how many words a game is.
     this.words = DEFAULT_WORDS;
     this.status = 'lobby';
@@ -269,12 +268,6 @@ export class Room {
     conn?.drop();
   }
 
-  setSpeed(m, speed) {
-    if (!this.isHost(m) || this.status !== 'lobby' || !SPEEDS[speed]) return;
-    this.speed = speed;
-    this.broadcastRoom();
-  }
-
   setWords(m, n) {
     if (!this.isHost(m) || this.status !== 'lobby' || !WORD_COUNTS.includes(n)) return;
     this.words = n;
@@ -341,13 +334,12 @@ export class Room {
     if (!this.isHost(m) || this.status !== 'lobby') return;
     const seated = this.members.slice(0, MAX_PLAYERS);
     if (seated.length < 2) return;
-    const speed = SPEEDS[this.speed];
     const [Engine, Bot] = ENGINES[this.kind];
     const players = seated.map((s, i) => {
       s.seat = i;
       s.away = false;
       s.misses = 0;
-      s.ai = new Bot({ delay: speed.delay * this.timeScale });
+      s.ai = new Bot({ delay: botDelay(this.kind) * this.timeScale });
       return { name: s.name, controller: s.kind === 'bot' ? s.ai : new SeatController(this, s) };
     });
     for (const s of this.members.slice(MAX_PLAYERS)) s.seat = -1;
@@ -358,7 +350,7 @@ export class Room {
     this.gameNo++;
     // The server has no renderer; the "view" just paces the game so clients can animate.
     // In Wordle the speed is only how fast the bots think; the pauses stay put.
-    const pace = this.kind === 'wordle' ? 1 : speed.pace;
+    const pace = this.kind === 'wordle' ? 1 : SPEED.pace;
     const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
     const game = new Engine({ players, view, words: this.words });
     this.game = game;
@@ -574,7 +566,6 @@ export class Room {
       hostId: this.hostId,
       status: this.status,
       game: this.kind,
-      speed: this.speed,
       words: this.words,
       max: MAX_PLAYERS,
       members: this.members.map((m) => ({

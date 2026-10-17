@@ -78,7 +78,6 @@ export class OnlineSession {
     this.lobby = new Lobby(this.chat, {
       addBot: () => this.send('addBot'),
       kick: (id) => this.send('kick', { id }),
-      speed: (speed) => this.send('speed', { speed }),
       words: (words) => this.send('words', { words }),
       game: (game) => this.send('game', { game }),
       start: () => this.send('start'),

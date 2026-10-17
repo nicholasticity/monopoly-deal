@@ -11,12 +11,13 @@ export const DEFAULT_GAME = 'deal';
 
 export const BOT_NAMES = ['Rich Uncle Pennybags', 'Lady Luck', 'The Baron', 'Madame Mortgage', 'Monty Mogul'];
 
-// delay: AI thinking time per decision (ms); pace: multiplier on animation pauses.
-export const SPEEDS = {
-  slow: { delay: 1300, pace: 1.35 },
-  normal: { delay: 850, pace: 1 },
-  fast: { delay: 380, pace: 0.6 },
-};
+// How fast every game goes. delay: AI thinking time per decision (ms); pace: multiplier
+// on animation pauses (1 is the pauses as written in the engines). Wordle bots think
+// slower (wordleDelay), at about a person's pace: some 50 s a word, so you can race them.
+export const SPEED = { delay: 380, pace: 0.6, wordleDelay: 850 };
+
+// A bot's thinking time per decision in this game (ms).
+export const botDelay = (kind) => (kind === 'wordle' ? SPEED.wordleDelay : SPEED.delay);
 
 // The table has room for five players.
 export const MAX_PLAYERS = 5;
