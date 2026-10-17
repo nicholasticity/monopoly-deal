@@ -87,7 +87,17 @@ export class Lobby {
       b.addEventListener('click', () => this.isHost && this.actions.game(kind));
       this.gameSeg.appendChild(b);
     }
-    gameRow.append(el('span', null, 'Game'), this.gameSeg);
+    // On phones a dropdown instead of the buttons, which wrap untidily there (style.css
+    // shows one or the other).
+    this.gameSelect = el('select', 'game-select');
+    this.gameSelect.setAttribute('aria-label', 'Game');
+    for (const [kind, g] of Object.entries(GAMES)) {
+      const o = el('option', null, g.name);
+      o.value = kind;
+      this.gameSelect.appendChild(o);
+    }
+    this.gameSelect.addEventListener('change', () => this.isHost && this.actions.game(this.gameSelect.value));
+    gameRow.append(el('span', null, 'Game'), this.gameSeg, this.gameSelect);
     // Wordle: how many words a game is.
     this.wordsRow = el('div', 'opt-row');
     this.wordsSeg = el('div', 'seg');
@@ -185,6 +195,8 @@ export class Lobby {
       }
       seg.classList.toggle('readonly', !host);
     }
+    this.gameSelect.value = room.game;
+    this.gameSelect.disabled = !host || room.status !== 'lobby';
     this.startBtn.style.display = host ? '' : 'none';
     this.startBtn.disabled = players < 2 || room.status !== 'lobby';
     const hostName = room.members.find((m) => m.id === room.hostId)?.name ?? 'the host';

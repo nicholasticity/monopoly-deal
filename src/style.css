@@ -636,6 +636,22 @@ body:has(.peek-back:not(.hidden)) #status { visibility: hidden; }
 .opt-row:has(.seg.games) { gap: 12px; }
 .seg.games { flex-wrap: wrap; justify-content: flex-end; }
 .seg.games button { white-space: nowrap; }
+/* On phones (the portrait rules below) the game picker is this dropdown instead. */
+.game-select {
+  display: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  min-width: 0;
+  flex: 1;
+  max-width: 240px;
+}
+.game-select option { color: #111; }
+.game-select:disabled { opacity: 1; color: var(--muted); }
 .gameover { text-align: center; }
 .trophy { font-size: 4rem; }
 .muted { color: var(--muted); }
@@ -1069,6 +1085,8 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 /* Phones and other tall screens: the status and End turn button move down to a row
    just above the hand (--hand-h is set by the table view). Keep in sync with hud.js. */
 @media (max-aspect-ratio: 1/1), (max-width: 640px) {
+  .seg.games { display: none; }
+  .game-select { display: block; }
   #status {
     position: fixed;
     left: 50%;
