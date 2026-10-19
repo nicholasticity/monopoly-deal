@@ -5,7 +5,7 @@
 // it. The engine runs the shot (physics.js) and keeps it in state.shot, so a view can
 // replay it from the same positions while the engine waits for it to finish.
 import { GameAborted } from '../game/engine.js';
-import { simulate } from './physics.js';
+import { simulate, STROKE_MS } from './physics.js';
 import * as R from './rules.js';
 import { planShot, placeCue } from './ai.js';
 
@@ -139,7 +139,8 @@ export class PoolGame {
     state.balls = result.balls;
     state.ballInHand = null;
     state.phase = 'shot';
-    await this.sync(result.time * 1000 + SETTLE_MS);
+    // The cue strikes, the balls roll, and a moment to see where they ended up.
+    await this.sync(STROKE_MS + result.time * 1000 + SETTLE_MS);
 
     const judged = R.judgeShot({ before, events: result.events, groups: state.groups, team, brk });
     const potted = result.events.pocketed.map((x) => x.id).filter((id) => id !== 0);

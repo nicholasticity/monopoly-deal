@@ -324,6 +324,20 @@ export class Room {
     this.broadcastRoom();
   }
 
+  // Pool: the shooter's cue as they line it up, passed on so everyone sees it move. Only
+  // from whoever's shot it is, and only numbers (the browser sends a few a second).
+  relayAim(m, v) {
+    const g = this.game;
+    if (!g || g.kind !== 'pool' || g.state.phase !== 'aim' || g.state.current !== m.seat || m.away) return;
+    const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+    const dx = num(v?.dx);
+    const dy = num(v?.dy);
+    if (dx == null || dy == null || (dx === 0 && dy === 0)) return;
+    const cue = v.cue && num(v.cue.x) != null && num(v.cue.y) != null ? { x: v.cue.x, y: v.cue.y } : null;
+    const msg = { type: 'aim', seat: m.seat, dx, dy, pull: Math.max(0, Math.min(1, num(v.pull) ?? 0)), cue };
+    for (const x of this.humans) if (x !== m) x.conn?.send(msg);
+  }
+
   // Passes a voice connection offer or answer to another member in voice chat.
   // The audio itself goes directly between the players.
   relay(m, to, data) {

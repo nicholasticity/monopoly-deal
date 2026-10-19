@@ -75,6 +75,8 @@ views.judgement.on('moves', cueTricks);
 views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
 views.wordle.on('submit', (word) => !!activeHuman()?.submit?.(word));
 views.wordle.on('marked', () => sound.play('flip'));
+// Pool online: the others see our cue as we aim.
+views.pool.on('aim', (aim) => online?.sendAim(aim));
 
 // Puts a game's table on show (and its name in the top bar). Returns its view.
 function useGame(k) {

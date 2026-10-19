@@ -173,6 +173,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'stop': return room.stop(member);
           case 'voice': return room.setVoice(member, msg.on, msg.muted);
           case 'rtc': return room.relay(member, msg.to, msg.data);
+          case 'aim': return room.relayAim(member, msg);
         }
       } catch (e) {
         console.error('[rooms] message failed', msg.type, e);

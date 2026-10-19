@@ -4,12 +4,12 @@
 // the real physics and takes the one that turns out best. Then it adds a little aiming
 // error, so bots miss like people do. With ball in hand it puts the cue ball behind an
 // easy pot.
-import { simulate, POCKETS, R, LENGTH, WIDTH } from './physics.js';
+import { simulate, POCKETS, R, LENGTH, WIDTH, ROLL, DAMP, MAX_SPEED } from './physics.js';
 import { targets, judgeShot, canPlace, teamOf, HEAD_STRING, FOOT_SPOT, EIGHT } from './rules.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // How far off a bot's aim may be, in radians (one standard deviation).
-const AIM_ERROR = 0.014;
+const AIM_ERROR = 0.012;
 // Shots played out per decision (each at two strengths).
 const TRIES = 6;
 
@@ -45,7 +45,7 @@ function clear(balls, a, b, skip) {
   });
 }
 
-// Every pot the cue ball at `from` could try: { dx, dy, score, dist } (bigger score =
+// Every pot the cue ball at `from` could try: { dx, dy, score, d1, d2, cut } (bigger score =
 // easier: straighter and shorter).
 function pots(balls, from, legal) {
   const out = [];
@@ -64,10 +64,23 @@ function pots(balls, from, legal) {
       if (cut < 0.25) continue;
       if (!clear(balls, from, ghost, [0, id]) || !clear(balls, b, mouth, [0, id])) continue;
       const d2 = len(sub(mouth, b));
-      out.push({ dx: aim.x, dy: aim.y, score: (cut * cut) / (0.5 + d1 + 1.5 * d2), dist: d1 + d2 });
+      out.push({ dx: aim.x, dy: aim.y, score: (cut * cut) / (0.5 + d1 + 1.5 * d2), d1, d2, cut });
     }
   }
   return out.sort((a, b) => b.score - a.score);
+}
+
+// How hard to hit a pot: enough for the object ball to roll a little past the pocket,
+// worked back through the hit (a thinner cut passes on less) and the cue ball's slide
+// and roll (physics.js: a struck ball rolls on at 5/7 of its speed).
+function potPower(c) {
+  // Rolling a distance d from speed v slows it about as much as v² = 2·a·d.
+  const slow = ROLL + DAMP * 1.2;
+  const objectRolls = Math.sqrt(2 * slow * (c.d2 + 0.3));
+  // The object ball slides first, so it needs to set off 7/5 as fast.
+  const atContact = (objectRolls * 1.4) / (0.97 * Math.max(0.3, c.cut));
+  const cueStart = 1.4 * Math.sqrt(atContact * atContact + 2 * slow * c.d1);
+  return Math.max(0.06, Math.min(0.9, cueStart / MAX_SPEED));
 }
 
 // What a shot is worth to `team`: winning or losing, a foul, carrying on.
@@ -93,8 +106,8 @@ export function planShot(game, me, cue = null, rng = Math.random) {
   const legal = targets(balls, state.groups[team]);
   const tries = [];
   for (const c of pots(balls, from, legal).slice(0, TRIES)) {
-    const power = Math.max(0.16, Math.min(0.85, 0.12 + 0.17 * c.dist));
-    tries.push({ ...c, power }, { ...c, power: Math.min(1, power * 1.4) });
+    const power = potPower(c);
+    tries.push({ ...c, power }, { ...c, power: Math.min(1, power * 1.35) });
   }
   // Nothing to pot: hit a legal ball softly and get it to a cushion.
   if (!tries.length || tries.every((t) => t.score < 0.02)) {

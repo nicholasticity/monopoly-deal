@@ -28,6 +28,9 @@ function el(tag, cls, text) {
 const DOING = { turn: 'playing', payment: 'choosing how to pay', justsayno: 'responding', discard: 'discarding' };
 // The countdown only shows once a decision is running short.
 const CLOCK_FROM_S = 30;
+// Pool: how often our cue's aim goes to the others (ms). A few a second keeps it well
+// under the server's message limit.
+const AIM_MS = 200;
 // Set while this tab is in voice chat, so a reload rejoins it.
 const VOICE_KEY = 'md-voice';
 
@@ -193,6 +196,9 @@ export class OnlineSession {
         break;
       case 'chat':
         this.chat.add(msg);
+        break;
+      case 'aim':
+        this.view.setRemoteAim?.(msg);
         break;
       case 'rtc':
         this.voice.signal(msg.from, msg.data);
@@ -410,6 +416,22 @@ export class OnlineSession {
     // If the host already started the next game, the modal was closed for us.
     this.gameoverOpen = false;
     if (!this.closed && this.room?.status === 'lobby') this.showLobby();
+  }
+
+  // Pool: our cue as we line up, for the others to watch. At most every AIM_MS, always
+  // ending with the latest.
+  sendAim(aim) {
+    this.aimNext = aim;
+    if (this.aimTimer) return;
+    const flush = () => {
+      this.aimTimer = null;
+      const a = this.aimNext;
+      this.aimNext = null;
+      if (!a || this.closed) return;
+      this.send('aim', a);
+      this.aimTimer = setTimeout(flush, AIM_MS);
+    };
+    flush();
   }
 
   // ---------- voice chat ----------

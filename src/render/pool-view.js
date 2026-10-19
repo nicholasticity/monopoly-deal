@@ -4,16 +4,60 @@
 // screens, upright on tall ones, the break end nearest you), the cue to pull back for
 // power on its left and a wheel for fine aim on its right. Drag on the table to swing
 // the aim round the cue ball, or tap to aim at a spot; with ball in hand, drag the cue
-// ball itself. Shots are replayed from the engine's state.shot with the same physics.
+// ball itself. Shots are replayed from the engine's state.shot with the same physics,
+// after the cue's stroke. Everyone else's cue shows too: an online player's as they
+// aim (setRemoteAim), a bot's resting behind the cue ball while it thinks.
 import { TableView, AVATARS, div, setBox, esc } from './view.js';
-import { simulate, POCKETS, LENGTH, WIDTH, R } from '../pool/physics.js';
+import { simulate, POCKETS, LENGTH, WIDTH, R, STROKE_MS } from '../pool/physics.js';
 import { canPlace, targets, GROUPS, EIGHT, HEAD_SPOT, HEAD_STRING, FOOT_SPOT, teamOf, ballsLeft } from '../pool/rules.js';
 import { sound } from '../ui/sound.js';
 
 // Wood and cushion round the playing surface, in metres.
 const RAIL = 0.11;
-// Steps of the physics per animation frame (the physics runs at 500 steps a second).
-const FRAME_STEPS = 8;
+// Steps of the physics per recorded frame (the physics runs at 500 steps a second);
+// the replay draws between frames, so this only needs to be fine enough for curves.
+const FRAME_STEPS = 4;
+// How long a potted ball takes to sink into its pocket (s).
+const SINK = 0.18;
+// A ball's own features (its axes): the number spots on z (both ends), and a stripe
+// ball's band round y.
+const SPOT = 0.88;
+const BAND = 0.52;
+// The light, from the top left (screen space, unit length), and the highlight halfway
+// between it and the eye.
+const LIGHT = norm3(-0.45, -0.55, 0.7);
+const HALF = norm3(LIGHT[0], LIGHT[1], LIGHT[2] + 1);
+const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+const RGB = {};
+function norm3(x, y, z) {
+  const l = Math.sqrt(x * x + y * y + z * z);
+  return [x / l, y / l, z / l];
+}
+function rgb(hex) {
+  if (!RGB[hex]) RGB[hex] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return RGB[hex];
+}
+// Turns orientation m (row-major; columns are the ball's axes on the table) by angle
+// about the table axis (kx, ky, 0): Rodrigues' formula, then the rotation applied.
+function turned(m, kx, ky, angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const t = 1 - c;
+  const r = [c + t * kx * kx, t * kx * ky, s * ky, t * kx * ky, c + t * ky * ky, -s * kx, -s * ky, s * kx, c];
+  const out = new Array(9);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) out[i * 3 + j] = r[i * 3] * m[j] + r[i * 3 + 1] * m[3 + j] + r[i * 3 + 2] * m[6 + j];
+  return out;
+}
+// Squares up an orientation that has drifted (Gram–Schmidt on its columns).
+function squared(m) {
+  const col = (j) => [m[j], m[3 + j], m[6 + j]];
+  const a = norm3(...col(0));
+  let b = col(1);
+  const d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  b = norm3(b[0] - d * a[0], b[1] - d * a[1], b[2] - d * a[2]);
+  const c = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  return [a[0], b[0], c[0], a[1], b[1], c[1], a[2], b[2], c[2]];
+}
 // Fine aim: radians per pixel on the wheel, and per arrow key press (Shift: 8 times).
 const WHEEL = Math.PI / 3600;
 const NUDGE = Math.PI / 720;
@@ -50,6 +94,18 @@ export class PoolView extends TableView {
     this.drag = null;
     // Online: the shot clock, { playerId, at (ms), total (ms) }.
     this.deadline = null;
+    // Online: another player's cue as they aim, { seat, dir, pull, cue }.
+    this.remote = null;
+    // The cue as last drawn, { dir, cue }: a shot's stroke swings round from it.
+    this.lastCue = null;
+    // Each ball's orientation (turned as it rolls), where it was last drawn, and its
+    // drawn picture, { canvas, key }.
+    this.spins = new Map();
+    this.lastAt = new Map();
+    this.art = new Map();
+    // Our aim as last sent to the others (online), to send only changes.
+    this.sentAim = '';
+    this.handlers.aim = () => {};
     this.raf = 0;
     this.tick = setInterval(() => this.deadline && !this.root.hidden && this.layoutCards(), 250);
     this.listen();
@@ -176,6 +232,61 @@ export class PoolView extends TableView {
       else return;
       e.preventDefault();
     });
+  }
+
+  // ---------- other players' cues ----------
+
+  // Online: another player's cue, as they line up.
+  setRemoteAim({ seat, dx, dy, pull, cue }) {
+    const state = this.game?.state;
+    if (!state || state.phase !== 'aim' || state.current !== seat || seat === this.seat) return;
+    this.remote = { seat, dir: { x: dx, y: dy }, pull, cue };
+    if (!this.anim) this.draw();
+  }
+
+  // Whose cue to draw while nobody's shooting, and how: ours, an online player's, or
+  // (a bot, or before their first move arrives) resting behind the cue ball, aimed at
+  // the nearest ball they may hit. null: no cue (the cue ball isn't on the table).
+  pose() {
+    const { state } = this.game;
+    if (this.aim) return { dir: this.aim.dir, cue: this.aim.cue, pull: this.aim.pull, mine: true };
+    if (state.phase !== 'aim') return null;
+    const r = this.remote;
+    const cueBall = state.balls.find((b) => b.id === 0);
+    if (r?.seat === state.current) return { dir: r.dir, cue: r.cue ?? cueBall, pull: r.pull, guide: true };
+    if (cueBall.potted) return null;
+    const shooter = state.players[state.current];
+    const legal = targets(state.balls, state.groups[shooter?.team ?? 0]);
+    let best = state.shots === 0 ? FOOT_SPOT : null;
+    let bestD = Infinity;
+    if (!best) {
+      for (const b of state.balls) {
+        if (b.potted || !legal.includes(b.id)) continue;
+        const d = hypot(b.x - cueBall.x, b.y - cueBall.y);
+        if (d < bestD) [best, bestD] = [b, d];
+      }
+    }
+    best ??= FOOT_SPOT;
+    return { dir: { x: best.x - cueBall.x, y: best.y - cueBall.y }, cue: cueBall, pull: 0 };
+  }
+
+  // A shot's stroke, before the balls move (t in seconds, from -STROKE_MS to 0): the cue
+  // swings round to the shot's line, draws back as far as its power and strikes.
+  strokePose(t) {
+    const a = this.anim;
+    const f = 1 + (t * 1000) / STROKE_MS;
+    const ang = (v) => Math.atan2(v.y, v.x);
+    let from = ang(a.pre.from);
+    const to = ang(a.pre.to);
+    // The short way round.
+    while (from - to > Math.PI) from -= 2 * Math.PI;
+    while (to - from > Math.PI) from += 2 * Math.PI;
+    const ease = (x) => x * x * (3 - 2 * x);
+    const turn = Math.min(1, f / 0.35);
+    const angle = from + (to - from) * ease(turn);
+    const back = a.pre.power;
+    const pull = f < 0.35 ? 0 : f < 0.82 ? back * ease((f - 0.35) / 0.47) : back * (1 - (f - 0.82) / 0.18) - 0.04;
+    return { dir: { x: Math.cos(angle), y: Math.sin(angle) }, cue: a.pre.cue, pull };
   }
 
   // ---------- the human's turn ----------
@@ -311,6 +422,10 @@ export class PoolView extends TableView {
   }
 
   attach(game) {
+    this.remote = null;
+    this.lastCue = null;
+    this.spins.clear();
+    this.lastAt.clear();
     // A shot already over when we arrive isn't replayed.
     this.played = game.state.phase === 'shot' ? 0 : game.state.shot?.no ?? 0;
     this.anim = null;
@@ -418,9 +533,22 @@ export class PoolView extends TableView {
       this.played = state.shot.no;
       const { from, dx, dy, power: pw } = state.shot;
       const r = simulate(from, dx, dy, pw, { record: FRAME_STEPS });
-      this.anim = { frames: r.frames, dt: r.frameDt, start: performance.now(), hits: r.events.hits, drops: r.events.drops, heard: 0, dropped: 0, lastClack: -1 };
+      const cue = from.find((b) => b.id === 0);
+      const pre = { from: this.lastCue?.dir ?? { x: dx, y: dy }, to: { x: dx, y: dy }, cue: { x: cue.x, y: cue.y }, power: pw };
+      // Each potted ball: when it dropped, where it was last seen, and its pocket.
+      const sinks = new Map();
+      r.events.pocketed.forEach((pk, k) => {
+        const t = r.events.drops[k].t;
+        let i = Math.min(r.frames.length - 1, Math.floor(t / r.frameDt));
+        while (i > 0 && Number.isNaN(r.frames[i][2 * pk.id])) i--;
+        sinks.set(pk.id, { t, x: r.frames[i][2 * pk.id], y: r.frames[i][2 * pk.id + 1], pocket: POCKETS[pk.pocket] });
+      });
+      this.anim = { frames: r.frames, dt: r.frameDt, start: performance.now() + STROKE_MS, pre, from, sinks, hits: r.events.hits, drops: r.events.drops, heard: 0, dropped: 0, lastClack: -1 };
+      this.remote = null;
       if (this.aim) this.stopAim();
     }
+    // Someone else's turn now: their cue starts from rest.
+    if (this.remote && (state.phase !== 'aim' || state.current !== this.remote.seat)) this.remote = null;
     const me = state.players[this.seat];
     this.root.classList.toggle('my-turn', !!me?.isHuman && state.phase === 'aim' && state.current === this.seat);
     this.loop();
@@ -442,6 +570,7 @@ export class PoolView extends TableView {
     const a = this.anim;
     if (!a) return state.balls;
     const t = (performance.now() - a.start) / 1000;
+    if (t < 0) return a.from;
     const i = Math.min(a.frames.length - 1, Math.floor(t / a.dt));
     while (a.heard < a.hits.length && a.hits[a.heard].t <= t) {
       const hit = a.hits[a.heard++];
@@ -454,12 +583,49 @@ export class PoolView extends TableView {
       a.dropped++;
       sound.play('pocket');
     }
-    if (i >= a.frames.length - 1) this.anim = null;
+    const last = a.frames.length - 1;
+    // The replay runs on after the last frame for the last ball to finish sinking.
+    const sunk = [...a.sinks.values()].every((k) => t >= k.t + SINK);
+    if (i >= last && sunk) this.anim = null;
+    // Where each ball is between two frames.
+    const f = Math.min(1, t / a.dt - i);
     const row = a.frames[i];
+    const next = a.frames[Math.min(last, i + 1)];
     return state.balls.map((b) => {
       const x = row[2 * b.id];
-      return Number.isNaN(x) || x == null ? { ...b, potted: true } : { id: b.id, x, y: row[2 * b.id + 1], potted: false };
+      if (Number.isNaN(x) || x == null) {
+        // Just dropped: sinking into the pocket, smaller and fainter.
+        const k = a.sinks.get(b.id);
+        const u = k ? (t - k.t) / SINK : 1;
+        if (u < 1) return { id: b.id, x: k.x + (k.pocket.x - k.x) * u, y: k.y + (k.pocket.y - k.y) * u, potted: false, sink: Math.max(0, u) };
+        return { ...b, potted: true };
+      }
+      const x1 = next[2 * b.id];
+      if (Number.isNaN(x1)) return { id: b.id, x, y: row[2 * b.id + 1], potted: false };
+      return { id: b.id, x: x + (x1 - x) * f, y: row[2 * b.id + 1] + (next[2 * b.id + 1] - row[2 * b.id + 1]) * f, potted: false };
     });
+  }
+
+  // Turns each ball as far as it rolled since it was last drawn: rolling a distance d
+  // along u turns it by d / R about the axis across u. Not when it jumped (placed, or
+  // put back on the spot).
+  turnBalls(balls) {
+    for (const b of balls) {
+      if (b.potted || b.sink) continue;
+      const was = this.lastAt.get(b.id);
+      this.lastAt.set(b.id, { x: b.x, y: b.y });
+      if (!was) continue;
+      const dx = b.x - was.x;
+      const dy = b.y - was.y;
+      const d = hypot(dx, dy);
+      if (d < 1e-7 || d > 0.3) continue;
+      const prev = this.spins.get(b.id) ?? IDENTITY;
+      const m = turned(prev, -dy / d, dx / d, d / R);
+      const n = (prev.n ?? 0) + 1;
+      const kept = n % 64 ? m : squared(m);
+      kept.n = n;
+      this.spins.set(b.id, kept);
+    }
   }
 
   // Both cards: who's at the table, whose shot it is (with the clock), and the balls.
@@ -519,14 +685,28 @@ export class PoolView extends TableView {
     ctx.clearRect(0, 0, w, h);
     this.drawTable(ctx, s, w, h);
     const a = this.aim;
-    // With ball in hand the cue ball is wherever it's been dragged.
-    const balls = this.shown().map((b) => (b.id === 0 && a ? { ...b, ...a.cue, potted: false } : b));
+    const stroke = this.anim && performance.now() < this.anim.start;
+    // Whose cue, and where: a shot's stroke, our aim, or the shooter's.
+    const pose = stroke ? this.strokePose((performance.now() - this.anim.start) / 1000) : this.anim ? null : this.pose();
+    // With ball in hand the cue ball is wherever it's been dragged (by us, or online by
+    // whoever's shot it is).
+    const balls = this.shown().map((b) => (b.id === 0 && pose?.cue && !stroke ? { ...b, x: pose.cue.x, y: pose.cue.y, potted: false } : b));
     const up = balls.filter((b) => !b.potted);
-    for (const b of up) this.drawShadow(ctx, b, s);
-    if (a?.dir && !this.anim) this.drawGuide(ctx, s, balls);
+    this.turnBalls(up);
+    for (const b of up) if (!b.sink) this.drawShadow(ctx, b, s);
+    if (pose?.dir && (pose.mine || pose.guide)) this.drawGuide(ctx, s, balls, pose, !pose.mine);
     for (const b of up) this.drawBall(ctx, b, s);
     if (a?.hand) this.drawHand(ctx, a.cue, s);
-    if (a?.dir && !this.anim) this.drawCue(ctx, s);
+    if (pose?.dir) this.drawCue(ctx, s, pose);
+    // Online: our aim, for the others to watch (only when it changes).
+    if (a?.dir) {
+      const aim = { dx: +a.dir.x.toFixed(5), dy: +a.dir.y.toFixed(5), pull: +a.pull.toFixed(3), cue: a.hand ? { x: +a.cue.x.toFixed(5), y: +a.cue.y.toFixed(5) } : null };
+      const key = JSON.stringify(aim);
+      if (key !== this.sentAim) {
+        this.sentAim = key;
+        this.handlers.aim(aim);
+      }
+    }
   }
 
   drawTable(ctx, s, w, h) {
@@ -625,40 +805,88 @@ export class PoolView extends TableView {
     ctx.fill();
   }
 
+  // A ball, as a lit sphere turned however it has rolled (its number spots and stripe
+  // turn with it), and its number on whichever spot faces up. Sinking: smaller, fainter.
   drawBall(ctx, b, s) {
     const p = this.toScreen(b.x, b.y);
-    const r = R * s;
+    const r = R * s * (1 - 0.45 * (b.sink ?? 0));
+    const dpr = this.canvas.width / this.geo.table.w;
+    const size = Math.max(4, Math.ceil(2 * r * dpr));
+    const m = this.spins.get(b.id) ?? IDENTITY;
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.clip();
-    const stripe = b.id >= 9;
-    const color = b.id === 0 ? '#f7f3e8' : BALL_COLORS[stripe ? b.id - 8 : b.id];
-    ctx.fillStyle = stripe ? '#f7f3e8' : color;
-    ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
-    if (stripe) {
-      ctx.fillStyle = color;
-      if (this.geo.portrait) ctx.fillRect(p.x - r * 0.55, p.y - r, r * 1.1, 2 * r);
-      else ctx.fillRect(p.x - r, p.y - r * 0.55, 2 * r, r * 1.1);
-    }
+    ctx.globalAlpha = 1 - 0.75 * (b.sink ?? 0);
+    ctx.drawImage(this.paintBall(b.id, size, m), p.x - r, p.y - r, 2 * r, 2 * r);
     if (b.id && r > 5) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r * 0.48, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#111';
-      ctx.font = `800 ${Math.max(6, r * 0.62)}px "Segoe UI", Arial, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(b.id), p.x, p.y + r * 0.04);
+      // The spot facing up (z > 0 of the two), seen from above.
+      const sign = m[8] >= 0 ? 1 : -1;
+      const up = sign * m[8];
+      if (up > 0.3) {
+        const o = this.toScreenDir(sign * m[2], sign * m[5]);
+        ctx.globalAlpha *= Math.min(1, (up - 0.3) / 0.3);
+        ctx.fillStyle = '#111';
+        ctx.font = `800 ${Math.max(5, r * 0.6 * Math.sqrt(up))}px "Segoe UI", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(b.id), p.x + o.x * r, p.y + o.y * r + r * 0.04);
+      }
     }
-    const g = ctx.createRadialGradient(p.x - r * 0.38, p.y - r * 0.42, r * 0.05, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(255, 255, 255, 0.75)');
-    g.addColorStop(0.28, 'rgba(255, 255, 255, 0.05)');
-    g.addColorStop(1, 'rgba(0, 0, 0, 0.38)');
-    ctx.fillStyle = g;
-    ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
     ctx.restore();
+  }
+
+  // A table direction (x, y) on screen.
+  toScreenDir(x, y) {
+    return this.geo.portrait ? { x: y, y: -x } : { x, y };
+  }
+
+  // A ball's picture, `size` pixels across, turned by m: every pixel of the disc is a
+  // point on the sphere, coloured by where it is on the ball (spot, stripe or not) and
+  // lit. Cached until the ball turns.
+  paintBall(id, size, m) {
+    let art = this.art.get(id);
+    if (!art) {
+      const canvas = document.createElement('canvas');
+      art = { canvas, ctx: canvas.getContext('2d'), key: '' };
+      this.art.set(id, art);
+    }
+    const portrait = this.geo.portrait;
+    const key = `${size}|${portrait}|${m.map((v) => v.toFixed(3)).join(',')}`;
+    if (art.key === key) return art.canvas;
+    art.key = key;
+    if (art.canvas.width !== size) art.canvas.width = art.canvas.height = size;
+    const img = art.ctx.createImageData(size, size);
+    const px = img.data;
+    const stripe = id >= 9;
+    const white = rgb('#f7f3e8');
+    const color = id === 0 ? white : rgb(BALL_COLORS[stripe ? id - 8 : id]);
+    const half = size / 2;
+    for (let j = 0; j < size; j++) {
+      const Y = (j + 0.5 - half) / half;
+      for (let i = 0; i < size; i++) {
+        const X = (i + 0.5 - half) / half;
+        const d2 = X * X + Y * Y;
+        if (d2 >= 1) continue;
+        const Z = Math.sqrt(1 - d2);
+        // The point on the table's axes, then on the ball's own.
+        const tx = portrait ? -Y : X;
+        const ty = portrait ? X : Y;
+        const qy = m[1] * tx + m[4] * ty + m[7] * Z;
+        const qz = m[2] * tx + m[5] * ty + m[8] * Z;
+        const spot = qz > SPOT || qz < -SPOT;
+        const base = id === 0 || spot ? white : stripe ? (qy < BAND && qy > -BAND ? color : white) : color;
+        const diffuse = Math.max(0, X * LIGHT[0] + Y * LIGHT[1] + Z * LIGHT[2]);
+        const h = Math.max(0, X * HALF[0] + Y * HALF[1] + Z * HALF[2]);
+        const spec = h ** 48 * 0.8 + h ** 8 * 0.12;
+        const shade = 0.42 + 0.7 * diffuse;
+        const k = (j * size + i) * 4;
+        px[k] = Math.min(255, base[0] * shade + 255 * spec);
+        px[k + 1] = Math.min(255, base[1] * shade + 255 * spec);
+        px[k + 2] = Math.min(255, base[2] * shade + 255 * spec);
+        // A soft edge, a pixel wide.
+        px[k + 3] = Math.min(255, (1 - Math.sqrt(d2)) * half * 255);
+      }
+    }
+    art.ctx.putImageData(img, 0, 0);
+    return art.canvas;
   }
 
   // Ball in hand: a hand on the cue ball, to show it can be moved.
@@ -704,16 +932,18 @@ export class PoolView extends TableView {
   // The guide, as in the apps: the cue ball's path to a ghost ball, then the object
   // ball's path and the cue ball's, longer for the one that takes more of the hit.
   // Red where the first ball isn't one you may hit.
-  drawGuide(ctx, s, balls) {
-    const a = this.aim;
-    const from = a.cue;
-    const l = hypot(a.dir.x, a.dir.y);
-    const u = { x: a.dir.x / l, y: a.dir.y / l };
+  // faint: someone else's (online), drawn lighter.
+  drawGuide(ctx, s, balls, pose, faint = false) {
+    const from = pose.cue;
+    const l = hypot(pose.dir.x, pose.dir.y);
+    const u = { x: pose.dir.x / l, y: pose.dir.y / l };
     const { hit, at } = this.contact(balls, from, u);
     const { state } = this.game;
-    const legal = targets(state.balls, state.groups[teamOf(this.seat)]);
+    const team = faint ? state.players[state.current]?.team ?? 0 : teamOf(this.seat);
+    const legal = targets(state.balls, state.groups[team]);
     const bad = hit && !legal.includes(hit.id);
     const white = 'rgba(255, 255, 255, 0.9)';
+    ctx.globalAlpha = faint ? 0.5 : 1;
     const red = 'rgba(255, 90, 90, 0.95)';
     const line = (p0, p1, color, width = 1.6) => {
       const a0 = this.toScreen(p0.x, p0.y);
@@ -760,11 +990,14 @@ export class PoolView extends TableView {
       }
     }
     ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
-  // The cue behind the cue ball, drawn back as the power cue is pulled.
-  drawCue(ctx, s) {
-    const a = this.aim;
+  // A cue behind the cue ball (pose: { dir, cue, pull }), drawn back by pull: ours as the
+  // power cue is pulled, someone else's as they aim or strike.
+  drawCue(ctx, s, pose) {
+    this.lastCue = { dir: pose.dir, cue: pose.cue };
+    const a = pose;
     const l = hypot(a.dir.x, a.dir.y);
     const u = { x: a.dir.x / l, y: a.dir.y / l };
     const back = R * 1.5 + a.pull * 0.32;

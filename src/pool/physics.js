@@ -1,7 +1,14 @@
-// Pool table physics: balls rolling to a stop, bouncing off each other and the
-// cushions, and dropping into pockets. Deterministic: only + − × ÷ and Math.sqrt (no
-// trig), which give the same results in every browser and on the server, so a shot
-// replayed from the same positions and cue ball velocity ends the same everywhere.
+// Pool table physics: balls sliding, then rolling to a stop, bouncing off each other
+// and the cushions, and dropping into pockets. Deterministic: only + − × ÷ and
+// Math.sqrt (no trig), which give the same results in every browser and on the server,
+// so a shot replayed from the same positions and cue ball velocity ends the same
+// everywhere.
+//
+// Each ball has a velocity v and a "roll" w: how fast its surface turns (its spin times
+// its radius), so w = v is rolling naturally. A struck ball starts with w = 0, sliding;
+// friction on the cloth works on the slip v − w until it rolls, at 5/7 of its speed.
+// Balls trade only v when they meet, so a rolling cue ball that hits a ball full on
+// stops, then its roll carries it on after it (follow); the ball it hit slides first.
 // Units are metres and seconds; x runs along the table (head rail at 0, foot rail at
 // LENGTH), y across it.
 
@@ -21,14 +28,24 @@ export const POCKETS = [
   { x: LENGTH, y: WIDTH, r: 0.064 },
 ];
 
+// How long the cue takes to swing round, draw back and strike before a shot plays out
+// (ms): the view draws it, and the engine waits for it.
+export const STROKE_MS = 650;
+
 // The fastest cue ball (a full-power break), in m/s.
 export const MAX_SPEED = 7;
-const DT = 1 / 500; // seconds per step
-const ROLL = 0.55; // rolling slowdown, m/s²
-const DAMP = 0.12; // and a little in proportion to speed (cloth and air), 1/s
+export const DT = 1 / 500; // seconds per step
+// Sliding friction on the cloth (m/s²: 0.2 g), and what rolling loses (m/s², and a
+// little more in proportion to speed, 1/s).
+const SLIDE = 1.96;
+export const ROLL = 0.3;
+export const DAMP = 0.1;
 const BALL_E = 0.94; // ball-on-ball restitution
-const RAIL_E = 0.72; // cushion restitution
-const STOP = 0.006; // slower than this (m/s) is stopped
+const RAIL_E = 0.74; // cushion restitution
+// A cushion takes most of a ball's roll into it, and some of its roll along it.
+const RAIL_ROLL_IN = 0.35;
+const RAIL_ROLL_ALONG = 0.85;
+const STOP = 0.005; // slower than this (m/s), and not slipping, is stopped
 const MAX_TIME = 40; // no shot lasts longer (s)
 
 // `balls`: [{ id, x, y, potted }], id 0 the cue ball. The cue ball leaves along
@@ -43,7 +60,7 @@ const MAX_TIME = 40; // no shot lasts longer (s)
 export function simulate(balls, dx, dy, power, { record = 0 } = {}) {
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const speed = Math.max(0, Math.min(1, power)) * MAX_SPEED;
-  const live = balls.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, potted: !!b.potted }));
+  const live = balls.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, wx: 0, wy: 0, potted: !!b.potted }));
   const cue = live.find((b) => b.id === 0);
   cue.vx = (dx / len) * speed;
   cue.vy = (dy / len) * speed;
@@ -62,18 +79,41 @@ export function simulate(balls, dx, dy, power, { record = 0 } = {}) {
   let step = 0;
   for (; t < MAX_TIME; t += DT, step++) {
     let moving = false;
-    // Roll, slowing down.
     for (const b of live) {
-      if (b.potted || (b.vx === 0 && b.vy === 0)) continue;
-      const v = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      const slower = v - (ROLL + DAMP * v) * DT;
-      if (slower <= STOP) {
-        b.vx = 0;
-        b.vy = 0;
-        continue;
+      if (b.potted || (b.vx === 0 && b.vy === 0 && b.wx === 0 && b.wy === 0)) continue;
+      const sx = b.vx - b.wx;
+      const sy = b.vy - b.wy;
+      const slip = Math.sqrt(sx * sx + sy * sy);
+      if (slip > 1e-4) {
+        // Sliding: friction against the slip slows the ball and turns its roll (the
+        // roll gains 5/2 as much, for a solid ball), until they match.
+        const dv = SLIDE * DT;
+        if (slip <= 3.5 * dv) {
+          // This step it starts rolling: at the speed that keeps its momentum about the
+          // point touching the cloth.
+          b.vx = b.wx = (5 * b.vx + 2 * b.wx) / 7;
+          b.vy = b.wy = (5 * b.vy + 2 * b.wy) / 7;
+        } else {
+          const ux = sx / slip;
+          const uy = sy / slip;
+          b.vx -= dv * ux;
+          b.vy -= dv * uy;
+          b.wx += 2.5 * dv * ux;
+          b.wy += 2.5 * dv * uy;
+        }
+      } else {
+        // Rolling: it slows gently, and stops once slow enough.
+        const v = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        const slower = v - (ROLL + DAMP * v) * DT;
+        if (slower <= STOP) {
+          b.vx = b.vy = b.wx = b.wy = 0;
+          continue;
+        }
+        b.vx *= slower / v;
+        b.vy *= slower / v;
+        b.wx = b.vx;
+        b.wy = b.vy;
       }
-      b.vx *= slower / v;
-      b.vy *= slower / v;
       b.x += b.vx * DT;
       b.y += b.vy * DT;
       moving = true;
@@ -88,7 +128,7 @@ export function simulate(balls, dx, dy, power, { record = 0 } = {}) {
         const ey = b.y - q.y;
         if (ex * ex + ey * ey < q.r * q.r) {
           b.potted = true;
-          b.vx = b.vy = 0;
+          b.vx = b.vy = b.wx = b.wy = 0;
           events.pocketed.push({ id: b.id, pocket: p });
           events.drops.push({ t, id: b.id });
           break;
@@ -96,7 +136,7 @@ export function simulate(balls, dx, dy, power, { record = 0 } = {}) {
       }
     }
     // Ball on ball: equal masses, so they swap the part of their velocity along the
-    // line between their centres (less a little lost).
+    // line between their centres (less a little lost). Their roll stays with them.
     for (let i = 0; i < live.length; i++) {
       const a = live[i];
       if (a.potted) continue;
@@ -132,10 +172,24 @@ export function simulate(balls, dx, dy, power, { record = 0 } = {}) {
     for (const b of live) {
       if (b.potted) continue;
       let bounced = false;
-      if (b.x < R) { b.x = R; if (b.vx < 0) b.vx = -b.vx * RAIL_E; bounced = true; }
-      else if (b.x > LENGTH - R) { b.x = LENGTH - R; if (b.vx > 0) b.vx = -b.vx * RAIL_E; bounced = true; }
-      if (b.y < R) { b.y = R; if (b.vy < 0) b.vy = -b.vy * RAIL_E; bounced = true; }
-      else if (b.y > WIDTH - R) { b.y = WIDTH - R; if (b.vy > 0) b.vy = -b.vy * RAIL_E; bounced = true; }
+      // Off a cushion: back out across it, losing some speed; most of the roll into the
+      // cushion goes, so the ball slides away and picks up its roll again.
+      const offX = () => {
+        b.vx = -b.vx * RAIL_E;
+        b.wx = -b.wx * RAIL_ROLL_IN;
+        b.wy *= RAIL_ROLL_ALONG;
+        bounced = true;
+      };
+      const offY = () => {
+        b.vy = -b.vy * RAIL_E;
+        b.wy = -b.wy * RAIL_ROLL_IN;
+        b.wx *= RAIL_ROLL_ALONG;
+        bounced = true;
+      };
+      if (b.x < R) { b.x = R; if (b.vx < 0) offX(); }
+      else if (b.x > LENGTH - R) { b.x = LENGTH - R; if (b.vx > 0) offX(); }
+      if (b.y < R) { b.y = R; if (b.vy < 0) offY(); }
+      else if (b.y > WIDTH - R) { b.y = WIDTH - R; if (b.vy > 0) offY(); }
       if (bounced && events.first != null) events.rail = true;
     }
     if (record && step % record === 0) snap();
