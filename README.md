@@ -306,12 +306,15 @@ four as two teams, and anyone else in the room watches.
 - House rules where tournaments differ: no called pockets, and ball in hand anywhere after
   any foul.
 
-To shoot, drag on the table to point the cue. A dotted line shows the cue ball's path, and
-the ball it would hit shows which way that one goes: gold if you may hit it first, red if
-not. Fine-tune with ◀ ▶ (or the arrow keys), set the power (or ↑ ↓) and press **Shoot** (or
-Space). With ball in hand, tap where the cue ball goes, or **✋ Move** it. Each shot has 60 s
-online. The table is lengthways on wide screens and upright on phones, the break end
-nearest you.
+It's laid out like the pool apps. A card for each side across the top shows its players and
+the seven balls of its group, greyed out as they drop, then the 8; online, a ring round the
+shooter's avatar runs down their 60 seconds. To aim, drag on the table to swing the cue round
+the cue ball, or tap a ball to aim straight at it. The guide shows the cue ball's path to a
+ghost ball, then which way the object ball and the cue ball go (red with a cross if that ball
+isn't yours to hit first). Fine-tune with the wheel on the right (or ← →). To shoot, pull the
+cue on the left down as far as the power you want and let go (or ↑ ↓ and Space). With ball in
+hand there's a ✋ on the cue ball: drag it where you want. The table is lengthways on wide
+screens and upright on phones, the break end nearest you.
 
 The physics (src/pool/physics.js) uses only arithmetic and square roots, which come out the
 same in every browser: online, the server plays each shot and every browser replays it from

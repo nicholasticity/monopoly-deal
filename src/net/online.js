@@ -16,7 +16,7 @@ import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { cueLog } from '../ui/sound.js';
 import { VoiceChat, voiceSupported } from './voice.js';
-import { TRICK_GAMES } from '../game/settings.js';
+import { TRICK_GAMES, TIMEOUTS } from '../game/settings.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 function el(tag, cls, text) {
@@ -528,6 +528,8 @@ export class OnlineSession {
       return;
     }
     if (this.mirror.kind === 'pool') {
+      // The shot clock runs round the shooter's avatar.
+      this.view.deadline = w?.kind === 'shot' ? { playerId: w.playerId, at: w.deadline, total: TIMEOUTS.shot * 1000 } : null;
       const { text, mine } = PoolUI.poolStatus(state, this.seat);
       this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
       return;

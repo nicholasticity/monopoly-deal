@@ -933,7 +933,8 @@ const POOL_RULES = `
         <li><b>Fouls</b>: potting the cue ball (a scratch), hitting nothing, hitting the wrong ball first (on an open table, the 8 first), or no ball reaching a cushion after the hit with nothing potted. After a foul the other side has <b>ball in hand</b>: they put the cue ball anywhere.</li>
         <li>Once your group is cleared, go for the 8. Sink it and you win. Sink it too early, or with a foul (a scratch), and you lose. An 8 potted on the break is put back.</li>
       </ul>
-      <p><b>How to shoot:</b> drag on the table to point the cue. A dotted line shows where the cue ball goes, and the ball it hits shows which way it’ll go: gold if you may hit it first, red if not. Fine-tune with ◀ ▶ (or the arrow keys), set the power and press <b>Shoot</b> (or Space). With ball in hand, tap where the cue ball goes, or <b>✋ Move</b> it.</p>
+      <p><b>How to shoot:</b> drag on the table to swing the cue round the cue ball, or tap a ball to aim straight at it. The guide shows the cue ball’s path to a ghost ball where it hits, then which way each ball goes (red with a cross if that ball isn’t yours to hit first). Fine-tune with the <b>wheel</b> on the right (or ← →). To shoot, <b>pull the cue</b> on the left down as far as the power you want and let go (or set the power with ↑ ↓ and press Space). With ball in hand (a ✋ on the cue ball), drag the cue ball where you want it.</p>
+      <p class="muted">Each card shows a side’s balls still to pot, greyed out as they drop, then the 8. Online, a ring round the shooter’s avatar runs down their 60 seconds.</p>
       <p class="muted">House rules: no called pockets, and ball in hand anywhere after any foul.</p>`;
 
 const WORDLE_RULES = `
