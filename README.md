@@ -1,11 +1,11 @@
-# Monopoly Deal, Judgement, Bingo & Wordle
+# Monopoly Deal, Call Bridge, Judgement, Bingo, Wordle & Pool
 
-Four games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
-the trick-taking game **Judgement**, pen-and-paper **Bingo** (the 5×5, 1–25 kind) and a
-**Wordle** race. Pick one on the home screen, then play against 1–4 computer opponents on a
+Six games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+the trick-taking games **Call Bridge** and **Judgement**, pen-and-paper **Bingo** (the 5×5,
+1–25 kind), a **Wordle** race and 8-ball **Pool**. Pick one on the home screen, then play against 1–4 computer opponents on a
 2D table, or
 **online with friends**: create a room, send the
-invite link, and play in your browsers (2–5 players, bots fill empty seats).
+invite link, and play in your browsers (up to 8 players, bots fill empty seats).
 
 ## Running
 
@@ -24,10 +24,12 @@ Other scripts:
 | `npm start`        | Production server: the built game and online rooms on one port |
 | `npm run preview`  | Serve the production build locally (online rooms included)    |
 | `npm run simulate` | Play 300 headless AI-vs-AI games to sanity-check the rules     |
-| `npm run simulate:judgement` | The same for Judgement (200 games): how often bids are made, missed or overshot |
+| `npm run simulate:callbridge` | The same for Call Bridge (200 games): how often bids are made, missed or overshot |
 | `npm run simulate:bingo` | The same for Bingo: game length, shared wins, and smart callers against random ones |
+| `npm run simulate:judgement` | The same for Judgement (120 games): checks hand sizes, trumps, the dealer's ruled-out bid and all three scorings |
+| `npm run simulate:pool` | Checks the 8-ball rules and that a shot replays the same, then plays 40 bot games (1 vs 1 and 2 vs 2) |
 | `npm run simulate:wordle` | Checks Wordle's marking and word lists, how many guesses the bots take, and races bots through whole games |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all four over WebSocket |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all six over WebSocket |
 
 ## Playing online with friends
 
@@ -36,11 +38,11 @@ Other scripts:
 2. Send your friends the **invite link** from the lobby (or just the 4-letter room code — they
    pick *Online with friends*, type the code and press **Join room**).
 3. Everyone shows up in the lobby. The host (👑) can add bots, remove players and press
-   **Start game** once there are at least 2 players. Up to 5 can play.
+   **Start game** once there are at least 2 players. Up to 8 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal, Judgement, Bingo and Wordle in the lobby between games (and for Wordle, pick 5, 10 or
-20 words). An invite link skips the game picker, because
+Deal, Call Bridge, Judgement, Bingo, Wordle and Pool in the lobby between games (and pick
+Judgement's scoring, or for Wordle, 5, 10 or 20 words). An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
@@ -54,7 +56,8 @@ While you play:
   **M** to mute. See [Voice chat](#voice-chat). (In Wordle, Enter and M are for your guess:
   use the buttons instead.)
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
-  30 s for a Just Say No. In Judgement you have 45 s to call trumps, bid or play a card; in
+  30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
+  Judgement, to bid or play); in
   Bingo, 60 s to arrange your grid and 30 s to call a number. A Wordle word stays open for
   3 minutes at most, with its own clock in your bar. The
   clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
@@ -180,12 +183,12 @@ On a phone held upright every table stays in view, one per row: each player's na
 sets and hand size sit in a bar down the left of their cards, and the deck and discard pile
 shrink to two counts in the top bar, where cards are drawn from and discarded to.
 
-### Judgement
+### Call Bridge
 
 Bid how many tricks you'll take, then take at least that many, but not twice as many.
 
 - A game has one round per player, and everyone is the **den** once. Each round the whole
-  deck is dealt out evenly: 26, 17, 13 or 10 cards each for 2–5 players. Any cards left over
+  deck is dealt out evenly: 26, 17, 13, 10, 8, 7 or 6 cards each for 2–8 players. Any cards left over
   are set aside unseen.
 - The den sees only the first half of their cards, then calls **trumps**. The rest of the
   cards are dealt after that. If anyone ends up with no trumps, the cards are shuffled and
@@ -212,8 +215,38 @@ their total and the tricks they've won out of their bid. The round counter in th
 **Cards** on the start screen switches between the **Classic** deck and a **Fantasy** one,
 with Moons ☾, Suns ☀, Clovers ☘ and Stars ★ in place of spades, hearts, clubs and diamonds
 and the Elf (E), Wizard (W), Dragon (D) and Phoenix (P) in place of the jack, queen, king
-and ace. Only the look changes, not the game. The choice is saved in
+and ace. Only the look changes, not the game. Judgement has the same choice and the same
+Fantasy deck. A Call Bridge or Judgement game with the Fantasy deck starts
+with a short guide to the new cards and their order (tick *Don't show this again* to skip
+it; it stays in **How to play**). The choice is saved in
 your browser, so online everyone plays with the deck they picked.
+
+### Judgement
+
+Bid how many tricks you'll take, and take **exactly** that many. The rules are
+[kard.games'](https://kard.games/src/web/help.html) (the game is also called Kachuful or
+Oh Hell), for 2–5 players against the computer and up to 8 online.
+
+- The first round deals **7 cards** each (**6** with 8 players). Each round deals one fewer,
+  down to **1**, then one more each round back up again: 13 rounds (11 with 8 players). The rest of the deck is set aside unseen.
+- Trumps go round in turn: **spades, diamonds, clubs, hearts**, then a round with
+  **no trumps**, and again from spades.
+- The deal moves round the table. From the dealer's left, everyone **bids** 0 up to the
+  cards in hand. The dealer bids last and **can't** make the bids add up to the number of
+  tricks, so someone always misses (that bid is greyed out).
+- The player on the dealer's left leads the first trick; whoever wins a trick leads the
+  next. Follow the suit led if you can. The highest trump wins, otherwise the highest card
+  of the suit led. Aces are high.
+- **Scoring**: only an exact bid scores. Pick one on the start screen, or the host picks in
+  the lobby:
+  - **High** (the usual): made, **(bid + 1) × 10 + bid**; missed, the same taken off. Bid 3
+    and take 3: +43; take 2 or 4: −43. Bid 0 and take none: +10.
+  - **Medium**: made, **10 × bid**; missed, 0.
+  - **Low**: made, **bid × 2 + 5**; missed, 0.
+- The highest total after the last round wins, and a tie is a shared win.
+
+It plays on the same table as Call Bridge: the dealer has a **Dealer** tag, and the round
+counter in the top bar shows the trumps (**NT** for none) and opens the scores.
 
 ### Bingo
 
@@ -255,6 +288,35 @@ words are about 950 common words picked by hand; any of 12,500 words is accepted
 (from the MIT-licensed [word-list](https://github.com/sindresorhus/word-list) package; see
 `scripts/build-wordle-guesses.mjs`).
 
+### Pool
+
+Eight-ball, one on one or two against two (partners take turns and share a group). Against
+the computer, pick **1 vs 1** or **2 vs 2** (you and a bot partner); online, two play, or
+four as two teams, and anyone else in the room watches.
+
+- The cue ball starts behind the line for the **break**. After the break the table is
+  **open**: the first player to pot a ball legally takes that group, **solids** (1–7) or
+  **stripes** (9–15), and the other side gets the other.
+- Pot one of your own balls and you shoot again; otherwise it's the other side's turn.
+- **Fouls**: potting the cue ball (a scratch), hitting nothing, hitting the wrong ball first
+  (on an open table, the 8 first), or no ball reaching a cushion after the hit with nothing
+  potted. After a foul the other side has **ball in hand**: they put the cue ball anywhere.
+- Clear your group, then sink the **8** to win. Sink it early, or with a foul, and you lose.
+  An 8 potted on the break is put back on the spot.
+- House rules where tournaments differ: no called pockets, and ball in hand anywhere after
+  any foul.
+
+To shoot, drag on the table to point the cue. A dotted line shows the cue ball's path, and
+the ball it would hit shows which way that one goes: gold if you may hit it first, red if
+not. Fine-tune with ◀ ▶ (or the arrow keys), set the power (or ↑ ↓) and press **Shoot** (or
+Space). With ball in hand, tap where the cue ball goes, or **✋ Move** it. Each shot has 60 s
+online. The table is lengthways on wide screens and upright on phones, the break end
+nearest you.
+
+The physics (src/pool/physics.js) uses only arithmetic and square roots, which come out the
+same in every browser: online, the server plays each shot and every browser replays it from
+the same positions, so everyone sees the same thing.
+
 ## Code layout
 
 ```
@@ -265,15 +327,25 @@ src/
     engine.js    async turn loop; asks controllers for every decision
     ai.js        computer opponents
     settings.js  the games, the game speed and online time limits
-  judgement/ Judgement's rules, engine and AI, the same way
-    cards.js     the 52-card deck
+  callbridge/ Call Bridge's rules, engine and AI, the same way
+    cards.js     the 52-card deck (Judgement's too)
     rules.js     dealing, bids, following suit, trick winners, scoring
     engine.js    rounds and tricks; asks controllers for trumps, bids and cards
     ai.js        computer opponents
+  judgement/ Judgement's rules, engine and AI. It shares Call Bridge's deck, and the
+             trick-taking table, mirror and prompts
+    rules.js     hand sizes, trumps by round, the dealer's ruled-out bid, the three scorings
+    engine.js    rounds and tricks; asks controllers for bids and cards
+    ai.js        computer opponents (bid from simulated deals, play like Call Bridge's)
   bingo/     Bingo's rules, engine and AI
     rules.js     grids, lines, B-I-N-G-O letters
     engine.js    arranging, then calls in turn; asks controllers for grids and numbers
     ai.js        computer opponents (call the number that helps their own lines most)
+  pool/      Pool's physics, rules, engine and AI
+    physics.js   balls rolling, colliding, bouncing off cushions and dropping (deterministic)
+    rules.js     the rack, groups, fouls and what each shot means
+    engine.js    turns and teams; asks controllers for shots (and with ball in hand, a place)
+    ai.js        computer opponents (ghost-ball aiming, then the best few played out)
   wordle/    Wordle's rules, engine and AI
     answers.js   the secret words, picked by hand
     guesses.js   every other word accepted as a guess (generated)
@@ -282,26 +354,29 @@ src/
     ai.js        computer opponents (guess a word that fits, at a person's pace)
   render/    the tables (DOM + CSS)
     view.js      player panels, card layout and animation
-    judgement-view.js  the Judgement table, built on view.js
+    trick-view.js      the Call Bridge and Judgement table, built on view.js
     bingo-view.js      the Bingo table: player bars, the calls and your grid
     wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
+    pool-view.js       the pool table on a canvas: shots replayed, aiming and power
     textures.js  card faces (both decks) drawn on canvas
-    deck-style.js  Judgement’s card style (classic or fantasy suits)
+    deck-style.js  Call Bridge’s and Judgement’s card style (classic or fantasy suits)
   ui/
     hud.js       menus, modals, toasts, log
     human.js     turns HUD input into engine actions
-    judgement.js Judgement's prompts, status line and score tables
+    tricks.js    Call Bridge's and Judgement's prompts, status line and score tables
     bingo.js     Bingo's grid arranging and calling, status line and result
     wordle.js    Wordle's guesses, status line, scores and result
+    pool.js      Pool's shots, status line and result
     lobby.js     online room lobby
     chat.js      room chat panel
   net/       online client
     connection.js  WebSocket with automatic reconnect
     online.js      one online session: lobby, game, prompts, chat, voice
     mirror.js      read-only copy of the server's game for the view and HUD
-    judgement-mirror.js  the same for a Judgement game
+    trick-mirror.js      the same for a Call Bridge or Judgement game
     bingo-mirror.js      and for a Bingo game
     wordle-mirror.js     and for a Wordle game
+    pool-mirror.js       and for a Pool game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
   main.js    wires it all together
 server/
@@ -311,24 +386,28 @@ server/
   viewer.js    per-player snapshots that hide other players' cards
 scripts/
   simulate.mjs     headless AI games
-  simulate-judgement.mjs  the same for Judgement
+  simulate-callbridge.mjs  the same for Call Bridge
+  simulate-judgement.mjs   and for Judgement
   simulate-bingo.mjs      and for Bingo
   simulate-wordle.mjs     and for Wordle
+  simulate-pool.mjs       and for Pool
   build-wordle-guesses.mjs  regenerates src/wordle/guesses.js from the word-list package
   online-smoke.mjs headless multiplayer games over real sockets
 ```
 
 The engine talks to players only through a controller interface (`chooseTurnAction`,
 `choosePayment`, `chooseJustSayNo`, `chooseDiscards`), so humans and the AI are
-interchangeable, and the engine runs headless without a view. Judgement's engine works the
-same way, with `chooseTrump`, `chooseBid` and `choosePlay`, and so does Bingo's, with
+interchangeable, and the engine runs headless without a view. Call Bridge's engine works the
+same way, with `chooseTrump`, `chooseBid` and `choosePlay` (Judgement's only asks
+`chooseBid` and `choosePlay`), and so does Bingo's, with
 `arrangeGrid` (asked of everyone at once) and `chooseCall`. Wordle's asks everyone for
-`chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over.
+`chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over. Pool's asks `chooseShot`: a direction, a power, and
+with ball in hand where the cue ball goes.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
 to that player's browser as a `request` and waits for the `response`, falling back to the AI
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `JudgementHuman`, `BingoHuman`, `WordleHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `PoolHuman`)
 used for solo play.

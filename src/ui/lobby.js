@@ -1,6 +1,7 @@
 // Pre-game room screen: invite link, seats, host controls and chat.
 import { GAMES } from '../game/settings.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
+import { SCORING } from '../judgement/rules.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -31,7 +32,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), words(n), game(kind), start, leave, rules, voice(button) }
+  // actions: { addBot, kick(id), words(n), scoring(key), game(kind), start, leave, rules, voice(button) }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -108,10 +109,24 @@ export class Lobby {
       this.wordsSeg.appendChild(b);
     }
     this.wordsRow.append(el('span', null, 'Words'), this.wordsSeg);
+    // Judgement: how a round scores.
+    this.scoringRow = el('div', 'opt-row');
+    this.scoringSeg = el('div', 'seg');
+    for (const [key, s] of Object.entries(SCORING)) {
+      const b = el('button', null, s.name);
+      b.dataset.v = key;
+      b.title = s.hint;
+      b.addEventListener('click', () => this.isHost && this.actions.scoring(key));
+      this.scoringSeg.appendChild(b);
+    }
+    this.scoringRow.append(el('span', null, 'Scoring'), this.scoringSeg);
+    this.scoringHint = el('p', 'muted small scoring-hint');
+    // Pool: who plays.
+    this.poolHint = el('p', 'muted small pool-hint', 'Pool is one on one, or two against two with four players (partners alternate). Anyone else watches.');
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, this.wordsRow, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.poolHint, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -156,8 +171,10 @@ export class Lobby {
     this.countEl.textContent = `Players ${Math.min(players, room.max)}/${room.max}`;
     this.listEl.innerHTML = '';
     this.rows.clear();
+    // Who'd sit out: past the table's size, or (pool with three) past two.
+    const seats = room.seats ?? room.max;
     seated.forEach((m, i) => {
-      const row = el('div', `seat${m.id === you ? ' me' : ''}${i >= room.max ? ' bench' : ''}`);
+      const row = el('div', `seat${m.id === you ? ' me' : ''}${i >= seats ? ' bench' : ''}`);
       const icon = m.kind === 'bot' ? '🤖' : m.id === room.hostId ? '👑' : '🙂';
       row.appendChild(el('span', 'seat-icon', icon));
       const name = el('span', 'seat-name', m.name);
@@ -175,6 +192,7 @@ export class Lobby {
       if (m.kind === 'bot') tags.push('computer');
       if (m.kind === 'human' && !m.connected) tags.push('reconnecting…');
       if (i >= room.max) tags.push('next game');
+      else if (i >= seats) tags.push('watches');
       if (tags.length) row.appendChild(el('span', 'seat-tags', tags.join(' · ')));
       if (host && m.id !== you) {
         const kick = el('button', 'ghost small', 'Remove');
@@ -188,7 +206,11 @@ export class Lobby {
     this.addBotBtn.style.display = host && room.status === 'lobby' && players < room.max ? '' : 'none';
     const wordle = room.game === 'wordle';
     this.wordsRow.style.display = wordle ? '' : 'none';
-    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)]]) {
+    this.poolHint.style.display = room.game === 'pool' ? '' : 'none';
+    const judgement = room.game === 'judgement';
+    this.scoringRow.style.display = this.scoringHint.style.display = judgement ? '' : 'none';
+    this.scoringHint.textContent = SCORING[room.scoring]?.hint ?? '';
+    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)], [this.scoringSeg, room.scoring]]) {
       for (const b of seg.children) {
         b.classList.toggle('on', b.dataset.v === value);
         b.disabled = (!host || room.status !== 'lobby') && b.dataset.v !== value;

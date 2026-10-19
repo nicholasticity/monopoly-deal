@@ -8,9 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "simulate": "node scripts/simulate.mjs",
+    "simulate:callbridge": "node scripts/simulate-callbridge.mjs",
     "simulate:judgement": "node scripts/simulate-judgement.mjs",
     "simulate:bingo": "node scripts/simulate-bingo.mjs",
     "simulate:wordle": "node scripts/simulate-wordle.mjs",
+    "simulate:pool": "node scripts/simulate-pool.mjs",
     "start": "node server/index.js",
     "test:online": "node scripts/online-smoke.mjs"
   },

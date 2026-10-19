@@ -56,6 +56,15 @@ const EFFECTS = {
   flip: (s, t) => {
     for (let i = 0; i < 5; i++) s.noise(t + i * 0.12, { dur: 0.07, gain: 0.2, type: 'bandpass', freq: 1700, to: 800, q: 1.2 });
   },
+  // Pool: two balls knocking together, and one dropping into a pocket.
+  clack: (s, t) => {
+    s.noise(t, { dur: 0.035, gain: 0.3, type: 'bandpass', freq: 3200, q: 2 });
+    s.tone(t, 1900, { dur: 0.04, gain: 0.05, to: 1500 });
+  },
+  pocket: (s, t) => {
+    s.noise(t, { dur: 0.16, gain: 0.32, type: 'lowpass', freq: 600, to: 180 });
+    s.tone(t + 0.02, 110, { dur: 0.18, gain: 0.12, to: 70 });
+  },
   // The discard pile riffled into a new deck.
   shuffle: (s, t) => {
     for (let i = 0; i < 12; i++) s.noise(t + i * 0.032 + Math.random() * 0.01, { dur: 0.03, gain: 0.16, freq: 2800, q: 1.5 });
@@ -185,7 +194,7 @@ export function cueLog(text, kind) {
   else if (/ rent |Birthday|Debt Collector/.test(text)) sound.play('charge');
 }
 
-// The same for a Judgement table: dealing, playing to the trick and taking it.
+// The same for Call Bridge and Judgement: dealing, playing to the trick and taking it.
 export function cueTricks(moves) {
   const counts = new Map();
   let taken = false;

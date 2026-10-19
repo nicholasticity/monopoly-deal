@@ -1,39 +1,62 @@
 import './style.css';
 import { TableView } from './render/view.js';
-import { JudgementView } from './render/judgement-view.js';
+import { TrickView } from './render/trick-view.js';
 import { BingoView } from './render/bingo-view.js';
 import { WordleView } from './render/wordle-view.js';
+import { PoolView } from './render/pool-view.js';
 import { Hud } from './ui/hud.js';
 import { HumanController } from './ui/human.js';
-import { JudgementHuman, judgementStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/judgement.js';
+import { TrickHuman, trickStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/tricks.js';
 import * as BingoUI from './ui/bingo.js';
 import * as WordleUI from './ui/wordle.js';
+import * as PoolUI from './ui/pool.js';
+import { PoolGame } from './pool/engine.js';
+import { PoolAI } from './pool/ai.js';
 import { AIController } from './game/ai.js';
 import { Game, GameAborted } from './game/engine.js';
-import { JudgementGame } from './judgement/engine.js';
-import { JudgementAI } from './judgement/ai.js';
+import { CallBridgeGame } from './callbridge/engine.js';
+import { CallBridgeAI } from './callbridge/ai.js';
 import { BingoGame } from './bingo/engine.js';
 import { BingoAI } from './bingo/ai.js';
 import { WordleGame } from './wordle/engine.js';
 import { WordleAI } from './wordle/ai.js';
+import { JudgementGame } from './judgement/engine.js';
+import { JudgementAI } from './judgement/ai.js';
+import { DEFAULT_SCORING } from './judgement/rules.js';
+import { JUDGEMENT_BACK } from './render/textures.js';
 import { DEFAULT_WORDS } from './wordle/rules.js';
 import * as R from './game/rules.js';
-import { BOT_NAMES, SPEED, GAMES, DEFAULT_GAME, botDelay } from './game/settings.js';
+import { BOT_NAMES, GAMES, DEFAULT_GAME, TRICK_GAMES, botDelay, paceFor } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
 import { cueMoves, cueLog, cueTricks, sound } from './ui/sound.js';
 
 const hud = new Hud();
 // A table for each game on the one stage; only the current game's is on show.
 const stage = document.getElementById('stage');
-const views = { deal: new TableView(stage), judgement: new JudgementView(stage), bingo: new BingoView(stage), wordle: new WordleView(stage) };
+const views = {
+  deal: new TableView(stage),
+  callbridge: new TrickView(stage),
+  // Judgement plays on Call Bridge's table, with its own name on the card backs.
+  judgement: new TrickView(stage, { back: JUDGEMENT_BACK }),
+  bingo: new BingoView(stage),
+  wordle: new WordleView(stage),
+  pool: new PoolView(stage),
+};
 let kind = null;
 let view = null;
 // Solo play runs the engine here; online play mirrors the server's game.
 let game = null;
 let human = null;
 let online = null;
+// The last game played, as saved before the games' keys matched their names: 'judgement'
+// was Call Bridge (and, while it was being built, 'ohhell' was Judgement). Moved once.
+if (!localStorage.getItem('md-keys')) {
+  const old = { judgement: 'callbridge', ohhell: 'judgement' }[localStorage.getItem('md-game')];
+  if (old) localStorage.setItem('md-game', old);
+  localStorage.setItem('md-keys', '2');
+}
 const lastGame = localStorage.getItem('md-game');
-let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, code: '' };
+let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, scoring: localStorage.getItem('md-scoring') || DEFAULT_SCORING, code: '' };
 
 const activeHuman = () => (online ? online.human : human);
 
@@ -47,6 +70,7 @@ for (const v of Object.values(views)) {
 views.deal.on('hover', (card, zone, side) => hud.preview(card, zone, side));
 views.deal.on('moves', cueMoves);
 views.deal.on('piles', (deck, discard) => hud.setPiles(deck, discard));
+views.callbridge.on('moves', cueTricks);
 views.judgement.on('moves', cueTricks);
 views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
 views.wordle.on('submit', (word) => !!activeHuman()?.submit?.(word));
@@ -70,7 +94,7 @@ hud.onEndTurn = () => activeHuman()?.endTurn();
 // The round counter in the top bar opens the scores so far.
 hud.onGameInfo = () => {
   const g = online?.mirror ?? game;
-  if (g?.kind === 'judgement') hud.overlay({ title: 'Scores', body: scoreTable(g.state, online ? online.seat : 0) });
+  if (TRICK_GAMES.has(g?.kind)) hud.overlay({ title: 'Scores', body: scoreTable(g.state, online ? online.seat : 0) });
   if (g?.kind === 'wordle') hud.overlay({ title: 'Scores', body: WordleUI.scoreTable(g.state, online ? online.seat : 0) });
 };
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
@@ -81,6 +105,11 @@ hud.onMuteKey = () => online?.toggleMute();
 function updateStatus() {
   if (!game) return;
   const { state } = game;
+  if (game.kind === 'pool') {
+    const { text, mine } = PoolUI.poolStatus(state, 0);
+    hud.setStatus(text, mine);
+    return;
+  }
   if (game.kind === 'wordle') {
     const { text, mine } = WordleUI.wordleStatus(state, 0);
     hud.setStatus(text, mine);
@@ -92,8 +121,8 @@ function updateStatus() {
     hud.setStatus(text, mine);
     return;
   }
-  if (game.kind === 'judgement') {
-    const { text, mine } = judgementStatus(state, 0);
+  if (TRICK_GAMES.has(game.kind)) {
+    const { text, mine } = trickStatus(state, 0);
     hud.setStatus(text, mine);
     hud.setGameInfo(gameInfo(state), 'Scores');
     return;
@@ -114,18 +143,20 @@ function updateStatus() {
 function newGame(opts) {
   const [Engine, Bot, Human] = {
     deal: [Game, AIController, HumanController],
-    judgement: [JudgementGame, JudgementAI, JudgementHuman],
+    callbridge: [CallBridgeGame, CallBridgeAI, TrickHuman],
+    judgement: [JudgementGame, JudgementAI, TrickHuman],
     bingo: [BingoGame, BingoAI, BingoUI.BingoHuman],
     wordle: [WordleGame, WordleAI, WordleUI.WordleHuman],
+    pool: [PoolGame, PoolAI, PoolUI.PoolHuman],
   }[kind];
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: botDelay(kind) }) });
   // Wordle on your own has no clock: a word lasts until you get it or run out of guesses.
   const untimed = kind === 'wordle' && !opts.opponents;
-  game = new Engine({ players, view, words: opts.words, ...(untimed && { roundMs: 0 }) });
-  // In Wordle the speed is only how fast the bots think; the pauses stay put.
-  view.pace = kind === 'wordle' ? 1 : SPEED.pace;
+  game = new Engine({ players, view, words: opts.words, scoring: opts.scoring, ...(untimed && { roundMs: 0 }) });
+  // In Wordle the speed is only how fast the bots think, and pool's shots play out in real time.
+  view.pace = paceFor(kind);
   hud.clearLog();
   hud.setTurnControls(false);
   const current = game;
@@ -135,8 +166,8 @@ function newGame(opts) {
       hud.log(data.text, data.kind);
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
-    // Judgement: no chime for every card you play.
-    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
+    // Call Bridge and Judgement: no chime for every card you play.
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
     // Bingo: players get ready one by one while everyone arranges. Wordle: guesses
     // come in from everyone at once.
     else if (type === 'state' && (current.kind === 'bingo' || current.kind === 'wordle')) view.layout();
@@ -154,12 +185,14 @@ function newGame(opts) {
 
 async function onGameOver(winner) {
   const finished = game;
-  if (finished.kind === 'judgement') {
+  if (TRICK_GAMES.has(finished.kind)) {
     await hud.showResult(gameResult(finished.state, 0));
   } else if (finished.kind === 'bingo') {
     await hud.showResult(BingoUI.gameResult(finished.state, 0));
   } else if (finished.kind === 'wordle') {
     await hud.showResult(WordleUI.gameResult(finished.state, 0));
+  } else if (finished.kind === 'pool') {
+    await hud.showResult(PoolUI.gameResult(finished.state, 0));
   } else {
     const sets = winner.piles.filter(R.isComplete).map((p) => p.color);
     const stats = `Finished on turn ${finished.state.turn} with ${[...new Set(sets)].length} complete sets.`;
@@ -212,8 +245,15 @@ async function startFlow(notice = null, home = false) {
   if (home) useGame(await hud.showHome(kind));
   const opts = await hud.showStart({ ...settings, notice });
   if (opts.mode === 'home') return startFlow(null, true);
-  settings = { ...settings, ...opts, mode: opts.mode === 'solo' ? 'solo' : 'online' };
-  if (opts.mode === 'solo') newGame(opts);
+  // Pool's 1 vs 1 or 2 vs 2 is its own setting, not the other games' number of opponents.
+  const own = kind === 'pool' ? { opponents: settings.opponents, poolOpponents: opts.opponents } : {};
+  settings = { ...settings, ...opts, ...own, mode: opts.mode === 'solo' ? 'solo' : 'online' };
+  localStorage.setItem('md-scoring', settings.scoring);
+  if (opts.mode === 'solo') {
+    // Solo, the fantasy deck's guide comes before the deal, so nothing goes on behind it.
+    if (TRICK_GAMES.has(kind)) await hud.showFantasyGuide();
+    newGame(opts);
+  }
   else goOnline(opts);
 }
 

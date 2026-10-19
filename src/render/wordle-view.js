@@ -197,7 +197,9 @@ export class WordleView extends TableView {
 
     const x0 = pad;
     const W = w - 2 * pad;
-    const cols = Math.max(1, portrait ? Math.min(k, 2) : k);
+    // Wide screens: one row of bars, or two once there are more than four opponents
+    // (online rooms seat up to eight), so names stay readable.
+    const cols = Math.max(1, portrait ? Math.min(k, 2) : k > 4 ? Math.ceil(k / 2) : k);
     const colW = Math.min((W - (cols - 1) * gap) / cols, portrait ? Infinity : BAR_MAX);
     const top = ins.top + 6;
     const bars = [];

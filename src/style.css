@@ -842,6 +842,16 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .chat-slot { height: 300px; display: flex; }
 .chat-slot .chat { flex: 1; padding: 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--panel-border); }
 .confirm-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+/* The fantasy deck's guide (hud.js): the face cards in order, and the suits. */
+.rank-order { display: flex; justify-content: center; align-items: flex-start; gap: 6px; margin: 6px 0 12px; }
+.rank-card { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; font-size: 0.85rem; text-align: center; }
+.rank-card .thumb { width: 64px; height: auto; border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+.rank-step { align-self: center; margin-top: -34px; color: var(--muted); font-size: 1.4rem; }
+.suit-key { display: grid; grid-template-columns: repeat(2, auto); justify-content: center; gap: 4px 20px; margin: 4px 0 8px; padding: 0; list-style: none; }
+.suit-key .suit { font-size: 1.2em; }
+.guide-row { align-items: center; justify-content: space-between; }
+.dont-show { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.dont-show input { width: 16px; height: 16px; accent-color: var(--gold); }
 
 /* ---------- start screen modes ---------- */
 .seg.mode { justify-content: stretch; }
@@ -895,8 +905,11 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .tile-text { grid-area: text; color: #dfe5e0; font-size: 0.9rem; line-height: 1.35; }
 .tile-meta { grid-area: meta; font-size: 0.78rem; }
 .back-home { align-self: flex-start; margin-bottom: -10px; padding: 4px 10px; font-size: 0.85rem; }
-/* Judgement's brand: navy, with the four suits in place of DEAL. */
-.logo.judgement { background: #1d3461; }
+/* Call Bridge's brand: navy, with the four suits in place of DEAL. */
+.logo.callbridge { background: #1d3461; }
+/* Judgement's brand: claret, with its hand sizes (7 down to 1 and back) in place of DEAL. */
+.logo.judgement { background: #7a1f3d; }
+.deal.judgement-mark { color: #f2b632; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .deal.suits i { font-style: normal; }
 /* Four suit colours (as on the cards, lightened for the dark UI); spades stay white. */
 .deal.suits i.hearts, .suit.hearts { color: #ff6b7d; }
@@ -908,10 +921,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .deal.suits i.clubs, .deck-fantasy .suit.clubs { color: #69db7c; }
 .deck-fantasy .deal.suits i.diamonds, .deck-fantasy .suit.diamonds { color: #74c0fc; }
 
-/* ---------- Judgement table ---------- */
+/* ---------- The trick-taking table (Call Bridge and Judgement) ---------- */
 .board[hidden] { display: none; }
-.board.judgement { background: radial-gradient(ellipse at 50% 42%, #24503d 0%, #163126 55%, #0a130f 100%); }
-.board.judgement .mini-card { background: linear-gradient(160deg, #3a5a94, #1d3461); }
+.board.tricks { background: radial-gradient(ellipse at 50% 42%, #24503d 0%, #163126 55%, #0a130f 100%); }
+.board.tricks .mini-card { background: linear-gradient(160deg, #3a5a94, #1d3461); }
 .chip.score { font-weight: 800; }
 .chip.score small { color: var(--muted); font-size: 0.85em; font-weight: 600; }
 .chip.tricks { font-weight: 700; }
@@ -982,7 +995,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 #game-info.hidden { display: none; }
 #game-info .suit { font-size: 1.2em; line-height: 1; }
 #game-info .suit.none { color: var(--muted); }
-#hud.judgement #piles { display: none !important; }
+#hud.tricks #piles { display: none !important; }
 
 /* A prompt docked above the hand (and your panel): the table stays in view and playable. */
 #modal-layer > .modal-backdrop.dock {
@@ -994,7 +1007,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 .modal.dock { width: min(520px, 94vw); max-height: calc(100dvh - var(--dock-h, 110px) - 70px); pointer-events: auto; }
 
-/* ---------- Judgement prompts & scores ---------- */
+/* ---------- Call Bridge and Judgement prompts & scores ---------- */
 .jprompt { display: flex; flex-direction: column; gap: 10px; }
 .jprompt .modal-body { margin: 0; }
 .suit-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -1559,3 +1572,73 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 @media (max-width: 640px), (max-height: 540px) {
   .tile-wordle i { width: 13px; height: 13px; }
 }
+
+/* ---------- Pool (8-ball) ---------- */
+/* The balls' colours (1–7; stripes 9–15 use the same, 8 is black). */
+:root {
+  --ball1: #f2c200; --ball2: #1d4fcf; --ball3: #d4231e; --ball4: #5b2b8c;
+  --ball5: #f07a10; --ball6: #118447; --ball7: #7d1d1d; --ball8: #141414;
+}
+.logo.pool { background: #0f5d3a; letter-spacing: 0.1em; }
+/* The 8 ball beside the name: black, with its number on a white spot. */
+.deal.pool-mark { display: inline-flex; }
+.deal.pool-mark i {
+  display: grid;
+  place-items: center;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #fff 0 34%, transparent 35%), radial-gradient(circle at 35% 30%, #5a5a5a 0%, #111 60%);
+  color: #111;
+  font-size: 0.75em;
+  font-style: normal;
+  line-height: 1;
+}
+#hud.pool #piles, #hud.pool #turn-controls, #hud.pool #hint { display: none !important; }
+.board.pool { background: radial-gradient(ellipse at 50% 45%, #2a3b31 0%, #18231d 55%, #0a0f0c 100%); }
+.pool-canvas { position: absolute; pointer-events: auto; touch-action: none; cursor: crosshair; border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); }
+.pool-canvas.hidden, .pool-controls.hidden { display: none; }
+.pool-controls {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  pointer-events: auto;
+}
+.pool-hint { color: var(--muted); font-size: 0.82rem; text-align: center; min-height: 1.2em; }
+.pool-hint.warn { color: #ffb4b4; }
+.pool-row { display: flex; align-items: center; gap: 8px; }
+.pool-row .pool-nudge { padding: 8px 12px; font-size: 1rem; }
+.pool-row .pool-move.hidden { display: none; }
+.pool-power { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; font-size: 0.85rem; color: var(--muted); }
+.pool-power input { flex: 1; min-width: 60px; accent-color: var(--gold); }
+.pool-power b { width: 3.2em; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+.pool-shoot { padding: 10px 22px; font-size: 1.05rem; }
+.small .pool-power span { display: none; }
+/* A player's group in their bar: a little solid or striped ball and how many are left. */
+.chip.pgroup { gap: 5px; font-weight: 700; }
+.chip.pgroup.open { color: var(--muted); }
+.pball { width: 10px; height: 10px; border-radius: 50%; background: var(--ball3); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3); }
+.pball.stripes { background: linear-gradient(180deg, #f7f3e8 0 28%, var(--ball2) 28% 72%, #f7f3e8 72%); }
+.chip.pteam { font-weight: 800; }
+.chip.pteam.t0 { color: #ffd75e; }
+.chip.pteam.t1 { color: #8fd3ff; }
+/* Pool's tile on the home screen: a rack. */
+.tile-pool { display: flex; flex-direction: column; align-items: center; gap: 1px; transform: rotate(-8deg); }
+.tile-pool b { display: flex; gap: 1px; }
+.tile-pool i {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--b);
+  color: #111;
+  font-size: 0.42rem;
+  font-style: normal;
+  font-weight: 800;
+  box-shadow: inset -2px -2px 3px rgba(0, 0, 0, 0.35);
+}
+.tile-pool i.st { background: linear-gradient(180deg, #f7f3e8 0 25%, var(--b) 25% 75%, #f7f3e8 75%); }
+.tile-pool i { text-shadow: 0 0 2px #fff, 0 0 2px #fff; }

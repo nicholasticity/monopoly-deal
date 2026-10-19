@@ -1,61 +1,64 @@
-// Judgement rules: dealing, bidding, following suit, trick winners and scoring.
-import { SUIT_ORDER } from './cards.js';
+// Judgement rules (kard.games' Judgement, also known as Kachuful or Oh Hell): hands
+// shrink from 7 cards to 1 and grow back, trumps go round the suits with a no-trump
+// round, and you score only for taking exactly the tricks you bid. Following suit and
+// trick winners are the same as Call Bridge's, so they come from there.
+import { DECK_SIZE } from '../callbridge/rules.js';
 
-export const DECK_SIZE = 52;
-export const MIN_BID = 2;
+export { ledSuit, legalCards, trickWinner, sortHand, topScore } from '../callbridge/rules.js';
 
-// The whole deck is shared out evenly every round; the rest is set aside unseen.
-export const cardsEach = (players) => Math.floor(DECK_SIZE / players);
+// The biggest hand: 7 cards, fewer when there aren't enough to go round (8 players: 6).
+export const startCards = (players) => Math.min(7, Math.floor(DECK_SIZE / players));
 
-// The den calls trumps after seeing only this many of their cards.
-export const denSees = (handSize) => Math.floor(handSize / 2);
-
-export const validBid = (bid, handSize) => Number.isInteger(bid) && bid >= MIN_BID && bid <= handSize;
-
-export const ledSuit = (trick) => (trick.length ? trick[0].card.suit : null);
-
-// Cards that may be played to the trick: follow the led suit if you can.
-export function legalCards(hand, trick) {
-  const led = ledSuit(trick);
-  const follow = led ? hand.filter((c) => c.suit === led) : [];
-  return follow.length ? follow : hand;
+// Cards per round: down to 1, then back up. 7 cards: 7 6 5 4 3 2 1 2 3 4 5 6 7.
+export function handSizes(players) {
+  const top = startCards(players);
+  const sizes = [];
+  for (let n = top; n >= 1; n--) sizes.push(n);
+  for (let n = 2; n <= top; n++) sizes.push(n);
+  return sizes;
 }
 
-// The highest trump wins, otherwise the highest card of the led suit.
-export function trickWinner(trick, trump) {
-  let best = trick[0];
-  for (const t of trick.slice(1)) {
-    if (t.card.suit === best.card.suit ? t.card.rank > best.card.rank : t.card.suit === trump) best = t;
+// Trumps each round, in turn: spades, diamonds, clubs, hearts, then none.
+export const TRUMP_ORDER = ['spades', 'diamonds', 'clubs', 'hearts', null];
+export const trumpFor = (round) => TRUMP_ORDER[(round - 1) % TRUMP_ORDER.length];
+
+// The bid the last bidder (the dealer) may not make: bids can't add up to the number
+// of tricks, so someone always misses. null when no bid is ruled out (it'd be over the
+// hand size, or under 0).
+export function forbiddenBid(others, handSize) {
+  const bid = handSize - others;
+  return bid >= 0 && bid <= handSize ? bid : null;
+}
+
+export const validBid = (bid, handSize, forbidden = null) =>
+  Number.isInteger(bid) && bid >= 0 && bid <= handSize && bid !== forbidden;
+
+// The three ways to score. Only an exact bid scores; "high" also takes points off for
+// a miss. The default is high, as on kard.games.
+export const SCORING = {
+  high: { name: 'High', hint: 'Made: (bid + 1) × 10 + bid. Missed: the same, taken off.' },
+  medium: { name: 'Medium', hint: 'Made: 10 × bid. Missed: 0.' },
+  low: { name: 'Low', hint: 'Made: bid × 2 + 5. Missed: 0.' },
+};
+export const DEFAULT_SCORING = 'high';
+export const scoringKey = (key) => (SCORING[key] ? key : DEFAULT_SCORING);
+
+export function roundPoints(bid, won, scoring = DEFAULT_SCORING) {
+  const made = won === bid;
+  switch (scoring) {
+    case 'medium':
+      return made ? 10 * bid : 0;
+    case 'low':
+      return made ? 2 * bid + 5 : 0;
+    default: {
+      const points = (bid + 1) * 10 + bid;
+      return made ? points : -points;
+    }
   }
-  return best;
 }
 
-// Points for a round. Short of the bid loses 10 per trick bid; making it scores 10
-// per trick bid plus 1 per extra trick, until the extras reach the bid, which loses
-// all of that instead.
-export function roundPoints(bid, won) {
-  if (won < bid) return -10 * bid;
-  const extra = won - bid;
-  return extra < bid ? 10 * bid + extra : -(10 * bid + extra);
-}
-
-// 'short' (still under the bid), 'made' or 'bust' (too many extras).
+// 'short' (under the bid so far), 'made' (exactly it) or 'bust' (over it).
 export function bidState(bid, won) {
   if (bid == null || won < bid) return 'short';
-  return won - bid < bid ? 'made' : 'bust';
-}
-
-// Hands sort by suit (trumps first once known), highest card first.
-export function sortHand(hand, trump = null) {
-  const start = trump ? SUIT_ORDER.indexOf(trump) : 0;
-  const order = (s) => (SUIT_ORDER.indexOf(s) - start + SUIT_ORDER.length) % SUIT_ORDER.length;
-  hand.sort((a, b) => order(a.suit) - order(b.suit) || b.rank - a.rank);
-  return hand;
-}
-
-// The players holding no card of the trump suit; any at all means a fresh deal.
-export const withoutTrumps = (players, trump) => players.filter((p) => !p.hand.some((c) => c.suit === trump));
-
-export function topScore(players) {
-  return Math.max(...players.map((p) => p.score));
+  return won === bid ? 'made' : 'bust';
 }

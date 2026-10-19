@@ -1,23 +1,28 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state: Monopoly Deal, then Judgement, then Bingo. Also checks that no
+// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle and Pool. Also checks that no
 // client ever sees a hidden card (or someone else's Bingo grid).
 // Usage: node scripts/online-smoke.mjs
 import http from 'node:http';
 import { WebSocket } from 'ws';
 import { attachGameServer } from '../server/hub.js';
+import { MAX_PLAYERS } from '../src/game/settings.js';
 import { MirrorGame } from '../src/net/mirror.js';
-import { JudgementMirror } from '../src/net/judgement-mirror.js';
+import { TrickMirror } from '../src/net/trick-mirror.js';
 import { AIController } from '../src/game/ai.js';
+import { CallBridgeAI } from '../src/callbridge/ai.js';
 import { JudgementAI } from '../src/judgement/ai.js';
+import { handSizes, roundPoints, validBid } from '../src/judgement/rules.js';
 import { BingoMirror } from '../src/net/bingo-mirror.js';
 import { BingoAI } from '../src/bingo/ai.js';
 import { completedLines, TO_WIN } from '../src/bingo/rules.js';
 import { WordleMirror } from '../src/net/wordle-mirror.js';
 import { WordleAI } from '../src/wordle/ai.js';
 import { mark as markGuess, MAX_GUESSES } from '../src/wordle/rules.js';
+import { PoolMirror } from '../src/net/pool-mirror.js';
+import { PoolAI } from '../src/pool/ai.js';
 
-const MIRRORS = { deal: MirrorGame, judgement: JudgementMirror, bingo: BingoMirror, wordle: WordleMirror };
+const MIRRORS = { deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -35,9 +40,11 @@ class Client {
     this.name = name;
     this.clientId = `${name}-${Math.random().toString(36).slice(2)}`;
     this.ai = new AIController();
+    this.cbai = new CallBridgeAI();
     this.jai = new JudgementAI();
     this.bai = new BingoAI();
     this.wai = new WordleAI();
+    this.pai = new PoolAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -90,7 +97,7 @@ class Client {
         break;
       case 'game':
         this.kind = msg.kind;
-        this.mirror = new MIRRORS[msg.kind](msg.seats, msg.you);
+        this.mirror = new MIRRORS[msg.kind](msg.seats, msg.you, msg.kind);
         this.turns = [];
         this.rounds = [];
         break;
@@ -123,12 +130,22 @@ class Client {
       case 'payment': return this.ai.choosePayment(g, me, args.amount);
       case 'justsayno': return this.ai.chooseJustSayNo(g, me, g.justSayNoContext(args));
       case 'discard': return this.ai.chooseDiscards(g, me, args.count);
-      case 'trump': return this.jai.chooseTrump(g, me);
-      case 'bid': return this.jai.chooseBid(g, me, args);
-      case 'play': return this.jai.choosePlay(g, me);
+      case 'trump': return this.cbai.chooseTrump(g, me);
+      case 'bid':
+        if (this.kind !== 'judgement') return this.cbai.chooseBid(g, me, args);
+        // Judgement: only the dealer can have a ruled-out bid (none when the others' bids
+        // are already over the tricks), and it's the one that makes them add up.
+        if (args.forbidden != null) {
+          const others = g.state.players.reduce((s, p) => s + (p.bid ?? 0), 0);
+          if (me.id !== g.state.den) fail('a player other than the dealer has a ruled-out bid');
+          if (others + args.forbidden !== me.hand.length) fail('the dealer\'s ruled-out bid is wrong');
+        }
+        return this.jai.chooseBid(g, me, args);
+      case 'play': return this.cbai.choosePlay(g, me);
       case 'arrange': return this.bai.arrangeGrid(g, me, args);
       case 'call': return this.bai.chooseCall(g, me);
       case 'guess': return this.wai.chooseGuess(g, me);
+      case 'shot': return this.pai.chooseShot(g, me, args);
     }
     fail(`unknown request ${kind}`);
   }
@@ -143,9 +160,11 @@ class Client {
   }
 
   checkHidden() {
-    if (this.kind === 'judgement') return this.checkHiddenJudgement();
+    if (this.kind === 'callbridge' || this.kind === 'judgement') return this.checkHiddenTricks();
     if (this.kind === 'bingo') return this.checkHiddenBingo();
     if (this.kind === 'wordle') return this.checkHiddenWordle();
+    // Nothing is hidden at the pool table: just all sixteen balls.
+    if (this.kind === 'pool') return this.mirror.state.balls.length === 16 || fail(`${this.name} sees ${this.mirror.state.balls.length} balls`);
     const { state, you } = this.mirror;
     for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a deck card`);
     for (const p of state.players) {
@@ -159,8 +178,8 @@ class Client {
     if (total !== 106) fail(`${this.name} tracks ${total} cards`);
   }
 
-  // Judgement: only your own hand and the cards played are face up.
-  checkHiddenJudgement() {
+  // Call Bridge and Judgement: only your own hand and the cards played are face up.
+  checkHiddenTricks() {
     const { state, you } = this.mirror;
     for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a set-aside card`);
     for (const p of state.players) {
@@ -223,13 +242,29 @@ async function playRound(clients, addBots = 0) {
   if (!winner) fail('no winner');
   if (clients.some((c) => !c.requests)) fail('a player was never asked anything');
   let how = results[0].stats;
-  if (game.kind === 'judgement') {
+  if (game.kind === 'callbridge') {
     const ids = results[0].winnerIds;
-    if (!ids?.includes(results[0].winnerId)) fail('Judgement winners missing');
+    if (!ids?.includes(results[0].winnerId)) fail('Call Bridge winners missing');
     if (clients.some((c) => c.rounds.length !== game.seats.length)) fail('round scores missing');
     if (clients.some((c) => !c.turns.includes('trump') || !c.turns.includes('bid') || !c.turns.includes('play'))) fail('turn kinds missing');
     const scores = clients[0].rounds.at(-1).results.map((r) => r.score);
     how = `${ids.length > 1 ? 'shared, ' : ''}scores ${scores.join('/')}`;
+  }
+  if (game.kind === 'judgement') {
+    const ids = results[0].winnerIds;
+    const n = game.seats.length;
+    const sizes = handSizes(n);
+    const { scoring } = clients[0].mirror.state;
+    if (!ids?.includes(results[0].winnerId)) fail('Judgement winners missing');
+    if (clients.some((c) => c.rounds.length !== sizes.length)) fail(`played ${clients[0].rounds.length} rounds, expected ${sizes.length}`);
+    if (clients.some((c) => c.turns.includes('trump') || !c.turns.includes('bid') || !c.turns.includes('play'))) fail('turn kinds wrong');
+    clients[0].rounds.forEach((r, i) => {
+      if (r.results.reduce((s, x) => s + x.bid, 0) === sizes[i]) fail(`round ${i + 1}: bids add up to the tricks`);
+      if (r.results.reduce((s, x) => s + x.won, 0) !== sizes[i]) fail(`round ${i + 1}: tricks don't add up`);
+      for (const x of r.results) if (!validBid(x.bid, sizes[i]) || x.points !== roundPoints(x.bid, x.won, scoring)) fail(`round ${i + 1}: wrong points`);
+    });
+    const scores = clients[0].rounds.at(-1).results.map((r) => r.score);
+    how = `${scoring} scoring, ${ids.length > 1 ? 'shared, ' : ''}scores ${scores.join('/')}`;
   }
   if (game.kind === 'bingo') {
     const ids = results[0].winnerIds;
@@ -242,6 +277,14 @@ async function playRound(clients, addBots = 0) {
       if (done !== ids.includes(p.id)) fail(`${p.name}'s grid doesn't match the result`);
     }
     how = `${ids.length > 1 ? 'shared, ' : ''}${called.length} calls`;
+  }
+  if (game.kind === 'pool') {
+    const ids = results[0].winnerIds;
+    const { state } = clients[0].mirror;
+    const team = state.players[ids[0]].team;
+    if (ids.length !== game.seats.length / 2 || ids.some((id) => state.players[id].team !== team)) fail('wrong pool winners');
+    if (!state.balls.find((b) => b.id === 8).potted) fail('the pool game ended with the 8 still up');
+    how = `${game.seats.length === 4 ? '2 vs 2, ' : ''}${state.shots} shots`;
   }
   if (game.kind === 'wordle') {
     const ids = results[0].winnerIds;
@@ -322,13 +365,13 @@ if (alice.room.members.length !== 2 || alice.room.status !== 'lobby') fail('non-
 await playRound([alice, bob], 0);
 await playRound([alice, bob], 2);
 
-// Cara joins a full table (2 humans + 3 bots) and bumps a bot.
-await playRound([alice, bob], 1);
+// A full table (2 humans + 6 bots: eight seats) plays, then Cara joins and bumps a bot.
+await playRound([alice, bob], MAX_PLAYERS - 4);
 const caraJoined = cara.next('joined');
 cara.send('join', { code: alice.code, name: 'Cara', clientId: cara.clientId });
 await caraJoined;
 const bumped = alice.next('room', (m) => m.room.members.some((x) => x.name === 'Cara'));
-if ((await bumped).room.members.length !== 5) fail('Cara did not bump a bot');
+if ((await bumped).room.members.length !== MAX_PLAYERS) fail('Cara did not bump a bot');
 const kicked = alice.next('room', (m) => !m.room.members.some((x) => x.kind === 'bot'));
 for (const m of alice.room.members.filter((x) => x.kind === 'bot')) alice.send('kick', { id: m.id });
 await kicked;
@@ -388,32 +431,48 @@ console.log(`  ${reshuffles} reshuffle log lines seen across clients`);
 if (!responses.without) fail('nobody saw a player without a Just Say No respond to an action');
 console.log(`  Just Say No moments seen by others: ${responses.holding} holding one, ${responses.without} without`);
 
-// Judgement: only the host picks the game, and only in the lobby.
+// Call Bridge: only the host picks the game, and only in the lobby.
 const clients = [alice, bob2, cara2];
-bob2.send('game', { game: 'judgement' });
+bob2.send('game', { game: 'callbridge' });
 await new Promise((r) => setTimeout(r, 200));
 if (alice.room.game !== 'deal') fail('non-host changed the game');
-const toJudgement = alice.next('room', (m) => m.room.game === 'judgement');
-alice.send('game', { game: 'judgement' });
-await toJudgement;
-if ((await playRound(clients)).kind !== 'judgement') fail('the game did not switch');
+const toCallBridge = alice.next('room', (m) => m.room.game === 'callbridge');
+alice.send('game', { game: 'callbridge' });
+await toCallBridge;
+if ((await playRound(clients)).kind !== 'callbridge') fail('the game did not switch');
 await playRound(clients, 2);
-// A room can be created for Judgement straight away.
+// A room can be created for Call Bridge straight away.
 const dan = new Client('Dan');
 await dan.connect();
 const danRoom = dan.next('room');
-dan.send('create', { name: 'Dan', clientId: dan.clientId, game: 'judgement' });
-if ((await danRoom).room.game !== 'judgement') fail('new room ignored its game');
+dan.send('create', { name: 'Dan', clientId: dan.clientId, game: 'callbridge' });
+if ((await danRoom).room.game !== 'callbridge') fail('new room ignored its game');
 const danGame = dan.next('game');
 dan.send('addBot');
 await playRound([dan]);
-if ((await danGame).kind !== 'judgement') fail('wrong game in a new Judgement room');
+if ((await danGame).kind !== 'callbridge') fail('wrong game in a new Call Bridge room');
+
+// Judgement: only the host sets the scoring, and the game plays by it.
+const toJudgement = alice.next('room', (m) => m.room.game === 'judgement');
+alice.send('game', { game: 'judgement' });
+await toJudgement;
+if (alice.room.scoring !== 'high') fail('Judgement should start on high scoring');
+bob2.send('scoring', { scoring: 'low' });
+alice.send('scoring', { scoring: 'nonsense' });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.scoring !== 'high') fail('the scoring changed when it should not have');
+await playRound(clients);
+const toMedium = alice.next('room', (m) => m.room.scoring === 'medium');
+alice.send('scoring', { scoring: 'medium' });
+await toMedium;
+if ((await playRound(clients, 2)).kind !== 'judgement') fail('the game did not switch to Judgement');
+if (clients[0].mirror.state.scoring !== 'medium') fail('the game ignored the scoring');
 
 // Bingo: everyone arranges at once, then calls in turn.
 const toBingo = alice.next('room', (m) => m.room.game === 'bingo');
 alice.send('game', { game: 'bingo' });
 await toBingo;
-// The two bots from the Judgement rounds are still seated; then just the three of them.
+// The two bots from the Call Bridge and Judgement rounds are still seated; then just the three of them.
 for (let i = 0; i < 4; i++) {
   if (i === 2) {
     const noBots = alice.next('room', (m) => !m.room.members.some((x) => x.kind === 'bot'));
@@ -436,6 +495,23 @@ alice.send('words', { words: 5 });
 await fiveWords;
 await playRound(clients);
 await playRound(clients, 2);
+
+// Pool: two play, or four as two teams; anyone else watches. Three humans and two bots
+// make two teams of two (a bot sits out); then without the bots, two play and Cara watches.
+const toPool = alice.next('room', (m) => m.room.game === 'pool');
+alice.send('game', { game: 'pool' });
+const poolRoom = (await toPool).room;
+if (poolRoom.max !== 4 || poolRoom.seats !== 4) fail(`pool should seat 4 of 5 (got ${poolRoom.seats} of max ${poolRoom.max})`);
+if ((await playRound(clients)).seats.length !== 4) fail('pool did not seat two teams');
+const poolBotsGone = alice.next('room', (m) => !m.room.members.some((x) => x.kind === 'bot'));
+for (const m of alice.room.members.filter((x) => x.kind === 'bot')) alice.send('kick', { id: m.id });
+await poolBotsGone;
+if (alice.room.seats !== 2) fail('three in a pool room should be two players and one watching');
+const caraWatches = cara2.next('game');
+cara2.requests = 0;
+await playRound([alice, bob2]);
+if ((await caraWatches).you !== -1) fail('Cara should have watched');
+if (cara2.requests) fail('the player watching was asked to shoot');
 
 console.log('PASS');
 process.exit(0);

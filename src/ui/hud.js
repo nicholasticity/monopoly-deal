@@ -2,9 +2,10 @@
 import { cardImageURL, isFlipped, MONEY_COLORS } from '../render/textures.js';
 import { ACTIONS, buildDeck } from '../game/cards.js';
 import * as R from '../game/rules.js';
-import { buildDeck as playingDeck, SUIT_ORDER } from '../judgement/cards.js';
-import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, restyle } from '../render/deck-style.js';
-import { GAMES } from '../game/settings.js';
+import { buildDeck as playingDeck, SUIT_ORDER } from '../callbridge/cards.js';
+import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, rankName, restyle } from '../render/deck-style.js';
+import { GAMES, TRICK_GAMES } from '../game/settings.js';
+import { SCORING, DEFAULT_SCORING } from '../judgement/rules.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
 import { sound } from './sound.js';
 
@@ -12,12 +13,15 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-// Each game's name in the top bar and on its start screen. Judgement's has the four
+// Each game's name in the top bar and on its start screen. Call Bridge's has the four
 // suits of the deck style in place of DEAL, in their text forms, not emoji.
 const suitLogo = () => SUIT_ORDER.map((key) => `<i class="${key}">${suitLook(key).symbol}&#xFE0E;</i>`).join('');
 const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
-  judgement: () => `<span class="logo judgement">JUDGEMENT</span><span class="deal suits">${suitLogo()}</span>`,
+  callbridge: () => `<span class="logo callbridge">CALL BRIDGE</span><span class="deal suits">${suitLogo()}</span>`,
+  // Judgement: hands from 7 cards down to 1 and back.
+  judgement: '<span class="logo judgement">JUDGEMENT</span><span class="deal judgement-mark">7·1·7</span>',
+  pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
   bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
   wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
 };
@@ -40,12 +44,49 @@ function miniBingo() {
   return grid;
 }
 
+// A rack of balls for Pool's tile on the home screen.
+function miniPool() {
+  const rack = el('span', 'tile-pool');
+  const rows = [[1], [9, 2], [3, 8, 10], [11, 4, 12, 5], [13, 6, 14, 7, 15]];
+  rack.innerHTML = rows.map((row) => `<b>${row.map((n) => `<i class="pb${n >= 9 ? ' st' : ''}" style="--b: var(--ball${n >= 9 ? n - 8 : n})">${n}</i>`).join('')}</b>`).join('');
+  return rack;
+}
+
 // Three marked guesses for Wordle's tile on the home screen.
 function miniWordle() {
   const board = el('span', 'tile-wordle');
   const rows = [['crane', 'bybbg'], ['route', 'gbbbg'], ['ridge', 'ggggg']];
   board.innerHTML = rows.map(([word, mark]) => `<b>${[...word].map((c, i) => `<i class="${mark[i]}">${c}</i>`).join('')}</b>`).join('');
   return board;
+}
+
+// Set once "Don't show this again" is ticked on the fantasy deck's guide.
+const GUIDE_OFF = 'md-fantasy-guide-off';
+// One face card of each rank in a different suit, so the guide shows all four colours.
+const GUIDE_FACES = [['clubs', 11], ['hearts', 12], ['diamonds', 13], ['spades', 14]];
+
+// The fantasy deck next to the classic one: its face cards from lowest to highest (with
+// the cards they stand for), and which suit is which.
+function fantasyGuide() {
+  const deck = playingDeck();
+  const classic = DECK_STYLES.classic;
+  const wrap = el('div', 'fantasy-guide');
+  wrap.appendChild(el('p', 'modal-body', 'The cards rank just like a normal deck. From lowest to highest: <b>2 to 10</b>, then'));
+  const row = wrap.appendChild(el('div', 'rank-order'));
+  for (const [i, [suit, rank]] of GUIDE_FACES.entries()) {
+    if (i) row.appendChild(el('span', 'rank-step', '›'));
+    const item = row.appendChild(el('div', 'rank-card'));
+    item.appendChild(thumb(deck.find((c) => c.key === `${suit}-${rank}`), { flipped: false }));
+    item.appendChild(el('b', null, esc(rankName(rank))));
+    item.appendChild(el('span', 'muted', `for the ${classic.ranks[rank][1].toLowerCase()}`));
+  }
+  wrap.appendChild(el('p', 'modal-body', 'So the <b>Phoenix</b> is the highest card of every suit. The suits are:'));
+  const suits = wrap.appendChild(el('ul', 'suit-key'));
+  for (const key of SUIT_ORDER) {
+    const look = suitLook(key);
+    suits.appendChild(el('li', null, `<span class="suit ${key}">${look.symbol}&#xFE0E;</span> <b>${look.name}</b> <span class="muted">for ${classic.suits[key].name.toLowerCase()}</span>`));
+  }
+  return wrap;
 }
 
 export function thumb(card, { flipped = isFlipped(card) } = {}) {
@@ -125,13 +166,14 @@ export class Hud {
     this.game = kind;
     this.brandEl.innerHTML = brand(kind);
     this.title = document.title = GAMES[kind].name;
-    for (const k of ['judgement', 'bingo', 'wordle']) this.hudEl.classList.toggle(k, kind === k);
+    // Call Bridge and Judgement share their HUD pieces ("tricks").
+    for (const k of ['tricks', 'bingo', 'wordle', 'pool']) this.hudEl.classList.toggle(k, k === 'tricks' ? TRICK_GAMES.has(kind) : kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
     this.pilesEl.classList.add('idle');
     this.setGameInfo('');
   }
 
-  // A button by the logo with the state of play (Judgement: trumps and the round).
+  // A button by the logo with the state of play (Call Bridge and Judgement: trumps and the round).
   setGameInfo(html, title = '') {
     this.infoEl.classList.toggle('hidden', !html);
     if (this.infoEl.innerHTML !== html) this.infoEl.innerHTML = html;
@@ -268,6 +310,35 @@ export class Hud {
     });
   }
 
+  // The fantasy deck's guide, at the start of a Call Bridge or Judgement game played with it, until
+  // "Don't show this again". In the top layer, above any prompt. Resolves once closed.
+  showFantasyGuide() {
+    if (deckStyle() !== 'fantasy' || localStorage.getItem(GUIDE_OFF)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const prevCancel = this.cancelTop;
+      const layer = el('div', 'modal-backdrop top');
+      const box = el('div', 'modal');
+      box.appendChild(el('h2', null, 'The fantasy deck'));
+      box.appendChild(fantasyGuide());
+      const row = el('div', 'confirm-row guide-row');
+      const off = el('label', 'dont-show', '<input type="checkbox"> Don’t show this again');
+      const ok = el('button', 'primary', 'Got it');
+      row.append(off, ok);
+      box.appendChild(row);
+      layer.appendChild(box);
+      document.body.appendChild(layer);
+      const done = () => {
+        if (off.querySelector('input').checked) localStorage.setItem(GUIDE_OFF, '1');
+        layer.remove();
+        this.cancelTop = prevCancel;
+        resolve();
+      };
+      ok.addEventListener('click', done);
+      this.cancelTop = done;
+      ok.focus();
+    });
+  }
+
   // ---------- passive displays ----------
 
   clearLog() {
@@ -276,7 +347,7 @@ export class Hud {
 
   log(text, kind = 'info') {
     const line = el('div', `log-line ${kind}`);
-    line.textContent = this.game === 'judgement' ? restyle(text) : text;
+    line.textContent = TRICK_GAMES.has(this.game) ? restyle(text) : text;
     this.logEl.appendChild(line);
     while (this.logEl.childElementCount > 300) this.logEl.firstChild.remove();
     this.logEl.scrollTop = this.logEl.scrollHeight;
@@ -284,7 +355,7 @@ export class Hud {
 
   toast(text, kind = 'info', ms = 2800) {
     const t = el('div', `toast ${kind}`);
-    t.textContent = this.game === 'judgement' ? restyle(text) : text;
+    t.textContent = TRICK_GAMES.has(this.game) ? restyle(text) : text;
     this.toastsEl.appendChild(t);
     while (this.toastsEl.childElementCount > 3) this.toastsEl.firstChild.remove();
     setTimeout(() => t.classList.add('out'), ms);
@@ -583,16 +654,17 @@ export class Hud {
       const playing = playingDeck();
       const looks = {
         deal: ['Boardwalk', 'Deal Breaker', '$5M'].map((name) => deal.find((c) => c.name === name)),
-        judgement: ['spades-14', 'hearts-13', 'diamonds-12'].map((key) => playing.find((c) => c.key === key)),
+        callbridge: ['spades-14', 'hearts-13', 'diamonds-12'].map((key) => playing.find((c) => c.key === key)),
+        judgement: ['clubs-7', 'diamonds-11', 'hearts-14'].map((key) => playing.find((c) => c.key === key)),
       };
       for (const [kind, info] of Object.entries(GAMES)) {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
         const fan = tile.appendChild(el('span', 'tile-fan'));
         if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
-        else fan.appendChild(kind === 'wordle' ? miniWordle() : miniBingo());
+        else fan.appendChild(kind === 'wordle' ? miniWordle() : kind === 'pool' ? miniPool() : miniBingo());
         tile.appendChild(el('span', 'start-logo', brand(kind)));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
-        tile.appendChild(el('span', 'tile-meta muted', '2–5 players'));
+        tile.appendChild(el('span', 'tile-meta muted', kind === 'pool' ? '2 or 4 players (1 vs 1 or 2 vs 2)' : '2–5 players, up to 8 online'));
         tile.addEventListener('click', () => {
           close();
           resolve(kind);
@@ -607,9 +679,13 @@ export class Hud {
   showStart(defaults) {
     return new Promise((resolve) => {
       this.closeAll();
-      // Wordle can be played alone, with no bots and no clock; the other games need opponents.
-      const counts = this.game === 'wordle' ? [0, 1, 2, 3, 4] : [1, 2, 3, 4];
-      const opponents = counts.includes(defaults.opponents) ? defaults.opponents : 3;
+      // Wordle can be played alone, with no bots and no clock; pool is one on one, or two
+      // against two (you and a bot partner); the other games need opponents.
+      const pool = this.game === 'pool';
+      const counts = this.game === 'wordle' ? [0, 1, 2, 3, 4] : pool ? [1, 3] : [1, 2, 3, 4];
+      const opponents = pool ? (defaults.poolOpponents === 3 ? 3 : 1) : counts.includes(defaults.opponents) ? defaults.opponents : 3;
+      const oppLabel = (n) => (pool ? (n === 1 ? '1 vs 1' : '2 vs 2') : n || 'None');
+      const oppTitle = (n) => (!n ? ' title="Just you, with no clock"' : pool && n === 3 ? ' title="You and a bot partner against two bots"' : '');
       const body = el('div', 'start');
       body.innerHTML = `
         <button class="ghost back-home" id="opt-home" title="Choose another game">← Games</button>
@@ -620,15 +696,17 @@ export class Hud {
         <label>Your name <input id="opt-name" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
         <div class="opt-row" id="opt-deck-row"><span>Cards</span><div class="seg" id="opt-deck">${Object.entries(DECK_STYLES).map(([k, d]) => `<button data-v="${k}" class="${k === deckStyle() ? 'on' : ''}">${d.name}</button>`).join('')}</div></div>
         <div class="start-solo">
-          <div class="opt-row"><span>Opponents</span><div class="seg" id="opt-opp">${counts.map((n) => `<button data-v="${n}" class="${n === opponents ? 'on' : ''}"${n ? '' : ' title="Just you, with no clock"'}>${n || 'None'}</button>`).join('')}</div></div>
+          <div class="opt-row"><span>${pool ? 'Players' : 'Opponents'}</span><div class="seg" id="opt-opp">${counts.map((n) => `<button data-v="${n}" class="${n === opponents ? 'on' : ''}"${oppTitle(n)}>${oppLabel(n)}</button>`).join('')}</div></div>
+          <div class="opt-row" id="opt-scoring-row"><span>Scoring</span><div class="seg" id="opt-scoring">${Object.entries(SCORING).map(([k, s]) => `<button data-v="${k}" class="${k === (SCORING[defaults.scoring] ? defaults.scoring : DEFAULT_SCORING) ? 'on' : ''}" title="${s.hint}">${s.name}</button>`).join('')}</div></div>
+          <p class="muted small" id="opt-scoring-hint"></p>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-          <button class="primary big" id="opt-start">${this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
+          <button class="primary big" id="opt-start">${pool ? 'Rack them up' : this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
           <button class="primary big" id="opt-create">Create a room</button>
           <div class="or"><span>or join a friend’s room</span></div>
           <div class="join-row"><input id="opt-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false"><button id="opt-join">Join room</button></div>
-          <p class="muted small">Create a room and send the invite link to your friends. Up to 5 players; empty seats can be filled with bots.</p>
+          <p class="muted small">Create a room and send the invite link to your friends. Up to 8 players; empty seats can be filled with bots.</p>
         </div>
         <p class="start-error" id="opt-error"></p>
         <button class="ghost" id="opt-rules">How to play</button>`;
@@ -647,9 +725,15 @@ export class Hud {
       const opp = seg('#opt-opp');
       const words = seg('#opt-words');
       $b('#opt-words-row').hidden = this.game !== 'wordle';
-      // Judgement's deck style is this browser's own, solo or online, and shows at once.
+      // Judgement: how a round scores, with a line on what the choice means.
+      const scoring = seg('#opt-scoring');
+      const showScoring = () => ($b('#opt-scoring-hint').textContent = SCORING[scoring()].hint);
+      $b('#opt-scoring').addEventListener('change', showScoring);
+      showScoring();
+      $b('#opt-scoring-row').hidden = $b('#opt-scoring-hint').hidden = this.game !== 'judgement';
+      // The deck style (Call Bridge and Judgement) is this browser's own, solo or online, and shows at once.
       const deck = seg('#opt-deck');
-      $b('#opt-deck-row').hidden = this.game !== 'judgement';
+      $b('#opt-deck-row').hidden = !TRICK_GAMES.has(this.game);
       $b('#opt-deck').addEventListener('change', () => {
         setDeckStyle(deck());
         $b('.start-logo').innerHTML = this.brandEl.innerHTML = brand(this.game);
@@ -680,7 +764,7 @@ export class Hud {
 
       const finish = (choice) => {
         close();
-        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), code: codeInput.value, ...choice });
+        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), scoring: scoring(), code: codeInput.value, ...choice });
       };
       const onlineName = () => {
         const name = nameInput.value.trim();
@@ -768,7 +852,12 @@ export class Hud {
 
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = { judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES }[this.game] ?? DEAL_RULES;
+    body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES }[this.game] ?? DEAL_RULES;
+    // The fantasy deck's guide stays here after "Don't show this again".
+    if (TRICK_GAMES.has(this.game) && deckStyle() === 'fantasy') {
+      body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
+      body.appendChild(fantasyGuide());
+    }
     this.overlay({ title: 'How to play', body, wide: true });
   }
 }
@@ -788,10 +877,10 @@ const DEAL_RULES = `
       </ul>
       <p class="muted">Tip: hover any face-up card to see it up close. Press <b>E</b> to end your turn.</p>`;
 
-const JUDGEMENT_RULES = `
+const CALLBRIDGE_RULES = `
       <p><b>Goal:</b> the highest score after every player has been the <b>den</b> once (one round each).</p>
       <ul>
-        <li>Each round the whole deck is dealt out evenly (26, 17, 13 or 10 cards each for 2–5 players); any left over are set aside unseen.</li>
+        <li>Each round the whole deck is dealt out evenly (26, 17, 13, 10, 8, 7 or 6 cards each for 2–8 players); any left over are set aside unseen.</li>
         <li>The den sees only the first half of their cards, then calls <b>trumps</b>. The rest of the cards are dealt after that.</li>
         <li>If anyone ends up with no trumps, the cards are shuffled and dealt again, and the den calls trumps again.</li>
         <li>Starting with the den, everyone <b>bids</b> how many tricks they'll take: at least 2, at most the number of cards in hand.</li>
@@ -806,6 +895,25 @@ const JUDGEMENT_RULES = `
       </ul>
       <p class="muted">Tip: cards you can't play are dimmed. The round counter in the top bar shows everyone's scores.</p>`;
 
+// Judgement, as on kard.games.
+const JUDGEMENT_RULES = `
+      <p><b>Goal:</b> take <b>exactly</b> the number of tricks you bid, round after round. The highest total at the end wins.</p>
+      <ul>
+        <li>The first round deals <b>7 cards</b> each (<b>6</b> with 8 players). Each round deals one card fewer, down to <b>1</b>, then one more each round back up again: 13 rounds in all (11 with 8 players). The rest of the deck is set aside unseen.</li>
+        <li>Trumps go round in turn: <b>spades, diamonds, clubs, hearts</b>, then a round with <b>no trumps</b>, and again from spades.</li>
+        <li>The deal moves round the table. Starting on the dealer’s left, everyone <b>bids</b> how many tricks they’ll take, from 0 up to the cards in hand.</li>
+        <li>The dealer bids last and <b>can’t</b> make the bids add up to the number of tricks, so someone always misses.</li>
+        <li>The player on the dealer’s left leads the first trick, and whoever wins a trick leads the next. Follow the suit that was led if you can; if not, play a trump to win it or throw anything.</li>
+        <li>The highest trump wins the trick; with no trumps in it (or in a no-trump round), the highest card of the suit led. Aces are high.</li>
+      </ul>
+      <p><b>Scoring</b> (only an exact bid scores; pick one on the start screen or in the lobby):</p>
+      <ul>
+        <li><b>High</b> (the usual): made, <b>(bid + 1) × 10 + bid</b>; missed, the same taken off. Bid 3 and take 3: +43; take 2 or 4: −43. Bid 0 and take none: +10.</li>
+        <li><b>Medium</b>: made, <b>10 × bid</b>; missed, 0.</li>
+        <li><b>Low</b>: made, <b>bid × 2 + 5</b>; missed, 0.</li>
+      </ul>
+      <p class="muted">Tip: cards you can't play are dimmed. The round counter in the top bar shows the trumps and everyone's scores.</p>`;
+
 const BINGO_RULES = `
       <p><b>Goal:</b> be the first to cross off <b>five lines</b> on your grid: one letter of <b>B-I-N-G-O</b> for each.</p>
       <ul>
@@ -816,6 +924,17 @@ const BINGO_RULES = `
         <li>The first to 5 lines wins. If a call takes several players to 5 at once, they share the win.</li>
       </ul>
       <p class="muted">Tip: call the numbers that finish your own lines, and think about where they sit when you arrange: a number in the middle is on four lines.</p>`;
+
+const POOL_RULES = `
+      <p><b>Goal:</b> pot all seven of your balls, <b>solids</b> (1–7) or <b>stripes</b> (9–15), then sink the <b>8</b>. One on one, or two against two (partners take turns and share a group).</p>
+      <ul>
+        <li>The cue ball starts behind the line for the <b>break</b>. After the break the table is <b>open</b>: the first player to pot a ball (legally) takes that group, and the other side gets the other.</li>
+        <li>Pot one of your own balls and you shoot again. Miss, and it’s the other side’s turn.</li>
+        <li><b>Fouls</b>: potting the cue ball (a scratch), hitting nothing, hitting the wrong ball first (on an open table, the 8 first), or no ball reaching a cushion after the hit with nothing potted. After a foul the other side has <b>ball in hand</b>: they put the cue ball anywhere.</li>
+        <li>Once your group is cleared, go for the 8. Sink it and you win. Sink it too early, or with a foul (a scratch), and you lose. An 8 potted on the break is put back.</li>
+      </ul>
+      <p><b>How to shoot:</b> drag on the table to point the cue. A dotted line shows where the cue ball goes, and the ball it hits shows which way it’ll go: gold if you may hit it first, red if not. Fine-tune with ◀ ▶ (or the arrow keys), set the power and press <b>Shoot</b> (or Space). With ball in hand, tap where the cue ball goes, or <b>✋ Move</b> it.</p>
+      <p class="muted">House rules: no called pockets, and ball in hand anywhere after any foul.</p>`;
 
 const WORDLE_RULES = `
       <p><b>Goal:</b> guess the most words <b>first</b>. A game is 5, 10 or 20 words.</p>

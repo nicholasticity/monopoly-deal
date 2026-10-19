@@ -2,18 +2,21 @@
 // the table view and turns the server's prompts into the usual HUD dialogs.
 import { Connection } from './connection.js';
 import { MirrorGame } from './mirror.js';
-import { JudgementMirror } from './judgement-mirror.js';
+import { TrickMirror } from './trick-mirror.js';
 import { BingoMirror } from './bingo-mirror.js';
 import { WordleMirror } from './wordle-mirror.js';
+import { PoolMirror } from './pool-mirror.js';
+import * as PoolUI from '../ui/pool.js';
 import { HumanController } from '../ui/human.js';
 import { playNumber, PLAYS_PER_TURN } from '../game/rules.js';
-import { JudgementHuman, judgementStatus, gameInfo, gameResult, roundBoard, turnToast } from '../ui/judgement.js';
+import { TrickHuman, trickStatus, gameInfo, gameResult, roundBoard, turnToast } from '../ui/tricks.js';
 import * as BingoUI from '../ui/bingo.js';
 import * as WordleUI from '../ui/wordle.js';
 import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { cueLog } from '../ui/sound.js';
 import { VoiceChat, voiceSupported } from './voice.js';
+import { TRICK_GAMES } from '../game/settings.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 function el(tag, cls, text) {
@@ -79,6 +82,7 @@ export class OnlineSession {
       addBot: () => this.send('addBot'),
       kick: (id) => this.send('kick', { id }),
       words: (words) => this.send('words', { words }),
+      scoring: (scoring) => this.send('scoring', { scoring }),
       game: (game) => this.send('game', { game }),
       start: () => this.send('start'),
       leave: () => this.confirmLeave(),
@@ -166,7 +170,7 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
+        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
         break;
       case 'round':
         this.onRound(msg);
@@ -264,8 +268,8 @@ export class OnlineSession {
       this.gameNo = msg.gameNo;
       this.seat = msg.you;
       this.setKind(msg.kind);
-      const Mirror = { judgement: JudgementMirror, bingo: BingoMirror, wordle: WordleMirror }[this.kind] ?? MirrorGame;
-      this.mirror = new Mirror(msg.seats, msg.you);
+      const Mirror = TRICK_GAMES.has(this.kind) ? TrickMirror : ({ bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror }[this.kind] ?? MirrorGame);
+      this.mirror = new Mirror(msg.seats, msg.you, this.kind);
       this.needsAttach = true;
       this.waiting = null;
       this.hud.closeAll();
@@ -273,6 +277,9 @@ export class OnlineSession {
       // On a fresh start the log belongs to the last game; on a (re)join the
       // server has just sent this game's log as history.
       if (!this.justJoined) this.hud.clearLog();
+      // The fantasy deck's guide when a game starts (not on a rejoin). The game goes on
+      // meanwhile; the guide sits above the prompts.
+      if (TRICK_GAMES.has(this.kind) && !this.justJoined) this.hud.showFantasyGuide();
     }
     this.inGame = true;
     this.gameoverOpen = false;
@@ -311,7 +318,7 @@ export class OnlineSession {
     if (this.req?.id === msg.reqId) return;
     this.dropRequest();
     const g = this.mirror;
-    const Human = { judgement: JudgementHuman, bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman }[g.kind] ?? HumanController;
+    const Human = TRICK_GAMES.has(g.kind) ? TrickHuman : ({ bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman, pool: PoolUI.PoolHuman }[g.kind] ?? HumanController);
     const human = new Human(this.hud, this.view);
     const req = { id: msg.reqId, kind: msg.kind };
     this.req = req;
@@ -350,6 +357,9 @@ export class OnlineSession {
       case 'guess':
         value = await human.chooseGuess(g, me);
         break;
+      case 'shot':
+        value = await human.chooseShot(g, me, a);
+        break;
       default:
         return;
     }
@@ -369,7 +379,7 @@ export class OnlineSession {
     this.hud.setTurnControls(false);
   }
 
-  // Judgement: the round's scores while the next one is dealt. The next prompt (or
+  // Call Bridge and Judgement: the round's scores while the next one is dealt. The next prompt (or
   // Continue) closes them; the last round's are in the game-over table instead.
   onRound(msg) {
     const state = this.mirror?.state;
@@ -389,10 +399,10 @@ export class OnlineSession {
     const winner = state?.players[msg.winnerId];
     if (!winner) return;
     this.gameoverOpen = true;
-    if (['judgement', 'bingo', 'wordle'].includes(this.mirror.kind)) {
+    if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool'].includes(this.mirror.kind)) {
       state.winners = msg.winnerIds.map((id) => state.players[id]);
       state.phase = 'over';
-      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
+      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult, pool: PoolUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
       await this.hud.showResult({ ...result, buttonLabel: 'Back to lobby' });
     } else {
       await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
@@ -517,13 +527,18 @@ export class OnlineSession {
       this.hud.setGameInfo(WordleUI.gameInfo(state), 'Scores');
       return;
     }
+    if (this.mirror.kind === 'pool') {
+      const { text, mine } = PoolUI.poolStatus(state, this.seat);
+      this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
+      return;
+    }
     if (this.mirror.kind === 'bingo') {
       const { text, mine } = BingoUI.bingoStatus(state, this.seat);
       this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
       return;
     }
-    if (this.mirror.kind === 'judgement') {
-      const { text, mine } = judgementStatus(state, this.seat);
+    if (TRICK_GAMES.has(this.mirror.kind)) {
+      const { text, mine } = trickStatus(state, this.seat);
       this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
       this.hud.setGameInfo(gameInfo(state), 'Scores');
       return;

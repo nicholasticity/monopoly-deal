@@ -1,12 +1,18 @@
-// Client-side copy of an online Judgement game, rebuilt from the server's snapshots,
-// in the same shape as JudgementGame so its table view and human controller work on it.
+// Client-side copy of an online Call Bridge or Judgement game, rebuilt from the
+// server's snapshots, in the same shape as their engines' state so the table view and
+// human controller work on it.
 import { MirrorGame } from './mirror.js';
 
-export class JudgementMirror extends MirrorGame {
-  constructor(seats, you) {
+export class TrickMirror extends MirrorGame {
+  // kind: 'callbridge' (Call Bridge) or 'judgement' (Judgement).
+  constructor(seats, you, kind = 'callbridge') {
     super(seats, you);
-    this.kind = 'judgement';
+    this.kind = kind;
     this.state = {
+      kind,
+      // Judgement: its scoring and each round's hand size.
+      scoring: null,
+      sizes: [],
       players: this.state.players.map(({ id, memberId, name, isHuman, tag }) => ({
         id, memberId, name, isHuman, tag,
         hand: [], tricks: [], bid: null, won: 0, score: 0, history: [],
@@ -50,6 +56,8 @@ export class JudgementMirror extends MirrorGame {
     state.deck = snap.deck.map(ref);
     state.trick = snap.trick.map((t) => ({ playerId: t.playerId, card: ref(t.card) }));
     for (const key of ['trump', 'den', 'round', 'rounds', 'handSize', 'current', 'leader', 'phase']) state[key] = snap[key];
+    if (snap.scoring) state.scoring = snap.scoring;
+    if (snap.sizes) state.sizes = snap.sizes;
     state.winners = snap.winners.map((id) => state.players[id]);
     state.winner = state.winners[0] ?? null;
     for (const id of this.cards.keys()) if (!live.has(id)) this.cards.delete(id);

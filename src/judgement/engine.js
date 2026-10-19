@@ -1,10 +1,12 @@
-// Judgement engine: owns state and runs the rounds. Same interface as the Monopoly
-// Deal engine (events, sync, ask, abort), so the view, server and HUD can drive it.
-// Controllers answer chooseTrump, chooseBid and choosePlay.
+// Judgement engine: owns state and runs the rounds. Same interface as the other
+// engines (events, sync, ask, abort), so the view, server and HUD can drive it.
+// Controllers answer chooseBid and choosePlay; there's no trump to call.
+// The state has Call Bridge's shape (src/callbridge/engine.js), so that game's table
+// view, mirror and prompts work on it; `den` is the dealer here.
 import { GameAborted } from '../game/engine.js';
-import { buildDeck, SUITS, shortName } from './cards.js';
+import { buildDeck, SUITS, shortName } from '../callbridge/cards.js';
 import * as R from './rules.js';
-import { pickTrump, chooseBid, chooseCard } from './ai.js';
+import { chooseBid, chooseCard } from './ai.js';
 
 function shuffle(arr, rng) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -23,7 +25,8 @@ const verb = (p, third, base) => (you(p) ? base : third);
 const listNames = (names) => (names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 export class JudgementGame {
-  constructor({ players, view = null, rng = Math.random, firstPlayer = null }) {
+  // scoring: 'high', 'medium' or 'low' (rules.js).
+  constructor({ players, view = null, rng = Math.random, firstPlayer = null, scoring }) {
     this.kind = 'judgement';
     this.view = view;
     this.rng = rng;
@@ -31,8 +34,11 @@ export class JudgementGame {
     this.listeners = new Set();
     const deck = buildDeck();
     this.allCards = deck.slice();
-    const den = firstPlayer ?? Math.floor(rng() * players.length);
+    const dealer = firstPlayer ?? Math.floor(rng() * players.length);
+    const sizes = R.handSizes(players.length);
     this.state = {
+      kind: 'judgement',
+      scoring: R.scoringKey(scoring),
       players: players.map((p, i) => ({
         id: i, name: p.name, isHuman: !!p.isHuman, controller: p.controller,
         hand: [], tricks: [], bid: null, won: 0, score: 0, history: [],
@@ -40,12 +46,13 @@ export class JudgementGame {
       deck,
       trick: [],
       trump: null,
-      den,
+      den: dealer,
       round: 0,
-      rounds: players.length,
-      handSize: R.cardsEach(players.length),
-      current: den,
-      leader: den,
+      rounds: sizes.length,
+      sizes,
+      handSize: sizes[0],
+      current: dealer,
+      leader: dealer,
       phase: 'setup',
       winners: [],
       winner: null,
@@ -108,45 +115,14 @@ export class JudgementGame {
     state.winners = state.players.filter((p) => p.score === top);
     state.winner = state.winners[0];
     const names = state.winners.map((p) => p.name);
-    const who = listNames(names);
     const wins = names.length === 1 ? verb(state.winner, 'wins', 'win') : 'share the win';
-    this.log(`🏆 ${who} ${wins} with ${top} points!`, 'win');
+    this.log(`🏆 ${listNames(names)} ${wins} with ${top} points!`, 'win');
     await this.sync(200);
     this.emit('gameover', { winner: state.winner, winners: state.winners });
     return state.winner;
   }
 
-  // Shuffles every hand back into the deck and deals a fresh round: half the cards,
-  // the den's call, then the rest.
-  async dealHands(den) {
-    const { state } = this;
-    const size = state.handSize;
-    for (const p of state.players) state.deck.push(...p.hand.splice(0));
-    state.trump = null;
-    shuffle(state.deck, this.rng);
-    state.phase = 'deal';
-    await this.sync(450);
-
-    const first = R.denSees(size);
-    await this.deal(first);
-    for (const p of state.players) R.sortHand(p.hand);
-    await this.sync(250);
-
-    state.phase = 'trump';
-    this.emit('turn', { player: den, what: 'trump' });
-    const suit = await this.ask(den.controller.chooseTrump(this, den));
-    state.trump = SUITS[suit] ? suit : pickTrump(den.hand);
-    this.log(`${den.name} called ${SUITS[state.trump].symbol} ${SUITS[state.trump].name} as trumps.`, 'action');
-    for (const p of state.players) R.sortHand(p.hand, state.trump);
-    await this.sync(500);
-
-    state.phase = 'deal';
-    await this.deal(size - first);
-    for (const p of state.players) R.sortHand(p.hand, state.trump);
-    await this.sync(300);
-  }
-
-  // One card each at a time, starting left of the den.
+  // One card each at a time, starting left of the dealer.
   async deal(count) {
     const { state } = this;
     const n = state.players.length;
@@ -161,43 +137,47 @@ export class JudgementGame {
   async playRound() {
     const { state } = this;
     const n = state.players.length;
-    const size = state.handSize;
-    const den = state.players[state.den];
+    const size = state.sizes[state.round - 1];
+    const dealer = state.players[state.den];
+    const first = (dealer.id + 1) % n;
 
     for (const p of state.players) {
-      state.deck.push(...p.tricks.splice(0));
+      state.deck.push(...p.hand.splice(0), ...p.tricks.splice(0));
       p.bid = null;
       p.won = 0;
     }
     state.deck.push(...state.trick.splice(0).map((t) => t.card));
-    state.current = state.leader = den.id;
-    this.log(`Round ${state.round} of ${state.rounds} · ${den.name} ${verb(den, 'is', 'are')} the den.`, 'turn');
-    // If anyone ends the deal without a trump, the cards are shuffled and dealt again,
-    // and the den calls trumps again.
-    for (;;) {
-      await this.dealHands(den);
-      const none = R.withoutTrumps(state.players, state.trump);
-      if (!none.length) break;
-      const has = none.length === 1 ? verb(none[0], 'has', 'have') : 'have';
-      const text = `${listNames(none.map((p) => p.name))} ${has} no trumps, so the cards are dealt again.`;
-      this.log(text, 'action');
-      this.toast(text, 'action');
-      await this.sync(1800);
-    }
+    state.handSize = size;
+    state.trump = R.trumpFor(state.round);
+    state.current = state.leader = first;
+    const trumps = state.trump ? `${SUITS[state.trump].symbol} ${SUITS[state.trump].name} are trumps` : 'no trumps';
+    this.log(`Round ${state.round} of ${state.rounds} · ${plural(size, 'card')} each, ${trumps} · ${dealer.name} ${verb(dealer, 'deals', 'deal')}.`, 'turn');
 
+    shuffle(state.deck, this.rng);
+    state.phase = 'deal';
+    await this.sync(450);
+    await this.deal(size);
+    for (const p of state.players) R.sortHand(p.hand, state.trump);
+    await this.sync(300);
+
+    // Everyone bids from the dealer's left; the dealer bids last, and can't make the
+    // bids add up to the number of tricks.
     state.phase = 'bid';
+    let total = 0;
     for (let i = 0; i < n; i++) {
-      const p = state.players[(den.id + i) % n];
+      const p = state.players[(first + i) % n];
+      const forbidden = i === n - 1 ? R.forbiddenBid(total, size) : null;
       state.current = p.id;
       this.emit('turn', { player: p, what: 'bid' });
       this.emit('state');
-      const bid = await this.ask(p.controller.chooseBid(this, p, { min: R.MIN_BID, max: size }));
-      p.bid = R.validBid(bid, size) ? bid : chooseBid(this, p, this.rng);
+      const bid = await this.ask(p.controller.chooseBid(this, p, { min: 0, max: size, forbidden }));
+      p.bid = R.validBid(bid, size, forbidden) ? bid : chooseBid(this, p, forbidden, this.rng);
+      total += p.bid;
       this.log(`${p.name} ${verb(p, 'bids', 'bid')} ${p.bid}.`);
       await this.sync(300);
     }
-    const total = state.players.reduce((s, p) => s + p.bid, 0);
-    this.log(`Bids total ${total} for ${plural(size, 'trick')}.`);
+    const over = total > size ? `${total - size} more than there are` : `${size - total} fewer than there are`;
+    this.log(`Bids total ${total} for ${plural(size, 'trick')}: ${over}.`);
 
     for (let t = 0; t < size; t++) {
       state.phase = 'play';
@@ -226,10 +206,10 @@ export class JudgementGame {
 
     state.phase = 'scoring';
     const results = state.players.map((p) => {
-      const points = R.roundPoints(p.bid, p.won);
+      const points = R.roundPoints(p.bid, p.won, state.scoring);
       p.score += points;
       p.history.push({ bid: p.bid, won: p.won, points });
-      this.log(`${p.name}: bid ${p.bid}, won ${p.won} → ${signed(points)} (${p.score}).`, points > 0 ? 'info' : 'warn');
+      this.log(`${p.name}: bid ${p.bid}, won ${p.won} → ${signed(points)} (${p.score}).`, p.won === p.bid ? 'info' : 'warn');
       return { id: p.id, bid: p.bid, won: p.won, points, score: p.score };
     });
     this.emit('round', { round: state.round, results });

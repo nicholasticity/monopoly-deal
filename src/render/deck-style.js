@@ -1,8 +1,8 @@
-// How Judgement's cards look on this screen. The suits are the same underneath
+// How Call Bridge's and Judgement's cards look on this screen. The suits are the same underneath
 // (the rules, bots and server only know spades, hearts, clubs and diamonds); a
 // style changes their names, symbols and colours (and the face cards' names) here, so online each player sees
 // the deck they picked. Colours are in textures.js and style.css, by suit key.
-import { SUITS } from '../judgement/cards.js';
+import { SUITS } from '../callbridge/cards.js';
 
 export const DECK_STYLES = {
   classic: {

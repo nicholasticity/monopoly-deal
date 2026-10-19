@@ -1,8 +1,16 @@
-// Headless AI-vs-AI Judgement games to sanity-check the rules engine.
-// Usage: node scripts/simulate-judgement.mjs [games=200]
+// Headless AI-vs-AI Judgement games to check the rules engine:
+// the hand sizes and trumps round by round, the dealer's restricted bid, and the
+// scores under each scoring system.
+// Usage: node scripts/simulate-judgement.mjs [games=120]
 import { JudgementGame } from '../src/judgement/engine.js';
 import { JudgementAI } from '../src/judgement/ai.js';
 import * as R from '../src/judgement/rules.js';
+
+const fail = (msg) => {
+  console.error(`FAIL: ${msg}`);
+  process.exit(1);
+};
+const eq = (a, b, what) => JSON.stringify(a) === JSON.stringify(b) || fail(`${what}: got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
 
 function mulberry32(seed) {
   return () => {
@@ -13,92 +21,85 @@ function mulberry32(seed) {
   };
 }
 
-function checkCards(game) {
-  const { state } = game;
-  const seen = new Set();
-  const note = (card, where) => {
-    if (seen.has(card.id)) throw new Error(`${card.name} twice (${where})`);
-    seen.add(card.id);
-  };
-  state.deck.forEach((c) => note(c, 'deck'));
-  state.trick.forEach((t) => note(t.card, 'trick'));
-  for (const p of state.players) {
-    p.hand.forEach((c) => note(c, `${p.name}.hand`));
-    p.tricks.forEach((c) => note(c, `${p.name}.tricks`));
-    if (p.tricks.length !== p.won * state.players.length) throw new Error(`${p.name} has ${p.tricks.length} trick cards for ${p.won} tricks`);
-  }
-  if (seen.size !== 52) throw new Error(`card count ${seen.size}`);
-}
+// The rules as written on kard.games.
+eq(R.handSizes(4), [7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7], '4 players: hand sizes');
+eq(R.startCards(7), 7, '7 players start with 7');
+eq(R.startCards(8), 6, '8 players start with 6');
+eq([1, 2, 3, 4, 5, 6].map(R.trumpFor), ['spades', 'diamonds', 'clubs', 'hearts', null, 'spades'], 'trump order');
+eq([R.roundPoints(3, 3, 'high'), R.roundPoints(3, 2, 'high'), R.roundPoints(0, 0, 'high'), R.roundPoints(0, 1, 'high')], [43, -43, 10, -10], 'high scoring');
+eq([R.roundPoints(3, 3, 'medium'), R.roundPoints(3, 4, 'medium'), R.roundPoints(0, 0, 'medium')], [30, 0, 0], 'medium scoring');
+eq([R.roundPoints(3, 3, 'low'), R.roundPoints(3, 1, 'low'), R.roundPoints(0, 0, 'low')], [11, 0, 5], 'low scoring');
+eq([R.forbiddenBid(2, 5), R.forbiddenBid(7, 5), R.forbiddenBid(0, 3)], [3, null, 3], 'the dealer\'s ruled-out bid');
 
-// Checks every play against the hand it came from, before the engine applies it.
+// Watches a controller's decisions: the prompt it's given, and the bids it makes.
 class CheckedAI extends JudgementAI {
-  async choosePlay(game, me) {
-    const id = await super.choosePlay(game, me);
-    const card = me.hand.find((c) => c.id === id);
-    if (!card || !R.legalCards(me.hand, game.state.trick).includes(card)) throw new Error(`${me.name} played an illegal card`);
-    return id;
-  }
-
   async chooseBid(game, me, range) {
-    const bid = await super.chooseBid(game, me, range);
-    if (!R.validBid(bid, game.state.handSize) || range.min !== R.MIN_BID || range.max !== game.state.handSize) throw new Error(`bad bid ${bid}`);
-    return bid;
+    const { state } = game;
+    const n = state.players.length;
+    const lastToBid = me.id === state.den;
+    const others = state.players.filter((p) => p !== me && p.bid != null).reduce((s, p) => s + p.bid, 0);
+    if (range.min !== 0 || range.max !== me.hand.length) fail('wrong bid range');
+    if (lastToBid) {
+      if (state.players.filter((p) => p.bid != null).length !== n - 1) fail('the dealer did not bid last');
+      if (range.forbidden !== R.forbiddenBid(others, me.hand.length)) fail('wrong ruled-out bid for the dealer');
+    } else if (range.forbidden != null) fail('only the dealer has a ruled-out bid');
+    // Sometimes try the ruled-out bid (as a careless person might): the engine must not take it.
+    if (lastToBid && range.forbidden != null && this.rng() < 0.3) return range.forbidden;
+    return super.chooseBid(game, me, range);
   }
 }
 
-// Spot checks of the scoring rule (bid 3 from the rules).
-const expect = [[3, 3, 30], [3, 4, 31], [3, 5, 32], [3, 6, -33], [3, 7, -34], [3, 2, -30], [3, 0, -30], [2, 3, 21], [2, 4, -22]];
-for (const [bid, won, points] of expect) {
-  if (R.roundPoints(bid, won) !== points) throw new Error(`roundPoints(${bid}, ${won}) = ${R.roundPoints(bid, won)}, expected ${points}`);
-}
-const t = (suit, rank, playerId) => ({ playerId, card: { suit, rank } });
-if (R.trickWinner([t('hearts', 5, 0), t('hearts', 14, 1), t('spades', 2, 2)], 'spades').playerId !== 2) throw new Error('trump should win');
-if (R.trickWinner([t('hearts', 5, 0), t('clubs', 14, 1), t('hearts', 9, 2)], 'spades').playerId !== 2) throw new Error('led suit should win');
-
-const games = Number(process.argv[2] || 200);
-const stats = { byPlayers: {}, made: 0, bids: 0, busts: 0, bidSum: 0, wins: [], rounds: {}, deals: {} };
-const started = Date.now();
+const games = Number(process.argv[2] || 120);
+const stats = { rounds: 0, made: 0, bids: 0, zero: 0, noTrump: 0, byScoring: {} };
 for (let g = 0; g < games; g++) {
-  const rng = mulberry32(g + 1);
   const n = 2 + (g % 4);
-  const game = new JudgementGame({
-    players: Array.from({ length: n }, (_, i) => ({ name: `Bot ${i + 1}`, controller: new CheckedAI() })),
-    rng,
+  const scoring = Object.keys(R.SCORING)[g % 3];
+  const rng = mulberry32(500 + g);
+  const players = Array.from({ length: n }, (_, i) => {
+    const ai = new CheckedAI();
+    ai.rng = rng;
+    return { name: `AI${i}`, controller: ai };
   });
-  let rounds = 0;
+  const game = new JudgementGame({ players, rng, scoring });
+  const { state } = game;
+  const sizes = R.handSizes(n);
+  let round = 0;
+  const expected = new Array(n).fill(0);
   game.on((type, data) => {
-    if (type === 'state') checkCards(game);
-    // A deal counts once the den calls; bidding only starts once everyone holds a trump.
-    if (type === 'turn' && data.what === 'trump') stats.deals[n] = (stats.deals[n] || 0) + 1;
-    if (type === 'turn' && data.what === 'bid' && R.withoutTrumps(game.state.players, game.state.trump).length) throw new Error('bidding with someone out of trumps');
+    if (type === 'state' && state.phase === 'bid' && state.round !== round) {
+      round = state.round;
+      if (state.handSize !== sizes[round - 1]) fail(`round ${round}: ${state.handSize} cards, expected ${sizes[round - 1]}`);
+      if (state.trump !== R.trumpFor(round)) fail(`round ${round}: wrong trump`);
+      for (const p of state.players) if (p.hand.length !== state.handSize) fail(`round ${round}: ${p.name} holds ${p.hand.length}`);
+      if (state.trump === null) stats.noTrump++;
+    }
     if (type === 'round') {
-      rounds++;
-      const size = game.state.handSize;
-      const won = data.results.reduce((s, r) => s + r.won, 0);
-      if (won !== size) throw new Error(`${won} tricks won in a ${size}-trick round`);
+      stats.rounds++;
+      const total = data.results.reduce((s, r) => s + r.bid, 0);
+      if (total === state.handSize) fail(`round ${data.round}: bids add up to the tricks`);
+      if (data.results.reduce((s, r) => s + r.won, 0) !== state.handSize) fail('tricks don\'t add up');
       for (const r of data.results) {
+        const points = R.roundPoints(r.bid, r.won, scoring);
+        if (r.points !== points) fail(`wrong points for bid ${r.bid}, won ${r.won}`);
+        expected[r.id] += points;
+        if (r.score !== expected[r.id]) fail('running score off');
         stats.bids++;
-        stats.bidSum += r.bid;
-        const state = R.bidState(r.bid, r.won);
-        if (state === 'made') stats.made++;
-        if (state === 'bust') stats.busts++;
+        if (r.bid === r.won) stats.made++;
+        if (r.bid === 0) stats.zero++;
       }
     }
   });
-  const winner = await game.run();
-  if (rounds !== n) throw new Error(`${rounds} rounds for ${n} players`);
-  if (game.state.handSize !== R.cardsEach(n)) throw new Error('hand size');
-  const top = Math.max(...game.state.players.map((p) => p.score));
-  if (winner.score !== top || !game.state.winners.every((p) => p.score === top)) throw new Error('wrong winner');
-  for (const p of game.state.players) {
-    if (p.history.length !== n) throw new Error('history length');
-    if (p.history.reduce((s, h) => s + h.points, 0) !== p.score) throw new Error('score total');
-  }
-  stats.byPlayers[n] = (stats.byPlayers[n] || 0) + 1;
-  stats.rounds[n] = (stats.rounds[n] || 0) + rounds;
-  stats.wins.push(top);
+  await game.run();
+  if (round !== sizes.length) fail(`played ${round} rounds, expected ${sizes.length}`);
+  const top = Math.max(...expected);
+  if (state.winners.some((p) => p.score !== top) || !state.winners.length) fail('wrong winner');
+  const s = (stats.byScoring[scoring] ??= { games: 0, top: 0 });
+  s.games++;
+  s.top += top;
 }
-const pct = (a, b) => `${((100 * a) / b).toFixed(0)}%`;
-console.log(`games=${games} in ${((Date.now() - started) / 1000).toFixed(1)}s, by player count:`, stats.byPlayers);
-console.log('redeals per round:', Object.fromEntries(Object.keys(stats.rounds).map((k) => [k, pct(stats.deals[k] - stats.rounds[k], stats.rounds[k])])));
-console.log(`bids made ${pct(stats.made, stats.bids)}, short ${pct(stats.bids - stats.made - stats.busts, stats.bids)}, bust ${pct(stats.busts, stats.bids)}; average bid ${(stats.bidSum / stats.bids).toFixed(1)}; average winning score ${(stats.wins.reduce((a, b) => a + b, 0) / games).toFixed(0)}`);
+
+const pct = (x) => `${(100 * x).toFixed(0)}%`;
+console.log(`games=${games}, rounds=${stats.rounds} (${stats.noTrump} without trumps)`);
+console.log(`bids made exactly ${pct(stats.made / stats.bids)}; ${pct(stats.zero / stats.bids)} of bids were 0`);
+for (const [k, s] of Object.entries(stats.byScoring)) console.log(`  ${k} scoring: average winning score ${(s.top / s.games).toFixed(0)}`);
+console.log('OK');

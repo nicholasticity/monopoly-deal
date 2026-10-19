@@ -78,6 +78,22 @@ export class Viewer {
         cards,
       };
     }
+    if (game.kind === 'pool') {
+      // Nothing is hidden at the pool table. The last shot goes along so every browser
+      // can replay it.
+      return {
+        balls: state.balls,
+        groups: state.groups,
+        current: state.current,
+        phase: state.phase,
+        ballInHand: state.ballInHand,
+        shots: state.shots,
+        shot: state.shot,
+        last: state.last,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'bingo') {
       // Only your own grid, until the game is over; everyone sees how many lines.
       const open = state.phase === 'over';
@@ -97,8 +113,9 @@ export class Viewer {
         cards,
       };
     }
-    if (game.kind === 'judgement') {
-      // Only your own hand is private; cards played to a trick stay face up.
+    if (game.kind === 'callbridge' || game.kind === 'judgement') {
+      // Call Bridge and Judgement. Only your own hand is private; cards played to a
+      // trick stay face up.
       return {
         players: state.players.map((p) => ({
           id: p.id,
@@ -120,6 +137,8 @@ export class Viewer {
         leader: state.leader,
         phase: state.phase,
         winners: state.winners.map((p) => p.id),
+        // Judgement only: how it's scored, and the hand size each round.
+        ...(game.kind === 'judgement' && { scoring: state.scoring, sizes: state.sizes }),
         cards,
       };
     }

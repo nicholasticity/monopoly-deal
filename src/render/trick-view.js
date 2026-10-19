@@ -1,11 +1,12 @@
-// The Judgement table, built on the Monopoly Deal one: a header bar per player
-// (score, tricks won of the bid), the trick in the middle with each card in front
-// of whoever played it, and the local hand along the bottom.
+// The Call Bridge table (and Judgement's), built on the Monopoly Deal one: a header bar
+// per player (score, tricks won of the bid), the trick in the middle with each card in
+// front of whoever played it, and the local hand along the bottom.
 import { TableView, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc } from './view.js';
 import { cardImageURL, PLAYING_BACK } from './textures.js';
-import { SUIT_ORDER } from '../judgement/cards.js';
+import { SUIT_ORDER } from '../callbridge/cards.js';
 import { suitLook } from './deck-style.js';
-import { legalCards, trickWinner, bidState } from '../judgement/rules.js';
+import { legalCards, trickWinner, bidState } from '../callbridge/rules.js';
+import { bidState as exactBidState } from '../judgement/rules.js';
 
 // Phases where someone is deciding something.
 const DECIDING = new Set(['trump', 'bid', 'play']);
@@ -27,11 +28,13 @@ function* stateCards(state) {
   }
 }
 
-export class JudgementView extends TableView {
-  constructor(container) {
+export class TrickView extends TableView {
+  // back: the card back to deal with (Judgement's has its own name on it).
+  constructor(container, { back = PLAYING_BACK } = {}) {
     super(container);
-    this.root.classList.add('judgement');
-    this.backURL = cardImageURL(PLAYING_BACK);
+    this.root.classList.add('tricks');
+    this.back = back;
+    this.backURL = cardImageURL(back);
     for (const { spot, label } of Object.values(this.spots)) {
       spot.classList.add('hidden');
       label.classList.add('hidden');
@@ -42,7 +45,7 @@ export class JudgementView extends TableView {
 
   // The back is in the deck style picked before this game.
   attach(game) {
-    this.backURL = cardImageURL(PLAYING_BACK);
+    this.backURL = cardImageURL(this.back);
     super.attach(game);
   }
 
@@ -113,7 +116,9 @@ export class JudgementView extends TableView {
     const meBottom = portrait ? trayTop - ins.bottom : trayTop - gap;
     const meW = portrait ? W : Math.min(W, 560);
     const panels = [{ x: (w - meW) / 2, y: meBottom - head, w: meW, h: head }];
-    const cols = portrait ? Math.min(k, 2) : k;
+    // Wide screens: one row of bars, or two once there are more than four opponents
+    // (online rooms seat up to eight), so names stay readable.
+    const cols = portrait ? Math.min(k, 2) : k > 4 ? Math.ceil(k / 2) : k;
     const colW = Math.min((W - (cols - 1) * gap) / cols, portrait ? Infinity : BAR_MAX);
     const top = ins.top + 6;
     for (let i = 0; i < k; i++) {
@@ -143,7 +148,7 @@ export class JudgementView extends TableView {
     // Prompts dock above your panel, so your bid and tricks stay in view.
     const dock = h - panels[0].y;
     this.geo = { portrait, head, side: 0, lead: head, inner, panels, deck, discard: deck, hand, trick, dock };
-    this.layoutKey = `judgement:${portrait ? 'tall' : 'wide'}:${n}:${rows}`;
+    this.layoutKey = `tricks:${portrait ? 'tall' : 'wide'}:${n}:${rows}`;
     this.root.style.setProperty('--head', `${head}px`);
     this.root.style.setProperty('--inner', `${inner}px`);
     this.root.style.setProperty('--side', '0px');
@@ -222,8 +227,11 @@ export class JudgementView extends TableView {
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
     const tricks = p.bid == null ? (p.won ? `${p.won}` : '–') : `${p.won}/${p.bid}`;
-    const made = p.bid == null ? '' : bidState(p.bid, p.won);
-    const den = state.den === i ? '<span class="den-pill" title="The den calls trumps and leads first">Den</span>' : '';
+    // Judgement (kind 'judgement') wants the bid exactly, and has a dealer, not a den.
+    const judgement = state.kind === 'judgement';
+    const made = p.bid == null ? '' : (judgement ? exactBidState : bidState)(p.bid, p.won);
+    const pill = judgement ? '<span class="den-pill" title="The dealer bids last">Dealer</span>' : '<span class="den-pill" title="The den calls trumps and leads first">Den</span>';
+    const den = state.den === i ? pill : '';
     const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}${den}<span class="chips"><span class="chip score" title="Score">${p.score < 0 ? `−${-p.score}` : p.score}<small> pts</small></span><span class="chip tricks ${made}" title="Tricks won / bid"><i class="mini-card"></i>${tricks}</span></span>`;
     if (html !== panel.html) {
       panel.head.innerHTML = html;

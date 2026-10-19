@@ -1,9 +1,11 @@
-// The human side of Judgement: calling trumps and bidding in a panel docked above the
-// hand (so the cards stay in view), playing by clicking a card, and the scores between
-// rounds. Also the score tables and status line, shared by solo and online play.
-import { SUIT_ORDER } from '../judgement/cards.js';
+// The human side of Call Bridge and Judgement: calling trumps (Call Bridge) and bidding
+// in a panel docked above the hand (so the cards stay in view), playing by clicking a
+// card, and the scores between rounds. Also the score tables and status line, shared by
+// solo and online play. Judgement's state says kind: 'judgement'; Call Bridge's doesn't.
+import { SUIT_ORDER } from '../callbridge/cards.js';
 import { suitLook, rankText } from '../render/deck-style.js';
-import * as R from '../judgement/rules.js';
+import * as R from '../callbridge/rules.js';
+import * as OH from '../judgement/rules.js';
 import { AVATARS } from '../render/view.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -24,8 +26,21 @@ function el(tag, cls, html) {
 
 const nameList = (names) => (names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
+// Judgement (exact bids, trumps by turn), rather than Call Bridge.
+const exact = (state) => state.kind === 'judgement';
+// How a bid is going: 'short', 'made' or 'bust', by the game's rules.
+const bidStateOf = (state, bid, won) => (exact(state) ? OH.bidState : R.bidState)(bid, won);
+// The trump suit, or "No trumps" in a Judgement round without them.
+const trumpText = (state) => (state.trump ? `${suitMark(state.trump)} ${suitLook(state.trump).name} are trumps` : 'No trumps this round');
+
 // What each bid pays: the tricks that make it, falling short, and going over by too much.
-function bidOutcome(bid, size) {
+function bidOutcome(state, bid) {
+  const size = state.handSize;
+  if (exact(state)) {
+    const made = OH.roundPoints(bid, bid, state.scoring);
+    const missed = OH.roundPoints(bid, bid + 1, state.scoring);
+    return `<span class="good">Take exactly ${bid}: ${signed(made)}</span><span class="bad">Any other number: ${signed(missed)}</span>`;
+  }
   const top = Math.min(2 * bid - 1, size);
   const made = top > bid ? `Take ${bid}–${top}: ${signed(10 * bid)} to ${signed(R.roundPoints(bid, top))}` : `Take ${bid}: ${signed(10 * bid)}`;
   const parts = [`<span class="good">${made}</span>`, `<span class="bad">Fewer: ${signed(-10 * bid)}</span>`];
@@ -33,14 +48,16 @@ function bidOutcome(bid, size) {
   return parts.join('');
 }
 
-// Everyone's bid so far, in bidding order (from the den).
+// Everyone's bid so far, in bidding order (Call Bridge: from the den; Judgement: from
+// the dealer's left).
 function bidsSoFar(state) {
   const n = state.players.length;
-  const order = Array.from({ length: n }, (_, i) => state.players[(state.den + i) % n]);
+  const first = exact(state) ? state.den + 1 : state.den;
+  const order = Array.from({ length: n }, (_, i) => state.players[(first + i) % n]);
   return order.filter((p) => p.bid != null);
 }
 
-export class JudgementHuman {
+export class TrickHuman {
   constructor(hud) {
     this.hud = hud;
     this.pending = null;
@@ -68,8 +85,9 @@ export class JudgementHuman {
     });
   }
 
-  // Pick a number, read what it pays, then confirm.
-  chooseBid(game, me, { min, max }) {
+  // Pick a number, read what it pays, then confirm. forbidden: in Judgement, the one bid
+  // the dealer can't make (it would make the bids add up to the tricks).
+  chooseBid(game, me, { min, max, forbidden = null }) {
     return new Promise((resolve) => {
       const { state } = game;
       const body = el('div', 'jprompt');
@@ -77,20 +95,25 @@ export class JudgementHuman {
       const before = bidsSoFar(state);
       const total = before.reduce((s, p) => s + p.bid, 0);
       const info = el('div', 'bid-info');
-      info.innerHTML = `<span>${suitMark(state.trump)} ${suitLook(state.trump).name} are trumps · you hold ${trumps}</span>`
+      info.innerHTML = `<span>${trumpText(state)}${state.trump ? ` · you hold ${trumps}` : ''}</span>`
         + `<span>${before.length ? `${before.map((p) => `${esc(p.name)} <b>${p.bid}</b>`).join(' · ')} — total <b>${total}</b> of ${state.handSize}` : `You bid first · ${state.handSize} tricks to play`}</span>`;
       body.appendChild(info);
       const grid = el('div', 'bid-grid');
-      const explain = el('div', 'bid-explain', 'How many tricks will you take?');
+      const ask = exact(state) ? 'How many tricks will you take? Only exactly that many scores.' : 'How many tricks will you take?';
+      const explain = el('div', 'bid-explain', forbidden == null ? ask : `${ask} You deal, so you bid last, and you can’t bid ${forbidden}: the bids can’t add up to ${state.handSize}.`);
       const confirm = el('button', 'primary big', 'Bid');
       confirm.disabled = true;
       let pick = null;
       for (let b = min; b <= max; b++) {
         const btn = el('button', 'bid-btn', String(b));
+        if (b === forbidden) {
+          btn.disabled = true;
+          btn.title = `The bids can’t add up to ${state.handSize}`;
+        }
         btn.addEventListener('click', () => {
           pick = b;
           grid.querySelectorAll('.bid-btn').forEach((x) => x.classList.toggle('on', x === btn));
-          explain.innerHTML = bidOutcome(b, state.handSize);
+          explain.innerHTML = bidOutcome(state, b);
           confirm.textContent = `Bid ${b}`;
           confirm.disabled = false;
         });
@@ -110,8 +133,8 @@ export class JudgementHuman {
   choosePlay(game, me) {
     return new Promise((resolve) => {
       this.pending = { game, me, resolve };
-      if (TOUCH && !JudgementHuman.tapTold) {
-        JudgementHuman.tapTold = true;
+      if (TOUCH && !TrickHuman.tapTold) {
+        TrickHuman.tapTold = true;
         this.hud.toast('Tap a card to lift it, then tap it again to play it.', 'info', 4000);
       }
     });
@@ -156,14 +179,22 @@ export function roundBoard(state, results, seat = -1) {
   const best = Math.max(...results.map((r) => r.score));
   const rows = results.map((r) => {
     const p = state.players[r.id];
-    const how = R.bidState(r.bid, r.won);
+    const how = bidStateOf(state, r.bid, r.won);
     const cls = [r.id === seat ? 'me' : '', r.score === best ? 'lead' : ''].join(' ');
     return `<tr class="${cls}"><th>${dot(r.id)}${esc(p.name)}</th><td>${r.bid}</td><td>${r.won}</td><td class="${how}">${signed(r.points)}</td><td class="total">${scoreText(r.score)}</td></tr>`;
   });
   body.innerHTML = `<table class="score-table"><thead><tr><th></th><th>Bid</th><th>Won</th><th>Points</th><th>Total</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
   if (state.round < state.rounds) {
     const den = state.players[(state.den + 1) % state.players.length];
-    body.appendChild(el('p', 'muted', `Next: round ${state.round + 1} of ${state.rounds} · ${den.id === seat ? 'you are' : `${esc(den.name)} is`} the den.`));
+    const next = state.round + 1;
+    if (exact(state)) {
+      // Judgement: the next hand size and trumps, and who deals.
+      const trump = OH.trumpFor(next);
+      const trumps = trump ? `${suitMark(trump)} trumps` : 'no trumps';
+      body.appendChild(el('p', 'muted', `Next: round ${next} of ${state.rounds} · ${state.sizes[next - 1]} cards, ${trumps} · ${den.id === seat ? 'you deal' : `${esc(den.name)} deals`}.`));
+    } else {
+      body.appendChild(el('p', 'muted', `Next: round ${next} of ${state.rounds} · ${den.id === seat ? 'you are' : `${esc(den.name)} is`} the den.`));
+    }
   }
   return body;
 }
@@ -180,7 +211,7 @@ export function scoreTable(state, seat = -1, final = false) {
   const rows = players.map((p) => {
     const cells = rounds.map((r) => {
       const h = p.history[r];
-      if (h) return `<td class="${R.bidState(h.bid, h.won)}">${signed(h.points)}<small>${h.won}/${h.bid}</small></td>`;
+      if (h) return `<td class="${bidStateOf(state, h.bid, h.won)}">${signed(h.points)}<small>${h.won}/${h.bid}</small></td>`;
       // The round being played: tricks so far.
       if (r + 1 === state.round && state.phase !== 'over' && p.bid != null) return `<td class="now"><small>${p.won}/${p.bid}</small></td>`;
       return '<td></td>';
@@ -213,12 +244,13 @@ export function gameResult(state, seat = -1) {
 // The round and trumps, for the top bar.
 export function gameInfo(state) {
   if (!state.round) return '';
-  const trump = state.trump ? suitMark(state.trump) : '<span class="suit none">?</span>';
+  // Judgement's no-trump rounds say NT; before Call Bridge's den calls, it's a ?.
+  const trump = state.trump ? suitMark(state.trump) : `<span class="suit none">${exact(state) && state.phase !== 'deal' ? 'NT' : '?'}</span>`;
   return `${trump}<span>R${state.round}/${state.rounds}</span>`;
 }
 
 // The status line: what's happening, from `seat`'s point of view. Returns { text, mine }.
-export function judgementStatus(state, seat) {
+export function trickStatus(state, seat) {
   const name = (i) => `<b>${esc(state.players[i]?.name ?? '')}</b>`;
   const mine = state.current === seat;
   switch (state.phase) {
@@ -229,7 +261,7 @@ export function judgementStatus(state, seat) {
     case 'trump':
       return mine ? { text: '<b>Call trumps</b> · pick a suit', mine } : { text: `${name(state.current)} is calling trumps…`, mine };
     case 'bid':
-      return mine ? { text: `<b>Your bid</b> · ${suitMark(state.trump)} trumps`, mine } : { text: `${name(state.current)} is bidding…`, mine };
+      return mine ? { text: `<b>Your bid</b> · ${state.trump ? `${suitMark(state.trump)} trumps` : 'no trumps'}`, mine } : { text: `${name(state.current)} is bidding…`, mine };
     case 'play': {
       if (!mine) return { text: `${name(state.current)} is playing…`, mine };
       const led = R.ledSuit(state.trick);

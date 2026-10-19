@@ -29,7 +29,8 @@ const TRAY_GAP = 10;
 const SHORT_BAR = 100;
 // How long a card takes to glide to a new spot (must match .card in style.css).
 const MOVE_MS = 450;
-const AVATARS = ['#f5b83d', '#4fb3ff', '#ff6b8b', '#5fd68a', '#b48cff'];
+// One per seat, for up to eight players.
+const AVATARS = ['#f5b83d', '#4fb3ff', '#ff6b8b', '#5fd68a', '#b48cff', '#ff9a3c', '#35d0c4', '#c6e35a'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -713,5 +714,5 @@ export class TableView {
   }
 }
 
-// Shared with the Judgement table (judgement-view.js).
+// Shared with the trick-taking games' table (trick-view.js).
 export { W0, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc, sleep };

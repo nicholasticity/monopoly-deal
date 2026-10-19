@@ -470,10 +470,12 @@ function drawBack(ctx) {
   ctx.restore();
 }
 
-// ---------- playing cards (Judgement) ----------
+// ---------- playing cards (Call Bridge and Judgement) ----------
 
 // The back of a playing card, passed wherever a card face would be.
-export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back' };
+// Call Bridge's; Judgement's is the same but for the name.
+export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back', title: 'CALL BRIDGE' };
+export const JUDGEMENT_BACK = { key: 'playing-back-judgement', type: 'playing-back', title: 'JUDGEMENT' };
 
 const SUIT_RED = '#c8102e';
 // Four colours, so spades and clubs (and hearts and diamonds) are easy to tell apart.
@@ -1004,7 +1006,7 @@ function drawFantasyAce(ctx, card) {
 }
 
 // The fantasy back: a night sky with the four suits and the name in a gold medallion.
-function drawFantasyBack(ctx) {
+function drawFantasyBack(ctx, card) {
   base(ctx, '#2b1d4e');
   rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
   ctx.lineWidth = 6;
@@ -1035,8 +1037,8 @@ function drawFantasyBack(ctx) {
   ctx.fillStyle = '#2b1d4e';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  fitFont(ctx, 'JUDGEMENT', 200, 40, '900');
-  ctx.fillText('JUDGEMENT', 0, 22);
+  fitFont(ctx, card.title, 200, 40, '900');
+  ctx.fillText(card.title, 0, 22);
   ctx.restore();
 }
 
@@ -1060,8 +1062,8 @@ function drawPlaying(ctx, card) {
   }
 }
 
-function drawPlayingBack(ctx) {
-  if (fantasy()) return drawFantasyBack(ctx);
+function drawPlayingBack(ctx, card) {
+  if (fantasy()) return drawFantasyBack(ctx, card);
   base(ctx, '#1d3461');
   rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
   ctx.lineWidth = 6;
@@ -1098,8 +1100,8 @@ function drawPlayingBack(ctx) {
   ctx.fillStyle = '#1d3461';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  fitFont(ctx, 'JUDGEMENT', 250, 44, '900');
-  ctx.fillText('JUDGEMENT', 0, 22);
+  fitFont(ctx, card.title, 250, 44, '900');
+  ctx.fillText(card.title, 0, 22);
   ctx.restore();
 }
 
@@ -1114,7 +1116,7 @@ export function cardCanvas(card) {
   const ctx = canvas.getContext('2d');
   if (!card) drawBack(ctx);
   else if (card.type === 'playing') drawPlaying(ctx, card);
-  else if (card.type === 'playing-back') drawPlayingBack(ctx);
+  else if (card.type === 'playing-back') drawPlayingBack(ctx, card);
   else if (card.type === 'money') drawMoney(ctx, card);
   else if (card.type === 'property') drawProperty(ctx, card);
   else if (card.type === 'wild') drawWild(ctx, card);

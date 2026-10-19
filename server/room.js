@@ -4,15 +4,21 @@
 import { Game, GameAborted } from '../src/game/engine.js';
 import { AIController } from '../src/game/ai.js';
 import * as R from '../src/game/rules.js';
-import { JudgementGame } from '../src/judgement/engine.js';
-import { JudgementAI } from '../src/judgement/ai.js';
+import { CallBridgeGame } from '../src/callbridge/engine.js';
+import { CallBridgeAI } from '../src/callbridge/ai.js';
 import { BingoGame } from '../src/bingo/engine.js';
 import { BingoAI } from '../src/bingo/ai.js';
 import { validGrid } from '../src/bingo/rules.js';
 import { WordleGame } from '../src/wordle/engine.js';
 import { WordleAI } from '../src/wordle/ai.js';
 import { DEFAULT_WORDS, WORD_COUNTS } from '../src/wordle/rules.js';
-import { GAMES, DEFAULT_GAME, BOT_NAMES, SPEED, MAX_PLAYERS, TIMEOUTS, botDelay } from '../src/game/settings.js';
+import { JudgementGame } from '../src/judgement/engine.js';
+import { JudgementAI } from '../src/judgement/ai.js';
+import { SCORING, DEFAULT_SCORING } from '../src/judgement/rules.js';
+import { PoolGame } from '../src/pool/engine.js';
+import { PoolAI } from '../src/pool/ai.js';
+import { seatsFor } from '../src/pool/rules.js';
+import { GAMES, DEFAULT_GAME, BOT_NAMES, MAX_PLAYERS, TIMEOUTS, botDelay, paceFor, maxFor } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 
 const MAX_MEMBERS = MAX_PLAYERS + 3; // a few spectators may watch a running game
@@ -28,7 +34,7 @@ const EMPTY_ROOM_MS = 5 * 60_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
-const ENGINES = { deal: [Game, AIController], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI] };
+const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI] };
 // Decisions everyone makes at the same time (Bingo grids, Wordle guesses): each player
 // sees only their own clock.
 const TOGETHER = new Set(['arrange', 'guess']);
@@ -56,6 +62,8 @@ export class Room {
     this.kind = GAMES[game] ? game : DEFAULT_GAME;
     // Wordle: how many words a game is.
     this.words = DEFAULT_WORDS;
+    // Judgement: how it's scored (high, medium or low).
+    this.scoring = DEFAULT_SCORING;
     this.status = 'lobby';
     this.game = null;
     this.chat = [];
@@ -247,7 +255,7 @@ export class Room {
   }
 
   addBot(m) {
-    if (!this.isHost(m) || this.status !== 'lobby' || this.members.length >= MAX_PLAYERS) return;
+    if (!this.isHost(m) || this.status !== 'lobby' || this.members.length >= maxFor(this.kind)) return;
     const used = new Set(this.members.map((x) => x.name));
     const name = BOT_NAMES.find((n) => !used.has(n)) || this.uniqueName('Bot');
     this.members.push({ id: ++this.seq, kind: 'bot', name, seat: -1, away: false, left: false });
@@ -266,6 +274,12 @@ export class Room {
     conn?.send({ type: 'kicked' });
     this.leave(target, 'was removed by the host');
     conn?.drop();
+  }
+
+  setScoring(m, key) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !SCORING[key]) return;
+    this.scoring = key;
+    this.broadcastRoom();
   }
 
   setWords(m, n) {
@@ -330,9 +344,16 @@ export class Room {
 
   // ---------- the game ----------
 
+  // How many of the members play the next game: everyone up to the table's size;
+  // pool is two, or four as two teams. The rest watch.
+  seatCount() {
+    const n = Math.min(this.members.length, MAX_PLAYERS);
+    return this.kind === 'pool' ? Math.min(n, seatsFor(n)) : n;
+  }
+
   start(m) {
     if (!this.isHost(m) || this.status !== 'lobby') return;
-    const seated = this.members.slice(0, MAX_PLAYERS);
+    const seated = this.members.slice(0, this.seatCount());
     if (seated.length < 2) return;
     const [Engine, Bot] = ENGINES[this.kind];
     const players = seated.map((s, i) => {
@@ -342,7 +363,7 @@ export class Room {
       s.ai = new Bot({ delay: botDelay(this.kind) * this.timeScale });
       return { name: s.name, controller: s.kind === 'bot' ? s.ai : new SeatController(this, s) };
     });
-    for (const s of this.members.slice(MAX_PLAYERS)) s.seat = -1;
+    for (const s of this.members.slice(seated.length)) s.seat = -1;
     this.viewers = seated.map((_, i) => new Viewer(i));
     this.spectator = new Viewer(-1);
     this.log = [];
@@ -350,9 +371,9 @@ export class Room {
     this.gameNo++;
     // The server has no renderer; the "view" just paces the game so clients can animate.
     // In Wordle the speed is only how fast the bots think; the pauses stay put.
-    const pace = this.kind === 'wordle' ? 1 : SPEED.pace;
+    const pace = paceFor(this.kind);
     const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
-    const game = new Engine({ players, view, words: this.words });
+    const game = new Engine({ players, view, words: this.words, scoring: this.scoring });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -426,13 +447,13 @@ export class Room {
       case 'turn':
         this.broadcast({ type: 'turn', playerId: data.player.id, what: data.what ?? null });
         break;
-      // Judgement: a round's scores.
+      // Call Bridge and Judgement: a round's scores.
       case 'round':
         this.broadcast({ type: 'round', round: data.round, results: data.results });
         break;
       case 'gameover': {
         const w = data.winner;
-        if (['judgement', 'bingo', 'wordle'].includes(game.kind)) {
+        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool'].includes(game.kind)) {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -567,7 +588,10 @@ export class Room {
       status: this.status,
       game: this.kind,
       words: this.words,
-      max: MAX_PLAYERS,
+      scoring: this.scoring,
+      max: maxFor(this.kind),
+      // How many of the members would play if the game started now.
+      seats: this.seatCount(),
       members: this.members.map((m) => ({
         id: m.id,
         name: m.name,
@@ -633,7 +657,7 @@ class SeatController {
     return this.room.ask(this.m, 'discard', { count }, () => this.m.ai.chooseDiscards(game, me, count), (v) => this.ids(v));
   }
 
-  // Judgement. The engine checks the answers and has the bot decide if they won't do.
+  // Call Bridge and Judgement. The engine checks the answers and has the bot decide if they won't do.
   chooseTrump(game, me) {
     return this.room.ask(this.m, 'trump', {}, () => this.m.ai.chooseTrump(game, me), (v) => (typeof v === 'string' ? v : null));
   }
@@ -658,6 +682,14 @@ class SeatController {
   // Wordle. The engine checks the word; a non-word counts as a miss.
   chooseGuess(game, me) {
     return this.room.ask(this.m, 'guess', { round: game.state.round }, () => this.m.ai.chooseGuess(game, me), (v) => (typeof v === 'string' ? v.slice(0, 5) : null));
+  }
+
+  // Pool. The engine checks the shot and the cue ball's place, and has the bot shoot if
+  // they won't do.
+  chooseShot(game, me, args) {
+    const num = (x) => (typeof x === 'number' ? x : NaN);
+    const parse = (v) => (v && typeof v === 'object' ? { dx: num(v.dx), dy: num(v.dy), power: num(v.power), cue: v.cue ? { x: num(v.cue.x), y: num(v.cue.y) } : null } : null);
+    return this.room.ask(this.m, 'shot', args, () => this.m.ai.chooseShot(game, me, args), parse);
   }
 
   stopGuess() {

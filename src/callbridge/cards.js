@@ -1,4 +1,4 @@
-// The standard 52-card deck for Judgement. Aces are high (rank 14).
+// The standard 52-card deck for Call Bridge and Judgement. Aces are high (rank 14).
 
 // A four-colour deck (black spades, red hearts, green clubs, blue diamonds), so no two
 // suits look alike. The colours are in textures.js and style.css, by suit name.
