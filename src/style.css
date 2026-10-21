@@ -1168,6 +1168,12 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 @media (max-width: 370px) {
   .deal { display: none; }
 }
+/* Still too wide (in a game online, with the deck and discard counts too): slimmer still. */
+#topbar.tighter .top-actions { gap: 2px; }
+#topbar.tighter .top-actions button { padding-left: 2px; padding-right: 2px; }
+@media (max-width: 340px) {
+  #topbar.tighter .top-actions .ico { font-size: 0.85em; }
+}
 
 /* Dialogs on phones: smaller cards and padding, and room for browser toolbars. */
 @media (max-width: 640px), (max-height: 540px) {
