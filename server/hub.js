@@ -35,7 +35,8 @@ function clientIp(req) {
   return req.socket.remoteAddress || '?';
 }
 
-export function attachGameServer(httpServer, { path = '/ws', log = console.log, timeScale = 1, limits = {} } = {}) {
+// titleOf(videoId): a YouTube video's title for the room's music (tests pass their own).
+export function attachGameServer(httpServer, { path = '/ws', log = console.log, timeScale = 1, limits = {}, titleOf } = {}) {
   const limit = { ...LIMITS, ...limits };
   const ice = iceServers();
   const rooms = new Map();
@@ -140,7 +141,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'create': {
             if (!allowEntry(ip)) return conn.send({ type: 'error', message: 'Too many attempts. Wait a minute and try again.', fatal: true });
             if (rooms.size >= MAX_ROOMS) return conn.send({ type: 'error', message: 'The server is full right now. Try again later.', fatal: true });
-            const fresh = new Room(newCode(), closeRoom, { timeScale, game: msg.game });
+            const fresh = new Room(newCode(), closeRoom, { timeScale, game: msg.game, titleOf });
             rooms.set(fresh.code, fresh);
             log(`[rooms] opened ${fresh.code} (${rooms.size} open)`);
             enter(fresh, msg);
@@ -174,6 +175,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'voice': return room.setVoice(member, msg.on, msg.muted);
           case 'rtc': return room.relay(member, msg.to, msg.data);
           case 'aim': return room.relayAim(member, msg);
+          case 'music': return room.musicOp(member, msg);
         }
       } catch (e) {
         console.error('[rooms] message failed', msg.type, e);

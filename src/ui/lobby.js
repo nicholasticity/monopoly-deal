@@ -32,7 +32,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), words(n), scoring(key), game(kind), start, leave, rules, voice(button) }
+  // actions: { addBot, kick(id), words(n), scoring(key), game(kind), start, leave, rules, voice(button), music }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -57,8 +57,11 @@ export class Lobby {
     rules.addEventListener('click', () => this.actions.rules());
     this.voiceBtn = el('button', 'ghost voice-btn');
     this.voiceBtn.addEventListener('click', () => this.actions.voice(this.voiceBtn));
+    this.musicBtn = el('button', 'ghost music-btn', '🎵 Music');
+    this.musicBtn.title = 'Play YouTube songs for the room';
+    this.musicBtn.addEventListener('click', () => this.actions.music());
     const headBtns = el('div', 'lobby-head-btns');
-    headBtns.append(this.voiceBtn, rules, leave);
+    headBtns.append(this.voiceBtn, this.musicBtn, rules, leave);
     head.append(title, headBtns);
 
     const invite = el('div', 'invite');
@@ -126,7 +129,7 @@ export class Lobby {
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, this.addBotBtn, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.poolHint, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.poolHint, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -201,9 +204,15 @@ export class Lobby {
       }
       this.listEl.appendChild(row);
     });
-    for (let i = players; i < room.max; i++) this.listEl.appendChild(el('div', 'seat empty', host ? 'Empty seat — invite a friend or add a bot' : 'Empty seat'));
-
-    this.addBotBtn.style.display = host && room.status === 'lobby' && players < room.max ? '' : 'none';
+    // The seats still free, in one row (not one each: a room has up to eight), with the
+    // host's button to fill one with a bot.
+    const open = room.max - players;
+    if (open > 0) {
+      const row = el('div', 'seat empty');
+      row.appendChild(el('span', 'seat-tags', `${open} open seat${open === 1 ? '' : 's'}${host ? ' · invite a friend' : ''}`));
+      if (host && room.status === 'lobby') row.appendChild(this.addBotBtn);
+      this.listEl.appendChild(row);
+    }
     const wordle = room.game === 'wordle';
     this.wordsRow.style.display = wordle ? '' : 'none';
     this.poolHint.style.display = room.game === 'pool' ? '' : 'none';

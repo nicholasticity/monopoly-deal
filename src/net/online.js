@@ -16,6 +16,7 @@ import { ChatPanel } from '../ui/chat.js';
 import { Lobby } from '../ui/lobby.js';
 import { cueLog } from '../ui/sound.js';
 import { VoiceChat, voiceSupported } from './voice.js';
+import { RoomMusic } from './music.js';
 import { TRICK_GAMES, TIMEOUTS } from '../game/settings.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -91,10 +92,13 @@ export class OnlineSession {
       leave: () => this.confirmLeave(),
       rules: () => this.hud.showRules(),
       voice: (anchor) => this.voiceButton(anchor),
+      music: () => this.music.toggle(),
     });
     this.voice = new VoiceChat((type, data) => this.send(type, data));
     this.voice.onChange = () => this.showVoice();
     this.voice.onNotice = (text) => this.notice(text);
+    this.music = new RoomMusic({ send: (op, data) => this.send('music', { op, ...data }), toast: (text, kind) => this.notice(text, kind) });
+    this.music.onChange = () => this.showMusic();
 
     this.conn = new Connection();
     this.conn.onOpen = () => this.join();
@@ -199,6 +203,9 @@ export class OnlineSession {
         break;
       case 'aim':
         this.view.setRemoteAim?.(msg);
+        break;
+      case 'music':
+        this.music.apply(msg);
         break;
       case 'rtc':
         this.voice.signal(msg.from, msg.data);
@@ -522,6 +529,13 @@ export class OnlineSession {
     );
   }
 
+  // The 🎵 buttons light up while the room has music on.
+  showMusic() {
+    const on = this.music.on && !!this.music.current;
+    this.hud.musicBtn.classList.toggle('on', on);
+    this.lobby.musicBtn.classList.toggle('on', on);
+  }
+
   // Lobby notes and in-game toasts: the lobby covers the toasts.
   notice(text, kind = 'warn') {
     if (this.lobby.shown) this.lobby.notice(text, kind);
@@ -631,6 +645,8 @@ export class OnlineSession {
     this.closed = true;
     clearInterval(this.tick);
     this.voice.close();
+    this.music.destroy();
+    this.hud.musicBtn.classList.remove('on');
     sessionStorage.removeItem(VOICE_KEY);
     this.conn.close();
     this.lobby.hide();

@@ -55,6 +55,10 @@ While you play:
   each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
   **M** to mute. See [Voice chat](#voice-chat). (In Wordle, Enter and M are for your guess:
   use the buttons instead.)
+- **Listen together** with 🎵 (in the lobby or the top bar): paste a YouTube link and everyone
+  in the room hears the same song at the same moment. Anyone can queue songs, pause, play
+  and skip, for everyone; the volume, mute and "Music off for me" are only yours. The player
+  sits in a small card you can drag anywhere. See [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
   Judgement, to bid or play); in
@@ -135,6 +139,18 @@ connection details and never carries any audio.
   ```
 
   Without it, public STUN servers from Google and Cloudflare are used.
+
+### Music
+
+The songs play in YouTube's own player in each browser; the server only keeps the room's
+queue and where the song is, and each player keeps in step with it (within about 2 s).
+
+- Some videos don't allow playing on other sites (many official music videos do, some
+  don't). Those are taken off the queue with a note to whoever added them.
+- If the browser blocks sound until you've clicked something, the card shows
+  **Tap to listen**.
+- YouTube needs the player on show, so it stays visible (small) while music plays. Each song
+  title is looked up from YouTube by the server, which needs internet access.
 
 ### Safety on a public server
 
@@ -374,13 +390,15 @@ src/
     chat.js      room chat panel
   net/       online client
     connection.js  WebSocket with automatic reconnect
-    online.js      one online session: lobby, game, prompts, chat, voice
+    online.js      one online session: lobby, game, prompts, chat, voice, music
     mirror.js      read-only copy of the server's game for the view and HUD
     trick-mirror.js      the same for a Call Bridge or Judgement game
     bingo-mirror.js      and for a Bingo game
     wordle-mirror.js     and for a Wordle game
     pool-mirror.js       and for a Pool game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
+    music.js       the room's music: the YouTube player kept in step with the room
+    youtube.js     YouTube links to video ids (shared with the server)
   main.js    wires it all together
 server/
   index.js     production server (static files + rooms)

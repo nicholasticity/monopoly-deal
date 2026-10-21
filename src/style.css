@@ -789,7 +789,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .chat-line.mine b { color: var(--gold); }
 .chat-line.system { color: var(--muted); font-style: italic; font-size: 0.82rem; }
 .chat-form { display: flex; gap: 6px; }
-.chat-form input, .invite input, .join-row input {
+.chat-form input, .invite input, .join-row input, .music-add input {
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -800,7 +800,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   padding: 7px 10px;
   user-select: text;
 }
-.chat-form input:focus, .invite input:focus, .join-row input:focus, .start input:focus { outline: 2px solid rgba(255, 215, 94, 0.55); outline-offset: 0; }
+.chat-form input:focus, .invite input:focus, .join-row input:focus, .start input:focus, .music-add input:focus { outline: 2px solid rgba(255, 215, 94, 0.55); outline-offset: 0; }
 
 /* ---------- lobby ---------- */
 #lobby-layer { position: fixed; inset: 0; pointer-events: none; z-index: 9; }
@@ -830,6 +830,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 .seat.me { border-color: rgba(255, 215, 94, 0.55); background: rgba(255, 215, 94, 0.08); }
 .seat.empty { color: var(--muted); font-size: 0.85rem; border-style: dashed; background: transparent; }
+.seat.empty .add-bot { padding: 4px 12px; font-size: 0.85rem; }
 .seat.bench { opacity: 0.7; }
 .seat-icon { font-size: 1.15rem; width: 24px; text-align: center; }
 .seat-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1777,3 +1778,47 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 .tile-pool i.st { background: linear-gradient(180deg, #f7f3e8 0 25%, var(--b) 25% 75%, #f7f3e8 75%); }
 .tile-pool i { text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
+
+/* ---------- Room music (YouTube, listened to together) ---------- */
+
+#btn-music.on, .music-btn.on { background: rgba(255, 215, 94, 0.18); border-color: rgba(255, 215, 94, 0.5); }
+/* Above the lobby (9) and the game's dialogs (10), below the confirmations (20). */
+.music {
+  position: fixed;
+  left: 12px; bottom: 12px;
+  z-index: 15;
+  width: 240px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: 6px;
+  color: var(--text);
+}
+.music-head { display: flex; align-items: center; gap: 6px; cursor: grab; touch-action: none; user-select: none; }
+.music-head:active { cursor: grabbing; }
+.music-title { flex: 1; min-width: 0; font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-more-btn.on { background: rgba(255, 215, 94, 0.18); }
+.music-screen { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; }
+.music-player, .music-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.music-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 10px; text-align: center; font-size: 0.8rem; color: var(--muted); }
+.music-tap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; }
+.music-controls { display: flex; align-items: center; gap: 4px; }
+.music-controls button { min-width: 34px; }
+.music-volume { flex: 1; min-width: 0; accent-color: var(--gold); }
+.music-more { display: flex; flex-direction: column; gap: 6px; }
+.music-add { display: flex; gap: 4px; }
+.music-add input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 0.82rem; }
+.music-queue { margin: 0; padding: 0; list-style: none; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.music-queue li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 6px; font-size: 0.8rem; }
+.music-queue li.now { background: rgba(255, 215, 94, 0.12); }
+.music-queue li.now .q-title::before { content: '▶ '; color: var(--gold); }
+.music-queue .q-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-queue .q-by { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+.music-queue .q-empty { color: var(--muted); justify-content: center; }
+.music-queue button { padding: 1px 6px; }
+.music-off { align-self: flex-start; }
+@media (max-width: 640px), (max-height: 540px) {
+  .music { width: 190px; padding: 6px; }
+}

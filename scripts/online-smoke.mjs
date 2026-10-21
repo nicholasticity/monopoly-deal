@@ -26,7 +26,9 @@ const MIRRORS = { deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMir
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
-attachGameServer(server, { timeScale: 0, log: () => {}, limits: { messages: Infinity, roomEntries: Infinity } });
+// Song titles come from a stand-in for YouTube: 'deadvideo00' is one it won't let other sites play.
+const titleOf = async (id) => (id === 'deadvideo00' ? false : `Song ${id}`);
+attachGameServer(server, { timeScale: 0, log: () => {}, limits: { messages: Infinity, roomEntries: Infinity }, titleOf });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const url = `ws://127.0.0.1:${server.address().port}/ws`;
 
@@ -88,6 +90,9 @@ class Client {
         break;
       case 'room':
         this.room = msg.room;
+        break;
+      case 'music':
+        this.musicQueue = msg.queue;
         break;
       case 'log':
         if (msg.text.includes('shuffled into a new deck')) reshuffles++;
@@ -356,6 +361,40 @@ bob.send('voice', { on: false });
 await bothOut;
 console.log('  voice chat: offers passed between members in voice only');
 
+// Music: anyone queues YouTube songs, everyone gets the same queue and place, and only
+// the song playing can be skipped (so two people skipping at once skip one song).
+const music = (pred) => bob.next('music', pred);
+const firstSong = music((m) => m.queue.length === 1 && m.queue[0].title === 'Song dQw4w9WgXcQ');
+const addedLine = bob.next('chat', (m) => m.text.includes('Song dQw4w9WgXcQ'));
+alice.send('music', { op: 'add', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10' });
+const song1 = await firstSong;
+if (!song1.playing || song1.queue[0].by !== 'Alice') fail('first song not playing');
+await addedLine;
+const notYT = alice.next('toast', (m) => m.text.includes('YouTube link'));
+alice.send('music', { op: 'add', url: 'https://evil.example/watch?v=dQw4w9WgXcQ' });
+await notYT;
+const twoSongs = music((m) => m.queue.length === 2 && m.queue[1].title);
+bob.send('music', { op: 'add', url: 'youtu.be/9bZkp7q19f0' });
+await twoSongs;
+const deadToast = bob.next('toast', (m) => m.text.includes('can’t be played'));
+const deadGone = alice.next('music', (m) => m.queue.length === 2 && !m.queue.some((x) => x.vid === 'deadvideo00'));
+bob.send('music', { op: 'add', url: 'deadvideo00' });
+await Promise.all([deadToast, deadGone]);
+const paused = music((m) => !m.playing);
+bob.send('music', { op: 'pause' });
+await paused;
+const resumed = music((m) => m.playing);
+alice.send('music', { op: 'play' });
+await resumed;
+const skipped = music((m) => m.queue.length === 1 && m.queue[0].vid === '9bZkp7q19f0');
+alice.send('music', { op: 'skip', key: song1.queue[0].key });
+bob.send('music', { op: 'skip', key: song1.queue[0].key });
+const song2 = await skipped;
+await new Promise((r) => setTimeout(r, 200));
+if (alice.musicQueue?.length !== 1) fail('a second skip skipped another song');
+console.log('  music: a shared queue, titles, bad links refused, pause/play and one skip at a time');
+// Left playing: Cara, joining later, hears it too.
+
 // Non-hosts can't start or add bots.
 bob.send('addBot');
 bob.send('start');
@@ -368,10 +407,12 @@ await playRound([alice, bob], 2);
 // A full table (2 humans + 6 bots: eight seats) plays, then Cara joins and bumps a bot.
 await playRound([alice, bob], MAX_PLAYERS - 4);
 const caraJoined = cara.next('joined');
+const caraMusic = cara.next('music', (m) => m.queue[0]?.key === song2.queue[0].key);
 cara.send('join', { code: alice.code, name: 'Cara', clientId: cara.clientId });
 await caraJoined;
 const bumped = alice.next('room', (m) => m.room.members.some((x) => x.name === 'Cara'));
 if ((await bumped).room.members.length !== MAX_PLAYERS) fail('Cara did not bump a bot');
+await caraMusic;
 const kicked = alice.next('room', (m) => !m.room.members.some((x) => x.kind === 'bot'));
 for (const m of alice.room.members.filter((x) => x.kind === 'bot')) alice.send('kick', { id: m.id });
 await kicked;

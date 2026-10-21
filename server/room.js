@@ -20,6 +20,7 @@ import { PoolAI } from '../src/pool/ai.js';
 import { seatsFor } from '../src/pool/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, MAX_PLAYERS, TIMEOUTS, botDelay, paceFor, maxFor } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
+import { videoId, QUEUE_MAX } from '../src/net/youtube.js';
 
 const MAX_MEMBERS = MAX_PLAYERS + 3; // a few spectators may watch a running game
 const CHAT_KEEP = 60;
@@ -32,6 +33,24 @@ const LOBBY_GRACE_MS = 30_000;
 const EMPTY_ROOM_MS = 5 * 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A YouTube video's title, from YouTube's public oEmbed lookup. null if it can't be
+// had; false if YouTube says the video can't be played in other sites (or doesn't exist).
+export async function youtubeTitle(id) {
+  try {
+    const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    // 401/403: embedding is turned off; 400/404: no such video.
+    if ([400, 401, 403, 404].includes(res.status)) return false;
+    if (!res.ok) return null;
+    const { title } = await res.json();
+    return typeof title === 'string' ? title : null;
+  } catch {
+    return null;
+  }
+}
+// Titles end up on other players' screens (as plain text), so keep them short and clean.
+const cleanTitle = (t) => String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
 const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI] };
@@ -53,7 +72,8 @@ export function cleanName(raw) {
 export class Room {
   // timeScale shortens every pause and bot delay (tests use 0). game: which game
   // the room plays (the host can change it in the lobby).
-  constructor(code, onClose, { timeScale = 1, game = DEFAULT_GAME } = {}) {
+  // titleOf(videoId): looks up a song's title (youtubeTitle, or a stand-in for tests).
+  constructor(code, onClose, { timeScale = 1, game = DEFAULT_GAME, titleOf = youtubeTitle } = {}) {
     this.code = code;
     this.onClose = onClose;
     this.timeScale = timeScale;
@@ -74,6 +94,11 @@ export class Room {
     this.gameNo = 0;
     this.emptyTimer = null;
     this.closed = false;
+    // The room's music, heard by everyone together (each browser plays it from YouTube):
+    // a queue of { key, vid, title, by } whose first is playing (or paused), and where:
+    // pos seconds in at time `at` (ms).
+    this.titleOf = titleOf;
+    this.music = { queue: [], playing: false, pos: 0, at: Date.now(), next: 1 };
   }
 
   // ---------- membership ----------
@@ -132,6 +157,7 @@ export class Room {
       known: new Map(),
       dropTimer: null,
       chatTimes: [],
+      musicTimes: [],
       voice: null, // in voice chat: 'on' or 'muted'
     };
     this.members.push(m);
@@ -162,6 +188,7 @@ export class Room {
     m.misses = 0;
     conn.send({ type: 'joined', code: this.code, you: m.id });
     conn.send({ type: 'history', chat: this.chat, log: this.log });
+    if (this.music.queue.length) conn.send(this.musicMessage());
     if (this.status === 'playing') {
       this.sendGame(m);
       this.sendState(m);
@@ -313,6 +340,86 @@ export class Room {
     this.chat.push(entry);
     if (this.chat.length > CHAT_KEEP) this.chat.shift();
     this.broadcast({ type: 'chat', ...entry });
+  }
+
+  // ---------- music ----------
+
+  // Where the music is now: the queue, and how far into the first song.
+  musicMessage() {
+    const m = this.music;
+    const pos = m.pos + (m.playing ? (Date.now() - m.at) / 1000 : 0);
+    return { type: 'music', queue: m.queue.map(({ key, vid, title, by }) => ({ key, vid, title, by })), playing: m.playing, pos };
+  }
+
+  // Anyone in the room may change the music: add a song, play, pause, skip, take one
+  // off the queue. A browser also says when the song ended (or can't play), naming it,
+  // so the first to say so moves the queue on and the rest are ignored.
+  musicOp(m, v) {
+    const now = Date.now();
+    m.musicTimes = (m.musicTimes ?? []).filter((t) => now - t < 10_000);
+    if (m.musicTimes.length >= 12) return;
+    m.musicTimes.push(now);
+    const music = this.music;
+    const current = music.queue[0];
+    const here = () => music.pos + (music.playing ? (now - music.at) / 1000 : 0);
+    switch (v?.op) {
+      case 'add': {
+        const vid = videoId(v.url);
+        if (!vid) return m.conn?.send({ type: 'toast', text: 'That isn’t a YouTube link.', kind: 'warn' });
+        if (music.queue.length >= QUEUE_MAX) return m.conn?.send({ type: 'toast', text: 'The music queue is full.', kind: 'warn' });
+        const item = { key: music.next++, vid, title: null, by: m.name };
+        music.queue.push(item);
+        if (music.queue.length === 1) Object.assign(music, { playing: true, pos: 0, at: now });
+        this.lookUpTitle(item, m);
+        break;
+      }
+      case 'play':
+        if (!current || music.playing) return;
+        Object.assign(music, { playing: true, at: now });
+        break;
+      case 'pause':
+        if (!current || !music.playing) return;
+        Object.assign(music, { playing: false, pos: here(), at: now });
+        break;
+      case 'skip':
+      case 'ended':
+        if (!current || v.key !== current.key) return;
+        if (v.op === 'skip') this.system(`${m.name} skipped ${current.title ? `“${current.title}”` : 'a song'}.`);
+        this.nextSong();
+        break;
+      case 'remove': {
+        const i = music.queue.findIndex((x) => x.key === v.key);
+        if (i <= 0) return;
+        music.queue.splice(i, 1);
+        break;
+      }
+      default:
+        return;
+    }
+    this.broadcast(this.musicMessage());
+  }
+
+  nextSong() {
+    const music = this.music;
+    music.queue.shift();
+    Object.assign(music, { playing: music.queue.length > 0, pos: 0, at: Date.now() });
+  }
+
+  // Fills in a song's title once YouTube says it; a video YouTube won't let other sites
+  // play comes off the queue (and whoever added it is told).
+  async lookUpTitle(item, m) {
+    const title = await this.titleOf(item.vid);
+    if (this.closed || !this.music.queue.includes(item)) return;
+    if (title === false) {
+      const wasPlaying = this.music.queue[0] === item;
+      if (wasPlaying) this.nextSong();
+      else this.music.queue.splice(this.music.queue.indexOf(item), 1);
+      m.conn?.send({ type: 'toast', text: 'That video can’t be played here (its owner doesn’t allow it). Try another link.', kind: 'warn' });
+    } else {
+      item.title = title ? cleanTitle(title) : 'YouTube video';
+      this.system(`🎵 ${item.by} added “${item.title}”.`);
+    }
+    this.broadcast(this.musicMessage());
   }
 
   // ---------- voice chat ----------

@@ -102,6 +102,7 @@ hud.onGameInfo = () => {
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
 hud.onStopGame = () => online?.confirmStop();
 hud.onVoice = (button) => online?.voiceButton(button);
+hud.onMusic = () => online?.music.toggle();
 hud.onMuteKey = () => online?.toggleMute();
 
 function updateStatus() {

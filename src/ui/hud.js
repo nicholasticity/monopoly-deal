@@ -140,6 +140,9 @@ export class Hud {
     this.voiceBtn = $('#btn-voice');
     this.voiceBtn.addEventListener('click', () => this.onVoice(this.voiceBtn));
     this.onVoice = () => {};
+    this.musicBtn = $('#btn-music');
+    this.musicBtn.addEventListener('click', () => this.onMusic());
+    this.onMusic = () => {};
     this.onMuteKey = () => {};
     this.soundBtn = $('#btn-sound');
     this.soundBtn.addEventListener('click', () => this.setMuted(!sound.muted));
@@ -208,6 +211,7 @@ export class Hud {
     this.newBtn.querySelector('.txt').textContent = this.newBtn.title;
     this.chatBtn.classList.toggle('hidden', !on);
     this.voiceBtn.classList.toggle('hidden', !on);
+    this.musicBtn.classList.toggle('hidden', !on);
     if (!on) {
       this.setChatDock(false);
       this.chatPops.innerHTML = '';
