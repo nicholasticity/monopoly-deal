@@ -19,5 +19,21 @@ export function videoId(text) {
   return id && ID.test(id) ? id : null;
 }
 
-// Most songs a room's queue holds (the one playing included).
-export const QUEUE_MAX = 30;
+// A playlist's id from a YouTube link that has one (…/playlist?list=…, or a song played
+// from a playlist or mix, watch?v=…&list=…), or null.
+const LIST = /^[A-Za-z0-9_-]{10,64}$/;
+export function playlistId(text) {
+  const raw = String(text ?? '').trim();
+  let url;
+  try {
+    url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (!HOSTS.has(url.hostname.toLowerCase())) return null;
+  const list = url.searchParams.get('list');
+  return list && LIST.test(list) ? list : null;
+}
+
+// Most songs a room's queue holds (the one playing included): room for a playlist.
+export const QUEUE_MAX = 100;

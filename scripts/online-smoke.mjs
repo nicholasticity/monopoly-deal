@@ -392,7 +392,14 @@ bob.send('music', { op: 'skip', key: song1.queue[0].key });
 const song2 = await skipped;
 await new Promise((r) => setTimeout(r, 200));
 if (alice.musicQueue?.length !== 1) fail('a second skip skipped another song');
-console.log('  music: a shared queue, titles, bad links refused, pause/play and one skip at a time');
+// A playlist goes in at once, with one chat line; bad ids are ignored and songs YouTube
+// won't let other sites play come out again, with one note.
+const many = music((m) => m.queue.length === 4 && m.queue.every((x) => x.title));
+const manyLine = bob.next('chat', (m) => m.text.includes('added 4 songs from a playlist'));
+const manyDead = alice.next('toast', (m) => m.text.includes('1 song from the playlist'));
+alice.send('music', { op: 'addMany', ids: ['aaaaaaaaaaa', 'deadvideo00', 'bbbbbbbbbbb', 'bad id!', 'ccccccccccc'] });
+await Promise.all([many, manyLine, manyDead]);
+console.log('  music: a shared queue, titles, bad links refused, pause/play and one skip at a time, playlists');
 // Left playing: Cara, joining later, hears it too.
 
 // Non-hosts can't start or add bots.

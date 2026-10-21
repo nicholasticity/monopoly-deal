@@ -373,6 +373,20 @@ export class Room {
         this.lookUpTitle(item, m);
         break;
       }
+      // A playlist's songs, read from it by the browser that added it.
+      case 'addMany': {
+        const room = QUEUE_MAX - music.queue.length;
+        if (room <= 0) return m.conn?.send({ type: 'toast', text: 'The music queue is full.', kind: 'warn' });
+        const all = Array.isArray(v.ids) ? v.ids.filter((id) => typeof id === 'string' && videoId(id) === id) : [];
+        if (!all.length) return m.conn?.send({ type: 'toast', text: 'That playlist has no songs that can be added.', kind: 'warn' });
+        const items = all.slice(0, room).map((vid) => ({ key: music.next++, vid, title: null, by: m.name }));
+        if (!music.queue.length) Object.assign(music, { playing: true, pos: 0, at: now });
+        music.queue.push(...items);
+        const n = items.length;
+        this.system(`🎵 ${m.name} added ${n} song${n === 1 ? '' : 's'} from a playlist${all.length > n ? ` (the queue holds ${QUEUE_MAX}, so ${all.length - n} were left out)` : ''}.`);
+        this.lookUpTitles(items, m);
+        break;
+      }
       case 'play':
         if (!current || music.playing) return;
         Object.assign(music, { playing: true, at: now });
@@ -420,6 +434,39 @@ export class Room {
       this.system(`🎵 ${item.by} added “${item.title}”.`);
     }
     this.broadcast(this.musicMessage());
+  }
+
+  // Titles for a playlist's songs, a few lookups at a time; the songs YouTube won't let
+  // other sites play come off the queue, with one note about them at the end.
+  async lookUpTitles(items, m) {
+    const todo = items.slice();
+    let gone = 0;
+    const worker = async () => {
+      for (let item; (item = todo.shift()); ) {
+        const title = await this.titleOf(item.vid);
+        if (this.closed) return;
+        if (!this.music.queue.includes(item)) continue;
+        if (title === false) {
+          gone++;
+          if (this.music.queue[0] === item) this.nextSong();
+          else this.music.queue.splice(this.music.queue.indexOf(item), 1);
+        } else {
+          item.title = title ? cleanTitle(title) : 'YouTube video';
+        }
+        this.musicSoon();
+      }
+    };
+    await Promise.all([1, 2, 3, 4].map(worker));
+    if (gone && !this.closed) m.conn?.send({ type: 'toast', text: `${gone} song${gone === 1 ? '' : 's'} from the playlist can’t be played here, so ${gone === 1 ? 'it was' : 'they were'} left out.`, kind: 'warn' });
+  }
+
+  // The queue to everyone shortly (many changes at once go out together).
+  musicSoon() {
+    if (this.musicTimer) return;
+    this.musicTimer = setTimeout(() => {
+      this.musicTimer = null;
+      if (!this.closed) this.broadcast(this.musicMessage());
+    }, 200);
   }
 
   // ---------- voice chat ----------

@@ -534,7 +534,7 @@ export class OnlineSession {
     const members = this.room?.members ?? [];
     this.hud.setVoice(state, talking.has(this.memberId));
     this.lobby.setVoice(state, talking);
-    this.music.setDuck([...talking].some((id) => id !== this.memberId));
+    this.music.setDuck(talking.size > 0);
     if (!this.mirror || this.needsAttach) return;
     this.view.setVoice(
       this.mirror.state.players.map((p) => {

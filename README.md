@@ -55,8 +55,8 @@ While you play:
   each other, and a green ring shows who's speaking. Press it again to mute or leave, or press
   **M** to mute. See [Voice chat](#voice-chat). (In Wordle, Enter and M are for your guess:
   use the buttons instead.)
-- **Listen together** with 🎵 (in the lobby or the top bar): paste a YouTube link and everyone
-  in the room hears the same song at the same moment. Anyone can queue songs, pause, play
+- **Listen together** with 🎵 (in the lobby or the top bar): paste a YouTube link (a song, or
+  a whole playlist or mix) and everyone in the room hears the same song at the same moment. Anyone can queue songs, pause, play
   and skip, for everyone; the volume, mute and "Music off for me" are only yours. It plays
   as sound only. 🎵 opens a small card you can drag anywhere (play, skip, a volume slider,
   the queue and adding songs); ▼ puts it away completely while the music plays on, and the

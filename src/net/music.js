@@ -5,7 +5,7 @@
 // with ▼ (the music plays on; nothing stays on screen). Only the sound is wanted, so the
 // player itself is always out of sight. Volume, mute and "music off" are this browser's
 // own.
-import { videoId } from './youtube.js';
+import { videoId, playlistId } from './youtube.js';
 
 // How far (s) this player may drift from the room's place before it's put back.
 const DRIFT = 2;
@@ -16,7 +16,7 @@ const KEYS = { volume: 'md-music-volume', muted: 'md-music-muted', off: 'md-musi
 // While someone in voice chat talks, the music dips to this share of your volume, and
 // comes back up this long after they stop (so it doesn't pump between words), fading
 // in steps each way.
-const DUCK = 0.3;
+const DUCK = 0.15;
 const DUCK_RELEASE_MS = 800;
 const FADE_STEP = 0.1;
 const FADE_MS = 40;
@@ -128,13 +128,15 @@ export class RoomMusic {
     sound.append(this.volumeEl, this.muteBtn);
     const form = el('form', 'music-add');
     this.input = el('input');
-    Object.assign(this.input, { placeholder: 'Paste a YouTube link', autocomplete: 'off', spellcheck: false });
-    const add = el('button', 'primary small', 'Add');
+    Object.assign(this.input, { placeholder: 'Paste a YouTube song or playlist link', autocomplete: 'off', spellcheck: false });
+    const add = (this.addBtn = el('button', 'primary small', 'Add'));
     form.append(this.input, add);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const url = this.input.value.trim();
-      if (!url) return;
+      if (!url || add.disabled) return;
+      const list = playlistId(url);
+      if (list) return this.addPlaylist(list, videoId(url));
       if (!videoId(url)) return this.toast('That isn’t a YouTube link.', 'warn');
       this.send('add', { url });
       this.input.value = '';
@@ -148,6 +150,59 @@ export class RoomMusic {
     card.append(head, this.tapBtn, this.screenEl, body);
     document.body.appendChild(card);
     this.draggable(head);
+  }
+
+  // A playlist (or mix): its songs are read by a player of its own, out of sight, and
+  // go to the room all at once.
+  async addPlaylist(list, vid) {
+    this.addBtn.disabled = true;
+    this.addBtn.textContent = '…';
+    try {
+      const ids = await this.playlistIds(list, vid);
+      if (!ids?.length) return this.toast('Couldn’t read that playlist. Is it public (or unlisted)?', 'warn');
+      // All of them (within the message size limit): the room keeps what fits and says so.
+      this.send('addMany', { ids: ids.slice(0, 500) });
+      this.input.value = '';
+    } finally {
+      this.addBtn.disabled = false;
+      this.addBtn.textContent = 'Add';
+    }
+  }
+
+  playlistIds(list, vid) {
+    return youtubeAPI().then(
+      (YT) =>
+        new Promise((resolve) => {
+          const host = el('div');
+          this.screenEl.append(host);
+          let player = null;
+          let poll = null;
+          const finish = (ids) => {
+            clearTimeout(timer);
+            clearInterval(poll);
+            player?.destroy?.();
+            host.remove();
+            resolve(ids);
+          };
+          const timer = setTimeout(() => finish(null), 10_000);
+          player = new YT.Player(host, {
+            width: 200,
+            height: 113,
+            ...(vid ? { videoId: vid } : {}),
+            playerVars: { listType: 'playlist', list, autoplay: 0, controls: 0, origin: location.origin },
+            events: {
+              onReady: () => {
+                player.mute();
+                poll = setInterval(() => {
+                  const ids = player.getPlaylist?.();
+                  if (ids?.length) finish(ids);
+                }, 250);
+              },
+              onError: () => finish(null),
+            },
+          });
+        }),
+    );
   }
 
   // Drag the card by its top line; where it was left is remembered.
@@ -249,7 +304,7 @@ export class RoomMusic {
     else this.player.unMute();
   }
 
-  // Someone else in voice chat started or stopped talking: the music dips under them.
+  // Someone in voice chat (you included) started or stopped talking: the music dips under them.
   setDuck(talking) {
     if (talking === this.someoneTalking) return;
     this.someoneTalking = talking;
