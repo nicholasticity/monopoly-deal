@@ -1,8 +1,10 @@
 // The room's music: everyone hears the same YouTube songs together. The server keeps
 // the queue and where the song is (play, pause, skip, add, remove: anyone in the room
 // may); each browser plays it in YouTube's own player and keeps to the room's place.
-// The player stays on show, small, in a card you can drag about (YouTube's rules don't
-// allow hiding it); volume, mute and "music off" are this browser's own.
+// Its controls are a card you can drag about, opened with the 🎵 buttons and put away
+// with ▼ (the music plays on; nothing stays on screen). Only the sound is wanted, so the
+// player itself is always out of sight. Volume, mute and "music off" are this browser's
+// own.
 import { videoId } from './youtube.js';
 
 // How far (s) this player may drift from the room's place before it's put back.
@@ -70,28 +72,33 @@ export class RoomMusic {
 
   build() {
     const card = (this.el = el('div', 'music hidden'));
+    // The bar: always on show while there's music.
     const head = el('div', 'music-head');
     head.append(el('span', 'music-ico', '🎵'), (this.titleEl = el('span', 'music-title')));
-    this.moreBtn = el('button', 'ghost small music-more-btn', '☰');
-    this.moreBtn.title = 'Queue and settings';
-    this.moreBtn.addEventListener('click', () => this.setExpanded(!this.expanded));
-    head.append(this.moreBtn);
-    const screen = el('div', 'music-screen');
-    this.playerEl = el('div', 'music-player');
-    this.emptyEl = el('div', 'music-empty', 'Nothing playing. Paste a YouTube link below to play a song for everyone.');
-    this.tapBtn = el('button', 'primary music-tap hidden', '▶ Tap to listen');
-    this.tapBtn.addEventListener('click', () => {
-      this.player?.unMute?.();
-      this.applyVolume();
-      this.player?.playVideo?.();
-    });
-    screen.append(this.playerEl, this.emptyEl, this.tapBtn);
-    const controls = el('div', 'music-controls');
     this.playBtn = el('button', 'ghost small');
     this.playBtn.addEventListener('click', () => this.current && this.send(this.state.playing ? 'pause' : 'play'));
     this.skipBtn = el('button', 'ghost small', '⏭');
     this.skipBtn.title = 'Skip to the next song (for everyone)';
     this.skipBtn.addEventListener('click', () => this.current && this.send('skip', { key: this.current.key }));
+    this.foldBtn = el('button', 'ghost small music-fold', '▼');
+    this.foldBtn.title = 'Put away (the music plays on; 🎵 brings this back)';
+    this.foldBtn.addEventListener('click', () => this.setExpanded(false));
+    head.append(this.playBtn, this.skipBtn, this.foldBtn);
+    this.tapBtn = el('button', 'primary small music-tap hidden', '▶ Tap to listen');
+    this.tapBtn.addEventListener('click', () => {
+      this.player?.unMute?.();
+      this.applyVolume();
+      this.player?.playVideo?.();
+    });
+    // The player, playing out of sight.
+    this.screenEl = el('div', 'music-screen');
+    this.playerEl = el('div', 'music-player');
+    this.screenEl.append(this.playerEl);
+    // Adding songs and the queue, and beside them your own volume: a vertical slider
+    // over the mute button.
+    const body = el('div', 'music-body');
+    const more = el('div', 'music-more');
+    const sound = el('div', 'music-sound');
     this.muteBtn = el('button', 'ghost small');
     this.muteBtn.addEventListener('click', () => {
       this.muted = !this.muted;
@@ -101,6 +108,7 @@ export class RoomMusic {
     });
     this.volumeEl = el('input', 'music-volume');
     Object.assign(this.volumeEl, { type: 'range', min: '0', max: '100', value: String(this.volume), title: 'Your volume' });
+    this.volumeEl.setAttribute('orient', 'vertical');
     this.volumeEl.addEventListener('input', () => {
       this.volume = Number(this.volumeEl.value);
       this.muted = this.volume === 0;
@@ -108,8 +116,7 @@ export class RoomMusic {
       this.applyVolume();
       this.render();
     });
-    controls.append(this.playBtn, this.skipBtn, this.muteBtn, this.volumeEl);
-    const more = (this.moreEl = el('div', 'music-more hidden'));
+    sound.append(this.volumeEl, this.muteBtn);
     const form = el('form', 'music-add');
     this.input = el('input');
     Object.assign(this.input, { placeholder: 'Paste a YouTube link', autocomplete: 'off', spellcheck: false });
@@ -128,7 +135,8 @@ export class RoomMusic {
     off.title = 'Stop the music on this device (it carries on for everyone else)';
     off.addEventListener('click', () => this.setOn(false));
     more.append(form, this.queueEl, off);
-    card.append(head, screen, controls, more);
+    body.append(more, sound);
+    card.append(head, this.tapBtn, this.screenEl, body);
     document.body.appendChild(card);
     this.draggable(head);
   }
@@ -159,16 +167,16 @@ export class RoomMusic {
     });
   }
 
-  // The 🎵 button: music back on, or the card with the queue opened (or closed again).
+  // The 🎵 button: music back on, or the card opened (or put away again).
   toggle() {
     if (!this.on) return this.setOn(true, true);
-    this.setExpanded(!this.expanded || this.el.classList.contains('hidden'));
+    this.setExpanded(!this.expanded);
   }
 
   setExpanded(open) {
     this.expanded = open;
     this.render();
-    if (open) this.input.focus();
+    if (open && !this.current) this.input.focus();
   }
 
   setOn(on, expand = false) {
@@ -190,17 +198,13 @@ export class RoomMusic {
 
   render() {
     const cur = this.current;
-    const shown = this.on && (!!cur || this.expanded);
-    this.el.classList.toggle('hidden', !shown);
-    this.moreEl.classList.toggle('hidden', !this.expanded);
-    this.moreBtn.classList.toggle('on', this.expanded);
-    this.emptyEl.classList.toggle('hidden', !!cur);
-    this.playerEl.classList.toggle('hidden', !cur);
-    this.titleEl.textContent = cur ? cur.title ?? 'Loading…' : 'Music';
+    this.el.classList.toggle('hidden', !this.on || !this.expanded);
+    this.titleEl.textContent = cur ? cur.title ?? 'Loading…' : 'Music for the room';
     this.titleEl.title = cur ? `${cur.title ?? ''}${cur.by ? ` · added by ${cur.by}` : ''}` : '';
     this.playBtn.textContent = this.state.playing ? '⏸' : '▶';
     this.playBtn.title = this.state.playing ? 'Pause (for everyone)' : 'Play (for everyone)';
-    this.playBtn.disabled = this.skipBtn.disabled = !cur;
+    this.playBtn.classList.toggle('hidden', !cur);
+    this.skipBtn.classList.toggle('hidden', !cur);
     this.muteBtn.textContent = this.muted || this.volume === 0 ? '🔇' : '🔊';
     this.muteBtn.title = this.muted ? 'Unmute (just you)' : 'Mute (just you)';
     this.queueEl.replaceChildren(
@@ -282,7 +286,11 @@ export class RoomMusic {
     if (this.state.playing) {
       if (now !== YTS.PLAYING && now !== YTS.BUFFERING) {
         // The browser may want a tap before it plays sound.
-        if (++this.tries > AUTOPLAY_TRIES) this.tapBtn.classList.remove('hidden');
+        // The card comes out for that, even if it was put away.
+        if (++this.tries > AUTOPLAY_TRIES && this.tapBtn.classList.contains('hidden')) {
+          this.tapBtn.classList.remove('hidden');
+          this.setExpanded(true);
+        }
         this.player.seekTo(want, true);
         this.player.playVideo();
       } else if (Math.abs(this.player.getCurrentTime() - want) > DRIFT) {

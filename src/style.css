@@ -1793,8 +1793,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   position: fixed;
   left: 12px; bottom: 12px;
   z-index: 15;
-  width: 240px;
-  padding: 8px;
+  width: 250px;
+  max-width: calc(100vw - 24px);
+  padding: 6px 8px;
   border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -1802,18 +1803,21 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   display: flex; flex-direction: column; gap: 6px;
   color: var(--text);
 }
-.music-head { display: flex; align-items: center; gap: 6px; cursor: grab; touch-action: none; user-select: none; }
+.music-head { display: flex; align-items: center; gap: 4px; cursor: grab; touch-action: none; user-select: none; }
 .music-head:active { cursor: grabbing; }
+.music-head button { min-width: 30px; padding: 3px 6px; }
+.music-fold { font-size: 0.75rem; line-height: 1.4; }
 .music-title { flex: 1; min-width: 0; font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.music-more-btn.on { background: rgba(255, 215, 94, 0.18); }
-.music-screen { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; }
+.music-tap { align-self: center; white-space: nowrap; }
+/* Only the sound is wanted: the player plays out of sight behind the card. */
+.music-screen { position: absolute; left: 0; top: 0; width: 200px; height: 113px; opacity: 0; pointer-events: none; z-index: -1; overflow: hidden; }
 .music-player, .music-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.music-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 10px; text-align: center; font-size: 0.8rem; color: var(--muted); }
-.music-tap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; }
-.music-controls { display: flex; align-items: center; gap: 4px; }
-.music-controls button { min-width: 34px; }
-.music-volume { flex: 1; min-width: 0; accent-color: var(--gold); }
-.music-more { display: flex; flex-direction: column; gap: 6px; }
+.music-body { display: flex; gap: 6px; }
+.music-more { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Volume: a vertical slider (loud at the top) over the mute button. */
+.music-sound { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.music-sound button { min-width: 30px; padding: 3px 6px; }
+.music-volume { flex: 1; min-height: 70px; width: 20px; margin: 0; writing-mode: vertical-lr; direction: rtl; accent-color: var(--gold); }
 .music-add { display: flex; gap: 4px; }
 .music-add input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 0.82rem; }
 .music-queue { margin: 0; padding: 0; list-style: none; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
@@ -1826,5 +1830,5 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .music-queue button { padding: 1px 6px; }
 .music-off { align-self: flex-start; }
 @media (max-width: 640px), (max-height: 540px) {
-  .music { width: 190px; padding: 6px; }
+  .music { width: 220px; padding: 5px 6px; }
 }

@@ -57,8 +57,10 @@ While you play:
   use the buttons instead.)
 - **Listen together** with 🎵 (in the lobby or the top bar): paste a YouTube link and everyone
   in the room hears the same song at the same moment. Anyone can queue songs, pause, play
-  and skip, for everyone; the volume, mute and "Music off for me" are only yours. The player
-  sits in a small card you can drag anywhere. See [Music](#music).
+  and skip, for everyone; the volume, mute and "Music off for me" are only yours. It plays
+  as sound only. 🎵 opens a small card you can drag anywhere (play, skip, a volume slider,
+  the queue and adding songs); ▼ puts it away completely while the music plays on, and the
+  🎵 button stays lit. See [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
   Judgement, to bid or play); in
@@ -149,8 +151,9 @@ queue and where the song is, and each player keeps in step with it (within about
   don't). Those are taken off the queue with a note to whoever added them.
 - If the browser blocks sound until you've clicked something, the card shows
   **Tap to listen**.
-- YouTube needs the player on show, so it stays visible (small) while music plays. Each song
-  title is looked up from YouTube by the server, which needs internet access.
+- Only the sound plays: the player runs out of sight. Strictly, YouTube's embed rules ask
+  for the player to be visible, which matters only for a public deployment.
+- Each song title is looked up from YouTube by the server, which needs internet access.
 
 ### Safety on a public server
 
