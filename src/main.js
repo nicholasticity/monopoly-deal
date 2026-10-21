@@ -4,12 +4,17 @@ import { TrickView } from './render/trick-view.js';
 import { BingoView } from './render/bingo-view.js';
 import { WordleView } from './render/wordle-view.js';
 import { PoolView } from './render/pool-view.js';
+import { SudokuView } from './render/sudoku-view.js';
 import { Hud } from './ui/hud.js';
 import { HumanController } from './ui/human.js';
 import { TrickHuman, trickStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/tricks.js';
 import * as BingoUI from './ui/bingo.js';
 import * as WordleUI from './ui/wordle.js';
 import * as PoolUI from './ui/pool.js';
+import * as SudokuUI from './ui/sudoku.js';
+import { SudokuGame } from './sudoku/engine.js';
+import { SudokuAI } from './sudoku/ai.js';
+import { levelOf } from './sudoku/rules.js';
 import { PoolGame } from './pool/engine.js';
 import { PoolAI } from './pool/ai.js';
 import { AIController } from './game/ai.js';
@@ -41,6 +46,7 @@ const views = {
   bingo: new BingoView(stage),
   wordle: new WordleView(stage),
   pool: new PoolView(stage),
+  sudoku: new SudokuView(stage),
 };
 let kind = null;
 let view = null;
@@ -56,7 +62,7 @@ if (!localStorage.getItem('md-keys')) {
   localStorage.setItem('md-keys', '2');
 }
 const lastGame = localStorage.getItem('md-game');
-let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, scoring: localStorage.getItem('md-scoring') || DEFAULT_SCORING, code: '' };
+let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, scoring: localStorage.getItem('md-scoring') || DEFAULT_SCORING, level: levelOf(localStorage.getItem('md-level')), code: '' };
 
 const activeHuman = () => (online ? online.human : human);
 
@@ -75,6 +81,9 @@ views.judgement.on('moves', cueTricks);
 views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
 views.wordle.on('submit', (word) => !!activeHuman()?.submit?.(word));
 views.wordle.on('marked', () => sound.play('flip'));
+views.sudoku.on('submit', (move) => !!activeHuman()?.submit?.(move));
+views.sudoku.on('placed', () => sound.play('place'));
+views.sudoku.on('wrong', () => sound.play('no'));
 // Pool online: the others see our cue as we aim.
 views.pool.on('aim', (aim) => online?.sendAim(aim));
 
@@ -111,6 +120,12 @@ function updateStatus() {
   if (game.kind === 'pool') {
     const { text, mine } = PoolUI.poolStatus(state, 0);
     hud.setStatus(text, mine);
+    return;
+  }
+  if (game.kind === 'sudoku') {
+    const { text, mine } = SudokuUI.sudokuStatus(state, 0);
+    hud.setStatus(text, mine);
+    hud.setGameInfo(SudokuUI.gameInfo(state));
     return;
   }
   if (game.kind === 'wordle') {
@@ -151,13 +166,14 @@ function newGame(opts) {
     bingo: [BingoGame, BingoAI, BingoUI.BingoHuman],
     wordle: [WordleGame, WordleAI, WordleUI.WordleHuman],
     pool: [PoolGame, PoolAI, PoolUI.PoolHuman],
+    sudoku: [SudokuGame, SudokuAI, SudokuUI.SudokuHuman],
   }[kind];
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: botDelay(kind) }) });
   // Wordle on your own has no clock: a word lasts until you get it or run out of guesses.
   const untimed = kind === 'wordle' && !opts.opponents;
-  game = new Engine({ players, view, words: opts.words, scoring: opts.scoring, ...(untimed && { roundMs: 0 }) });
+  game = new Engine({ players, view, words: opts.words, scoring: opts.scoring, level: opts.level, ...(untimed && { roundMs: 0 }) });
   // In Wordle the speed is only how fast the bots think, and pool's shots play out in real time.
   view.pace = paceFor(kind);
   hud.clearLog();
@@ -170,10 +186,10 @@ function newGame(opts) {
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
     // Call Bridge and Judgement: no chime for every card you play.
-    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
-    // Bingo: players get ready one by one while everyone arranges. Wordle: guesses
-    // come in from everyone at once.
-    else if (type === 'state' && (current.kind === 'bingo' || current.kind === 'wordle')) view.layout();
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
+    // Bingo: players get ready one by one while everyone arranges. Wordle and Sudoku:
+    // moves come in from everyone at once.
+    else if (type === 'state' && ['bingo', 'wordle', 'sudoku'].includes(current.kind)) view.layout();
     else if (type === 'gameover') onGameOver(data.winner);
     updateStatus();
   });
@@ -196,6 +212,8 @@ async function onGameOver(winner) {
     await hud.showResult(WordleUI.gameResult(finished.state, 0));
   } else if (finished.kind === 'pool') {
     await hud.showResult(PoolUI.gameResult(finished.state, 0));
+  } else if (finished.kind === 'sudoku') {
+    await hud.showResult(SudokuUI.gameResult(finished.state, 0));
   } else {
     const sets = winner.piles.filter(R.isComplete).map((p) => p.color);
     const stats = `Finished on turn ${finished.state.turn} with ${[...new Set(sets)].length} complete sets.`;
@@ -252,6 +270,7 @@ async function startFlow(notice = null, home = false) {
   const own = kind === 'pool' ? { opponents: settings.opponents, poolOpponents: opts.opponents } : {};
   settings = { ...settings, ...opts, ...own, mode: opts.mode === 'solo' ? 'solo' : 'online' };
   localStorage.setItem('md-scoring', settings.scoring);
+  localStorage.setItem('md-level', settings.level);
   if (opts.mode === 'solo') {
     // Solo, the fantasy deck's guide comes before the deal, so nothing goes on behind it.
     if (TRICK_GAMES.has(kind)) await hud.showFantasyGuide();

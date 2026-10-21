@@ -2,6 +2,7 @@
 import { GAMES } from '../game/settings.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
 import { SCORING } from '../judgement/rules.js';
+import { LEVELS } from '../sudoku/rules.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -32,7 +33,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), words(n), scoring(key), game(kind), start, leave, rules, voice(button), music }
+  // actions: { addBot, kick(id), words(n), scoring(key), level(key), game(kind), start, leave, rules, voice(button), music }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -124,12 +125,23 @@ export class Lobby {
     }
     this.scoringRow.append(el('span', null, 'Scoring'), this.scoringSeg);
     this.scoringHint = el('p', 'muted small scoring-hint');
+    // Sudoku: how hard the puzzle is.
+    this.levelRow = el('div', 'opt-row');
+    this.levelSeg = el('div', 'seg');
+    for (const [key, l] of Object.entries(LEVELS)) {
+      const b = el('button', null, l.name);
+      b.dataset.v = key;
+      b.title = l.hint;
+      b.addEventListener('click', () => this.isHost && this.actions.level(key));
+      this.levelSeg.appendChild(b);
+    }
+    this.levelRow.append(el('span', null, 'Level'), this.levelSeg);
     // Pool: who plays.
     this.poolHint = el('p', 'muted small pool-hint', 'Pool is one on one, or two against two with four players (partners alternate). Anyone else watches.');
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.poolHint, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.levelRow, this.poolHint, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -219,7 +231,8 @@ export class Lobby {
     const judgement = room.game === 'judgement';
     this.scoringRow.style.display = this.scoringHint.style.display = judgement ? '' : 'none';
     this.scoringHint.textContent = SCORING[room.scoring]?.hint ?? '';
-    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)], [this.scoringSeg, room.scoring]]) {
+    this.levelRow.style.display = room.game === 'sudoku' ? '' : 'none';
+    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)], [this.scoringSeg, room.scoring], [this.levelSeg, room.level]]) {
       for (const b of seg.children) {
         b.classList.toggle('on', b.dataset.v === value);
         b.disabled = (!host || room.status !== 'lobby') && b.dataset.v !== value;

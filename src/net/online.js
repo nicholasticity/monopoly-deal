@@ -6,6 +6,8 @@ import { TrickMirror } from './trick-mirror.js';
 import { BingoMirror } from './bingo-mirror.js';
 import { WordleMirror } from './wordle-mirror.js';
 import { PoolMirror } from './pool-mirror.js';
+import { SudokuMirror } from './sudoku-mirror.js';
+import * as SudokuUI from '../ui/sudoku.js';
 import * as PoolUI from '../ui/pool.js';
 import { HumanController } from '../ui/human.js';
 import { playNumber, PLAYS_PER_TURN } from '../game/rules.js';
@@ -87,6 +89,7 @@ export class OnlineSession {
       kick: (id) => this.send('kick', { id }),
       words: (words) => this.send('words', { words }),
       scoring: (scoring) => this.send('scoring', { scoring }),
+      level: (level) => this.send('level', { level }),
       game: (game) => this.send('game', { game }),
       start: () => this.send('start'),
       leave: () => this.confirmLeave(),
@@ -191,7 +194,7 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
+        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
         break;
       case 'round':
         this.onRound(msg);
@@ -295,7 +298,7 @@ export class OnlineSession {
       this.gameNo = msg.gameNo;
       this.seat = msg.you;
       this.setKind(msg.kind);
-      const Mirror = TRICK_GAMES.has(this.kind) ? TrickMirror : ({ bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror }[this.kind] ?? MirrorGame);
+      const Mirror = TRICK_GAMES.has(this.kind) ? TrickMirror : ({ bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror }[this.kind] ?? MirrorGame);
       this.mirror = new Mirror(msg.seats, msg.you, this.kind);
       this.needsAttach = true;
       this.waiting = null;
@@ -345,7 +348,7 @@ export class OnlineSession {
     if (this.req?.id === msg.reqId) return;
     this.dropRequest();
     const g = this.mirror;
-    const Human = TRICK_GAMES.has(g.kind) ? TrickHuman : ({ bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman, pool: PoolUI.PoolHuman }[g.kind] ?? HumanController);
+    const Human = TRICK_GAMES.has(g.kind) ? TrickHuman : ({ bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman, pool: PoolUI.PoolHuman, sudoku: SudokuUI.SudokuHuman }[g.kind] ?? HumanController);
     const human = new Human(this.hud, this.view);
     const req = { id: msg.reqId, kind: msg.kind };
     this.req = req;
@@ -387,6 +390,9 @@ export class OnlineSession {
       case 'shot':
         value = await human.chooseShot(g, me, a);
         break;
+      case 'cell':
+        value = await human.chooseMove(g, me);
+        break;
       default:
         return;
     }
@@ -426,10 +432,10 @@ export class OnlineSession {
     const winner = state?.players[msg.winnerId];
     if (!winner) return;
     this.gameoverOpen = true;
-    if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool'].includes(this.mirror.kind)) {
+    if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku'].includes(this.mirror.kind)) {
       state.winners = msg.winnerIds.map((id) => state.players[id]);
       state.phase = 'over';
-      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult, pool: PoolUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
+      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult, pool: PoolUI.gameResult, sudoku: SudokuUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
       await this.hud.showResult({ ...result, buttonLabel: 'Back to lobby' });
     } else {
       await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
@@ -571,6 +577,13 @@ export class OnlineSession {
     const secs = w ? Math.max(0, Math.ceil((w.deadline - Date.now()) / 1000)) : null;
     const clock = secs != null && secs <= CLOCK_FROM_S ? ` <span class="clock${secs <= 10 ? ' low' : ''}">⏱ ${secs}s</span>` : '';
     const watching = this.seat < 0 ? 'Watching · ' : '';
+    // Sudoku's clock is on the table too.
+    if (this.mirror.kind === 'sudoku') {
+      const { text, mine } = SudokuUI.sudokuStatus(state, this.seat);
+      this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text, mine);
+      this.hud.setGameInfo(SudokuUI.gameInfo(state));
+      return;
+    }
     // Wordle's clock is the word's, on the table.
     if (this.mirror.kind === 'wordle') {
       const { text, mine } = WordleUI.wordleStatus(state, this.seat);

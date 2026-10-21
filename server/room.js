@@ -18,6 +18,9 @@ import { SCORING, DEFAULT_SCORING } from '../src/judgement/rules.js';
 import { PoolGame } from '../src/pool/engine.js';
 import { PoolAI } from '../src/pool/ai.js';
 import { seatsFor } from '../src/pool/rules.js';
+import { SudokuGame } from '../src/sudoku/engine.js';
+import { SudokuAI } from '../src/sudoku/ai.js';
+import { LEVELS, DEFAULT_LEVEL } from '../src/sudoku/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, MAX_PLAYERS, TIMEOUTS, botDelay, paceFor, maxFor } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 import { videoId, QUEUE_MAX } from '../src/net/youtube.js';
@@ -53,10 +56,10 @@ export async function youtubeTitle(id) {
 const cleanTitle = (t) => String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
-const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI] };
-// Decisions everyone makes at the same time (Bingo grids, Wordle guesses): each player
-// sees only their own clock.
-const TOGETHER = new Set(['arrange', 'guess']);
+const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI], sudoku: [SudokuGame, SudokuAI] };
+// Decisions everyone makes at the same time (Bingo grids, Wordle guesses, Sudoku
+// numbers): each player sees only their own clock.
+const TOGETHER = new Set(['arrange', 'guess', 'cell']);
 
 // Names end up in the HTML of other players' screens, so keep them plain.
 export function cleanName(raw) {
@@ -84,6 +87,8 @@ export class Room {
     this.words = DEFAULT_WORDS;
     // Judgement: how it's scored (high, medium or low).
     this.scoring = DEFAULT_SCORING;
+    // Sudoku: how hard the puzzle is.
+    this.level = DEFAULT_LEVEL;
     this.status = 'lobby';
     this.game = null;
     this.chat = [];
@@ -306,6 +311,12 @@ export class Room {
   setScoring(m, key) {
     if (!this.isHost(m) || this.status !== 'lobby' || !SCORING[key]) return;
     this.scoring = key;
+    this.broadcastRoom();
+  }
+
+  setLevel(m, key) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !LEVELS[key]) return;
+    this.level = key;
     this.broadcastRoom();
   }
 
@@ -541,7 +552,7 @@ export class Room {
     // In Wordle the speed is only how fast the bots think; the pauses stay put.
     const pace = paceFor(this.kind);
     const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
-    const game = new Engine({ players, view, words: this.words, scoring: this.scoring });
+    const game = new Engine({ players, view, words: this.words, scoring: this.scoring, level: this.level });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -621,7 +632,7 @@ export class Room {
         break;
       case 'gameover': {
         const w = data.winner;
-        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool'].includes(game.kind)) {
+        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku'].includes(game.kind)) {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -757,6 +768,7 @@ export class Room {
       game: this.kind,
       words: this.words,
       scoring: this.scoring,
+      level: this.level,
       max: maxFor(this.kind),
       // How many of the members would play if the game started now.
       seats: this.seatCount(),
@@ -862,6 +874,16 @@ class SeatController {
 
   stopGuess() {
     this.room.withdraw(this.m, 'guess');
+  }
+
+  // Sudoku: a number for a cell. The engine checks it against the answer.
+  chooseMove(game, me) {
+    const int = (x) => (Number.isInteger(x) ? x : null);
+    return this.room.ask(this.m, 'cell', {}, () => this.m.ai.chooseMove(game, me), (v) => (v && typeof v === 'object' ? { cell: int(v.cell), digit: int(v.digit) } : null));
+  }
+
+  stopMove() {
+    this.room.withdraw(this.m, 'cell');
   }
 
   // Rebuild a client's action from known fields only; the engine validates the rest.

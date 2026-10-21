@@ -1,8 +1,8 @@
-# Monopoly Deal, Call Bridge, Judgement, Bingo, Wordle & Pool
+# Monopoly Deal, Call Bridge, Judgement, Bingo, Wordle, Sudoku & Pool
 
-Six games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+Seven games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
 the trick-taking games **Call Bridge** and **Judgement**, pen-and-paper **Bingo** (the 5×5,
-1–25 kind), a **Wordle** race and 8-ball **Pool**. Pick one on the home screen, then play against 1–4 computer opponents on a
+1–25 kind), a **Wordle** race, a **Sudoku** race and 8-ball **Pool**. Pick one on the home screen, then play against 1–4 computer opponents on a
 2D table, or
 **online with friends**: create a room, send the
 invite link, and play in your browsers (up to 8 players, bots fill empty seats).
@@ -29,7 +29,8 @@ Other scripts:
 | `npm run simulate:judgement` | The same for Judgement (120 games): checks hand sizes, trumps, the dealer's ruled-out bid and all three scorings |
 | `npm run simulate:pool` | Checks the 8-ball rules and that a shot replays the same, then plays 40 bot games (1 vs 1 and 2 vs 2) |
 | `npm run simulate:wordle` | Checks Wordle's marking and word lists, how many guesses the bots take, and races bots through whole games |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all six over WebSocket |
+| `npm run simulate:sudoku` | Checks every puzzle has one answer and that only right numbers go in, races bots on each level, and times how long a bot takes |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all seven over WebSocket |
 
 ## Playing online with friends
 
@@ -41,13 +42,13 @@ Other scripts:
    **Start game** once there are at least 2 players. Up to 8 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal, Call Bridge, Judgement, Bingo, Wordle and Pool in the lobby between games (and pick
-Judgement's scoring, or for Wordle, 5, 10 or 20 words). An invite link skips the game picker, because
+Deal, Call Bridge, Judgement, Bingo, Wordle, Sudoku and Pool in the lobby between games (and pick
+Judgement's scoring, for Wordle 5, 10 or 20 words, or Sudoku's level). An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
 
-- Every player sees only their own hand (or Bingo grid, or Wordle letters); the server runs
+- Every player sees only their own hand (or Bingo grid, Wordle letters or Sudoku numbers); the server runs
   the game and never sends anyone else's hidden cards to your browser.
 - **Chat** with the button in the top bar (or press Enter). Messages that arrive while it's
   closed pop up briefly.
@@ -66,7 +67,8 @@ While you play:
   30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
   Judgement, to bid or play); in
   Bingo, 60 s to arrange your grid and 30 s to call a number. A Wordle word stays open for
-  3 minutes at most, with its own clock in your bar. The
+  3 minutes at most, with its own clock in your bar. In Sudoku, 5 minutes without putting in
+  a number and a bot fills in for you. The
   clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
   row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
@@ -314,6 +316,30 @@ words are about 950 common words picked by hand; any of 12,500 words is accepted
 (from the MIT-licensed [word-list](https://github.com/sindresorhus/word-list) package; see
 `scripts/build-wordle-guesses.mjs`).
 
+### Sudoku
+
+A race: everyone fills in the same puzzle at the same time.
+
+- Fill the 9×9 grid so every row, column and 3×3 box has 1 to 9 once each. Every puzzle
+  has exactly one answer, and you never need to guess.
+- Three levels (on the start screen, or in the lobby online): **Easy** (about 38 numbers to
+  start) and **Medium** (about 30) can be solved one number at a time, by finding the only
+  place a number fits or the only number a cell can take; **Hard** (about 25) needs more.
+- Tap a cell, then a number (or type 1–9; the arrow keys move). A right number goes in; a
+  wrong one flashes red and counts as a mistake. In a race, 3 mistakes and you're out.
+- **✏️ Notes** (or N) switches the numbers to pencil marks. They're only in your browser, and
+  tidy themselves up as you fill in cells. The small number on each key is how many of that
+  number are left to place.
+- The first to fill the grid wins, and the race ends there. Each opponent's bar shows how many
+  cells they've filled and their mistakes, and a tiny grid of which cells, but not the
+  numbers until it's over. Then the answer fills in the cells you didn't get to.
+- To play on your own, pick **None** for opponents: no limit on mistakes and no rush; the
+  clock in your bar shows how long you've taken.
+
+Bots fill in a cell at a time, the one with the fewest numbers left, at an unhurried
+person's pace: about 6 minutes for an easy puzzle, 10 for a medium and 16 for a hard one.
+Now and then they make a mistake too.
+
 ### Pool
 
 Eight-ball, one on one or two against two (partners take turns and share a group). Against
@@ -381,11 +407,16 @@ src/
     rules.js     marking a guess, the keyboard's colours, game lengths
     engine.js    each word a race: asks everyone for guesses at once
     ai.js        computer opponents (guess a word that fits, at a person's pace)
+  sudoku/    Sudoku's rules, engine and AI
+    rules.js     the grid, the solver and the puzzle maker (one answer; levels)
+    engine.js    one puzzle raced: asks everyone for numbers at once, checks each
+    ai.js        computer opponents (the cell with the fewest options, at a person's pace)
   render/    the tables (DOM + CSS)
     view.js      player panels, card layout and animation
     trick-view.js      the Call Bridge and Judgement table, built on view.js
     bingo-view.js      the Bingo table: player bars, the calls and your grid
     wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
+    sudoku-view.js     the Sudoku table: player bars, your grid, notes and the number pad
     pool-view.js       the pool table on a canvas: shots replayed, aiming and power
     textures.js  card faces (both decks) drawn on canvas
     deck-style.js  Call Bridge’s and Judgement’s card style (classic or fantasy suits)
@@ -395,6 +426,7 @@ src/
     tricks.js    Call Bridge's and Judgement's prompts, status line and score tables
     bingo.js     Bingo's grid arranging and calling, status line and result
     wordle.js    Wordle's guesses, status line, scores and result
+    sudoku.js    Sudoku's moves, status line and result
     pool.js      Pool's shots, status line and result
     lobby.js     online room lobby
     chat.js      room chat panel
@@ -405,6 +437,7 @@ src/
     trick-mirror.js      the same for a Call Bridge or Judgement game
     bingo-mirror.js      and for a Bingo game
     wordle-mirror.js     and for a Wordle game
+    sudoku-mirror.js     and for a Sudoku game
     pool-mirror.js       and for a Pool game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
     music.js       the room's music: the YouTube player kept in step with the room
@@ -421,6 +454,7 @@ scripts/
   simulate-judgement.mjs   and for Judgement
   simulate-bingo.mjs      and for Bingo
   simulate-wordle.mjs     and for Wordle
+  simulate-sudoku.mjs     and for Sudoku
   simulate-pool.mjs       and for Pool
   build-wordle-guesses.mjs  regenerates src/wordle/guesses.js from the word-list package
   online-smoke.mjs headless multiplayer games over real sockets
@@ -432,7 +466,8 @@ interchangeable, and the engine runs headless without a view. Call Bridge's engi
 same way, with `chooseTrump`, `chooseBid` and `choosePlay` (Judgement's only asks
 `chooseBid` and `choosePlay`), and so does Bingo's, with
 `arrangeGrid` (asked of everyone at once) and `chooseCall`. Wordle's asks everyone for
-`chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over. Pool's asks `chooseShot`: a direction, a power, and
+`chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over;
+Sudoku's the same with `chooseMove` (a number for a cell) and `stopMove`. Pool's asks `chooseShot`: a direction, a power, and
 with ball in hand where the cue ball goes.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
@@ -440,5 +475,5 @@ to that player's browser as a `request` and waits for the `response`, falling ba
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `PoolHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `SudokuHuman`, `PoolHuman`)
 used for solo play.

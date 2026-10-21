@@ -1832,3 +1832,108 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 @media (max-width: 640px), (max-height: 540px) {
   .music { width: 220px; padding: 5px 6px; }
 }
+
+/* ---------- Sudoku ---------- */
+
+:root { --sline: #1d2a22; --sthick: #0b120e; --sgiven: #eef2ec; --smine: #7cc6ff; }
+.logo.sudoku { background: #3b4f9e; letter-spacing: 0.08em; }
+.deal.sudoku-mark { font-weight: 800; letter-spacing: 0.04em; }
+#hud.sudoku #piles, #hud.sudoku #turn-controls, #hud.sudoku #hint { display: none !important; }
+.board.sudoku { background: radial-gradient(ellipse at 50% 42%, #1f2c3d 0%, #141c27 55%, #090d12 100%); }
+
+/* Opponents' bars: name and progress, then their filled cells as a tiny grid. --smini: one cell (sudoku-view.js). */
+.seat-panel.sbar { display: flex; align-items: center; }
+.seat-panel.sbar .seat-head { flex: 1; min-width: 0; height: 100%; }
+.smini { flex: none; display: grid; grid-template-columns: repeat(9, var(--smini)); gap: 1px; margin-right: var(--inner); padding: 1px; border-radius: 2px; background: rgba(0, 0, 0, 0.35); }
+.smini i { width: var(--smini); height: var(--smini); background: rgba(255, 255, 255, 0.07); }
+.smini i:nth-child(9n + 3), .smini i:nth-child(9n + 6) { margin-right: 1px; }
+.smini i:nth-child(n + 19):nth-child(-n + 27), .smini i:nth-child(n + 46):nth-child(-n + 54) { margin-bottom: 1px; }
+.smini i.g { background: rgba(255, 255, 255, 0.28); }
+.smini i.f { background: var(--c); }
+.chip.smiss.some { color: #ff8f8f; }
+
+/* Your grid. --cell: one cell's width. Box edges are thick, the rest thin. */
+.sudoku-board {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  border: 3px solid var(--sthick);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sthick);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  touch-action: manipulation;
+  user-select: none;
+}
+.scell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: #24324a;
+  border-right: 1px solid var(--sline);
+  border-bottom: 1px solid var(--sline);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.scell.alt { background: #1f2b40; }
+.scell.c8 { border-right: 0; }
+.scell.r8 { border-bottom: 0; }
+.scell.c2, .scell.c5 { border-right: 3px solid var(--sthick); }
+.scell.r2, .scell.r5 { border-bottom: 3px solid var(--sthick); }
+.scell.peer { background: #2d3e5c; }
+.scell.same { background: #3a5584; }
+.scell.sel { background: #4a6fae; box-shadow: inset 0 0 0 2px #9cc4ff; }
+.sval { font-size: calc(var(--cell) * 0.58); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.scell.given .sval { color: var(--sgiven); font-weight: 800; }
+.scell.mine .sval { color: var(--smine); }
+.scell.pend .sval { color: var(--smine); opacity: 0.55; }
+.scell.missing .sval { color: rgba(255, 255, 255, 0.35); font-weight: 500; }
+.scell.wrong { background: #6b2433; }
+.scell.wrong .sval { color: #ff9a9a; animation: wshake 0.35s; }
+.snotes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); pointer-events: none; }
+.snotes div { display: grid; place-items: center; font-size: calc(var(--cell) * 0.22); line-height: 1; color: rgba(200, 220, 255, 0.85); visibility: hidden; }
+.snotes div.on { visibility: visible; }
+
+/* The number pad: one row of nine under the grid, or three by three beside it; then
+   the tools. --skey: a number key's height (or size, beside). */
+.sudoku-pad { position: absolute; display: flex; flex-direction: column; gap: calc(var(--inner) / 1.5); pointer-events: auto; }
+.sdigits { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; }
+.sudoku-pad.beside .sdigits { grid-template-columns: repeat(3, 1fr); }
+.skey {
+  position: relative;
+  height: var(--skey);
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #3c4f73;
+  color: #fff;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.15s, opacity 0.15s;
+}
+.skey b { font-size: calc(var(--skey) * 0.48); font-weight: 700; }
+.sudoku-pad.beside .skey b { font-size: calc(var(--skey) * 0.42); }
+.skey small { position: absolute; right: 5px; bottom: 3px; font-size: 0.62rem; color: rgba(255, 255, 255, 0.55); }
+.skey:hover { filter: brightness(1.12); }
+.skey:active { transform: translateY(1px); }
+.skey.done { opacity: 0.3; }
+.sudoku-pad.notes .skey { background: #34465f; }
+.sudoku-pad.notes .skey b { font-size: calc(var(--skey) * 0.34); color: rgba(200, 220, 255, 0.9); }
+.skey.noted { box-shadow: inset 0 0 0 2px #9cc4ff; }
+.stools { display: flex; gap: 6px; }
+.stool { flex: 1; height: var(--stool); padding: 0 8px; border-radius: 8px; font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
+.stool.on { background: rgba(156, 196, 255, 0.25); border-color: #9cc4ff; }
+.sudoku-pad.off .skey, .sudoku-pad.off .stool { opacity: 0.45; pointer-events: none; }
+.board.small .stool span { font-size: 0.8rem; }
+
+/* The home screen's tile: a corner of a puzzle. */
+.tile-sudoku { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; padding: 3px; border-radius: 5px; background: #0b120e; }
+.tile-sudoku i { display: grid; place-items: center; width: 16px; height: 16px; background: #24324a; color: #eef2ec; font-size: 0.6rem; font-style: normal; font-weight: 800; }
+.tile-sudoku i.m { color: var(--smine); }
+.tile-sudoku i.e { color: transparent; }
+.tile-fan .tile-sudoku { position: absolute; left: 50%; top: 50%; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); transform: translate(-50%, -50%) rotate(4deg); }
+@media (max-width: 640px), (max-height: 540px) {
+  .tile-sudoku i { width: 13px; height: 13px; }
+}

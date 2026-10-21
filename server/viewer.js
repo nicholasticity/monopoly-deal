@@ -78,6 +78,36 @@ export class Viewer {
         cards,
       };
     }
+    if (game.kind === 'sudoku') {
+      // While the race is on, only your own numbers: everyone else's grid shows which
+      // cells they've filled (1) but not with what. The answer, and every grid, once it's over.
+      const open = state.phase === 'over';
+      return {
+        players: state.players.map((p) => {
+          const own = open || p.id === this.seat;
+          return {
+            id: p.id,
+            grid: own ? p.grid : null,
+            mask: own ? null : p.grid.map((d) => (d ? 1 : 0)).join(''),
+            filled: p.filled,
+            mistakes: p.mistakes,
+            solved: p.solved,
+            done: p.done,
+            time: p.time,
+            wrong: p.id === this.seat ? p.wrong : null,
+          };
+        }),
+        level: state.level,
+        puzzle: state.puzzle,
+        empty: state.empty,
+        limited: state.limited,
+        phase: state.phase,
+        elapsed: state.startedAt ? (state.endedAt || Date.now()) - state.startedAt : 0,
+        solution: open ? state.solution : null,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'pool') {
       // Nothing is hidden at the pool table. The last shot goes along so every browser
       // can replay it.

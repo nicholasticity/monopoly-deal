@@ -8,6 +8,7 @@ export const GAMES = {
   judgement: { name: 'Judgement', tagline: 'Bid exactly the tricks you’ll take. Hands go from 7 cards down to 1 and back up.' },
   bingo: { name: 'Bingo', tagline: 'Arrange 1–25 on your grid, take turns calling numbers, and be the first to cross off five lines.' },
   wordle: { name: 'Wordle', tagline: 'Everyone races to guess the same five-letter word. The first to get it scores a point.' },
+  sudoku: { name: 'Sudoku', tagline: 'Fill the grid so every row, column and box has 1 to 9. Race the others on the same puzzle.' },
   // 8-ball: two players, or four as two teams.
   pool: { name: 'Pool', tagline: 'Eight-ball: pot all your solids or stripes, then sink the 8. One on one, or two against two.' },
 };
@@ -22,14 +23,15 @@ export const BOT_NAMES = ['Rich Uncle Pennybags', 'Lady Luck', 'The Baron', 'Mad
 // How fast every game goes. delay: AI thinking time per decision (ms); pace: multiplier
 // on animation pauses (1 is the pauses as written in the engines). Wordle bots think
 // slower (wordleDelay), at about a person's pace: some 50 s a word, so you can race them.
-export const SPEED = { delay: 380, pace: 0.6, wordleDelay: 850 };
+// Sudoku bots too (sudokuDelay, a unit of their time per cell, src/sudoku/ai.js).
+export const SPEED = { delay: 380, pace: 0.6, wordleDelay: 850, sudokuDelay: 1000 };
 
 // A bot's thinking time per decision in this game (ms).
-export const botDelay = (kind) => (kind === 'wordle' ? SPEED.wordleDelay : SPEED.delay);
+export const botDelay = (kind) => ({ wordle: SPEED.wordleDelay, sudoku: SPEED.sudokuDelay })[kind] ?? SPEED.delay;
 
-// Pool's shots play out in real time, and Wordle's pauses stay put: the speed's pace
-// (shorter pauses) is for the other games.
-export const paceFor = (kind) => (kind === 'wordle' || kind === 'pool' ? 1 : SPEED.pace);
+// Pool's shots play out in real time, and Wordle's and Sudoku's pauses stay put: the
+// speed's pace (shorter pauses) is for the other games.
+export const paceFor = (kind) => (kind === 'wordle' || kind === 'pool' || kind === 'sudoku' ? 1 : SPEED.pace);
 
 // Most seats a game has in an online room: pool is two players, or four as two teams.
 export const maxFor = (kind) => (kind === 'pool' ? 4 : MAX_PLAYERS);
@@ -40,5 +42,6 @@ export const MAX_PLAYERS = 8;
 // Seconds an online player gets for each decision before a bot decides for them.
 // Then Call Bridge's and Judgement's (calling trumps, bidding and playing a card), Bingo's
 // (arranging your grid and calling a number). A Wordle guess has as long as the word
-// stays open (ROUND_SECONDS in wordle/rules.js); the word closes first.
-export const TIMEOUTS = { turn: 90, payment: 45, justsayno: 30, discard: 45, trump: 45, bid: 45, play: 45, arrange: 60, call: 30, guess: 180, shot: 60 };
+// stays open (ROUND_SECONDS in wordle/rules.js); the word closes first. A Sudoku player
+// has five minutes for each number they put in (cell) before a bot fills in for them.
+export const TIMEOUTS = { turn: 90, payment: 45, justsayno: 30, discard: 45, trump: 45, bid: 45, play: 45, arrange: 60, call: 30, guess: 180, shot: 60, cell: 300 };

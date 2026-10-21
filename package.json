@@ -12,6 +12,7 @@
     "simulate:judgement": "node scripts/simulate-judgement.mjs",
     "simulate:bingo": "node scripts/simulate-bingo.mjs",
     "simulate:wordle": "node scripts/simulate-wordle.mjs",
+    "simulate:sudoku": "node scripts/simulate-sudoku.mjs",
     "simulate:pool": "node scripts/simulate-pool.mjs",
     "start": "node server/index.js",
     "test:online": "node scripts/online-smoke.mjs"

@@ -7,6 +7,7 @@ import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, rankName, restyle } fro
 import { GAMES, TRICK_GAMES } from '../game/settings.js';
 import { SCORING, DEFAULT_SCORING } from '../judgement/rules.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
+import { LEVELS, DEFAULT_LEVEL, MAX_MISTAKES } from '../sudoku/rules.js';
 import { sound } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -24,6 +25,7 @@ const BRANDS = {
   pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
   bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
   wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
+  sudoku: '<span class="logo sudoku">SUDOKU</span><span class="deal sudoku-mark">9×9</span>',
 };
 
 const brand = (kind) => (typeof BRANDS[kind] === 'function' ? BRANDS[kind]() : BRANDS[kind]);
@@ -58,6 +60,15 @@ function miniWordle() {
   const rows = [['crane', 'bybbg'], ['route', 'gbbbg'], ['ridge', 'ggggg']];
   board.innerHTML = rows.map(([word, mark]) => `<b>${[...word].map((c, i) => `<i class="${mark[i]}">${c}</i>`).join('')}</b>`).join('');
   return board;
+}
+
+// A box of a puzzle for Sudoku's tile on the home screen: some numbers given, some
+// put in (m), some still to find (e).
+function miniSudoku() {
+  const box = el('span', 'tile-sudoku');
+  const cells = [['5', ''], ['3', 'm'], ['', 'e'], ['6', ''], ['', 'e'], ['9', 'm'], ['', 'e'], ['8', ''], ['1', 'm']];
+  box.innerHTML = cells.map(([d, cls]) => `<i class="${cls}">${d || '·'}</i>`).join('');
+  return box;
 }
 
 // Set once "Don't show this again" is ticked on the fantasy deck's guide.
@@ -170,7 +181,7 @@ export class Hud {
     this.brandEl.innerHTML = brand(kind);
     this.title = document.title = GAMES[kind].name;
     // Call Bridge and Judgement share their HUD pieces ("tricks").
-    for (const k of ['tricks', 'bingo', 'wordle', 'pool']) this.hudEl.classList.toggle(k, k === 'tricks' ? TRICK_GAMES.has(kind) : kind === k);
+    for (const k of ['tricks', 'bingo', 'wordle', 'pool', 'sudoku']) this.hudEl.classList.toggle(k, k === 'tricks' ? TRICK_GAMES.has(kind) : kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
     this.pilesEl.classList.add('idle');
     this.setGameInfo('');
@@ -665,10 +676,12 @@ export class Hud {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
         const fan = tile.appendChild(el('span', 'tile-fan'));
         if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
-        else fan.appendChild(kind === 'wordle' ? miniWordle() : kind === 'pool' ? miniPool() : miniBingo());
+        else fan.appendChild({ wordle: miniWordle, pool: miniPool, sudoku: miniSudoku }[kind]?.() ?? miniBingo());
         tile.appendChild(el('span', 'start-logo', brand(kind)));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
-        tile.appendChild(el('span', 'tile-meta muted', kind === 'pool' ? '2 or 4 players (1 vs 1 or 2 vs 2)' : '2–5 players, up to 8 online'));
+        // Wordle and Sudoku can be played alone too.
+        const players = kind === 'wordle' || kind === 'sudoku' ? '1–5 players, up to 8 online' : '2–5 players, up to 8 online';
+        tile.appendChild(el('span', 'tile-meta muted', kind === 'pool' ? '2 or 4 players (1 vs 1 or 2 vs 2)' : players));
         tile.addEventListener('click', () => {
           close();
           resolve(kind);
@@ -683,13 +696,16 @@ export class Hud {
   showStart(defaults) {
     return new Promise((resolve) => {
       this.closeAll();
-      // Wordle can be played alone, with no bots and no clock; pool is one on one, or two
-      // against two (you and a bot partner); the other games need opponents.
+      // Wordle and Sudoku can be played alone, with no bots (and in Wordle no clock);
+      // pool is one on one, or two against two (you and a bot partner); the other games
+      // need opponents.
       const pool = this.game === 'pool';
-      const counts = this.game === 'wordle' ? [0, 1, 2, 3, 4] : pool ? [1, 3] : [1, 2, 3, 4];
+      const sudoku = this.game === 'sudoku';
+      const counts = this.game === 'wordle' || sudoku ? [0, 1, 2, 3, 4] : pool ? [1, 3] : [1, 2, 3, 4];
       const opponents = pool ? (defaults.poolOpponents === 3 ? 3 : 1) : counts.includes(defaults.opponents) ? defaults.opponents : 3;
       const oppLabel = (n) => (pool ? (n === 1 ? '1 vs 1' : '2 vs 2') : n || 'None');
-      const oppTitle = (n) => (!n ? ' title="Just you, with no clock"' : pool && n === 3 ? ' title="You and a bot partner against two bots"' : '');
+      const oppTitle = (n) => (!n ? ` title="${sudoku ? 'Just you, with no limit on mistakes' : 'Just you, with no clock'}"` : pool && n === 3 ? ' title="You and a bot partner against two bots"' : '');
+      const level = LEVELS[defaults.level] ? defaults.level : DEFAULT_LEVEL;
       const body = el('div', 'start');
       body.innerHTML = `
         <button class="ghost back-home" id="opt-home" title="Choose another game">← Games</button>
@@ -704,7 +720,8 @@ export class Hud {
           <div class="opt-row" id="opt-scoring-row"><span>Scoring</span><div class="seg" id="opt-scoring">${Object.entries(SCORING).map(([k, s]) => `<button data-v="${k}" class="${k === (SCORING[defaults.scoring] ? defaults.scoring : DEFAULT_SCORING) ? 'on' : ''}" title="${s.hint}">${s.name}</button>`).join('')}</div></div>
           <p class="muted small" id="opt-scoring-hint"></p>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-          <button class="primary big" id="opt-start">${pool ? 'Rack them up' : this.game === 'bingo' || this.game === 'wordle' ? 'Start the game' : 'Deal the cards'}</button>
+          <div class="opt-row" id="opt-level-row"><span>Level</span><div class="seg" id="opt-level">${Object.entries(LEVELS).map(([k, l]) => `<button data-v="${k}" class="${k === level ? 'on' : ''}" title="${l.hint}">${l.name}</button>`).join('')}</div></div>
+          <button class="primary big" id="opt-start">${pool ? 'Rack them up' : ['bingo', 'wordle', 'sudoku'].includes(this.game) ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
           <button class="primary big" id="opt-create">Create a room</button>
@@ -729,6 +746,9 @@ export class Hud {
       const opp = seg('#opt-opp');
       const words = seg('#opt-words');
       $b('#opt-words-row').hidden = this.game !== 'wordle';
+      // Sudoku: how hard the puzzle is.
+      const levelPick = seg('#opt-level');
+      $b('#opt-level-row').hidden = !sudoku;
       // Judgement: how a round scores, with a line on what the choice means.
       const scoring = seg('#opt-scoring');
       const showScoring = () => ($b('#opt-scoring-hint').textContent = SCORING[scoring()].hint);
@@ -768,7 +788,7 @@ export class Hud {
 
       const finish = (choice) => {
         close();
-        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), scoring: scoring(), code: codeInput.value, ...choice });
+        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), scoring: scoring(), level: levelPick(), code: codeInput.value, ...choice });
       };
       const onlineName = () => {
         const name = nameInput.value.trim();
@@ -856,7 +876,7 @@ export class Hud {
 
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES }[this.game] ?? DEAL_RULES;
+    body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES }[this.game] ?? DEAL_RULES;
     // The fantasy deck's guide stays here after "Don't show this again".
     if (TRICK_GAMES.has(this.game) && deckStyle() === 'fantasy') {
       body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
@@ -940,6 +960,18 @@ const POOL_RULES = `
       <p><b>How to shoot:</b> drag on the table to swing the cue round the cue ball, or tap a ball to aim straight at it. The guide shows the cue ball’s path to a ghost ball where it hits, then which way each ball goes (red with a cross if that ball isn’t yours to hit first). Fine-tune with the <b>wheel</b> on the right (or ← →). To shoot, <b>pull the cue</b> on the left down as far as the power you want and let go (or set the power with ↑ ↓ and press Space). With ball in hand (a ✋ on the cue ball), drag the cue ball where you want it.</p>
       <p class="muted">Each card shows a side’s balls still to pot, greyed out as they drop, then the 8. Online, a ring round the shooter’s avatar runs down their 60 seconds.</p>
       <p class="muted">House rules: no called pockets, and ball in hand anywhere after any foul.</p>`;
+
+const SUDOKU_RULES = `
+      <p><b>Goal:</b> fill the grid so that every <b>row</b>, every <b>column</b> and every <b>3×3 box</b> has each number from 1 to 9 exactly once.</p>
+      <ul>
+        <li>Tap a cell, then a number (or type 1–9; the arrow keys move around). Each puzzle has one answer, and you can always find it by reasoning: no guessing needed.</li>
+        <li>A right number goes in. A wrong one doesn't: it flashes red and counts as a <b>mistake</b>.</li>
+        <li><b>✏️ Notes</b> turn the numbers into pencil marks, for the ones a cell could still be. Only you see them, and they tidy themselves up as you fill cells in.</li>
+        <li><b>Racing</b> (against bots or friends): everyone gets the same puzzle. The first to fill the grid wins. ${MAX_MISTAKES} mistakes and you're out of the race. You see how far the others have got, but not their numbers.</li>
+        <li><b>On your own:</b> no limit on mistakes and no rush; the clock just shows how long you've taken.</li>
+        <li>Levels: <b>Easy</b> and <b>Medium</b> can be solved one number at a time, by looking for the only place a number fits (or the only number a cell can take). <b>Hard</b> starts with fewer numbers and needs more thinking ahead.</li>
+      </ul>
+      <p class="muted">Tip: the small number on each key is how many of that number are still to place.</p>`;
 
 const WORDLE_RULES = `
       <p><b>Goal:</b> guess the most words <b>first</b>. A game is 5, 10 or 20 words.</p>

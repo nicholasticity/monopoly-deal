@@ -1,7 +1,8 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle and Pool. Also checks that no
-// client ever sees a hidden card (or someone else's Bingo grid).
+// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle, Sudoku and Pool. Also
+// checks that no client ever sees a hidden card (or someone else's Bingo grid, Wordle letters or
+// Sudoku numbers).
 // Usage: node scripts/online-smoke.mjs
 import http from 'node:http';
 import { WebSocket } from 'ws';
@@ -21,8 +22,11 @@ import { WordleAI } from '../src/wordle/ai.js';
 import { mark as markGuess, MAX_GUESSES } from '../src/wordle/rules.js';
 import { PoolMirror } from '../src/net/pool-mirror.js';
 import { PoolAI } from '../src/pool/ai.js';
+import { SudokuMirror } from '../src/net/sudoku-mirror.js';
+import { SudokuAI } from '../src/sudoku/ai.js';
+import { MAX_MISTAKES } from '../src/sudoku/rules.js';
 
-const MIRRORS = { deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror };
+const MIRRORS = { deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -47,6 +51,7 @@ class Client {
     this.bai = new BingoAI();
     this.wai = new WordleAI();
     this.pai = new PoolAI();
+    this.sai = new SudokuAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -151,6 +156,7 @@ class Client {
       case 'call': return this.bai.chooseCall(g, me);
       case 'guess': return this.wai.chooseGuess(g, me);
       case 'shot': return this.pai.chooseShot(g, me, args);
+      case 'cell': return this.sai.chooseMove(g, me);
     }
     fail(`unknown request ${kind}`);
   }
@@ -164,10 +170,15 @@ class Client {
     responses[players[seat].hand.some((c) => c.action === 'justsayno') ? 'holding' : 'without']++;
   }
 
+  checkHiddenSudoku() {
+    checkSudoku(this);
+  }
+
   checkHidden() {
     if (this.kind === 'callbridge' || this.kind === 'judgement') return this.checkHiddenTricks();
     if (this.kind === 'bingo') return this.checkHiddenBingo();
     if (this.kind === 'wordle') return this.checkHiddenWordle();
+    if (this.kind === 'sudoku') return this.checkHiddenSudoku();
     // Nothing is hidden at the pool table: just all sixteen balls.
     if (this.kind === 'pool') return this.mirror.state.balls.length === 16 || fail(`${this.name} sees ${this.mirror.state.balls.length} balls`);
     const { state, you } = this.mirror;
@@ -227,6 +238,28 @@ class Client {
         } else if (g.word) fail(`${this.name} can see ${p.name}'s letters`);
       }
     }
+  }
+}
+
+// Sudoku: while the race is on, your own numbers and only which cells the others have
+// filled, and not the answer; once it's over, everything. Only right numbers go in.
+function checkSudoku(client) {
+  const { state, you } = client.mirror;
+  const over = state.phase === 'over';
+  if (!over && state.solution) fail(`${client.name} was sent the answer`);
+  if (over && !state.solution) fail(`${client.name} wasn't shown the answer`);
+  for (const p of state.players) {
+    const filled = p.grid.filter(Boolean).length;
+    if (p.id === you || over) {
+      if (filled !== p.filled) fail(`${client.name} sees the wrong count for ${p.name}`);
+      if (over && p.grid.some((d, i) => d && d !== state.solution[i])) fail(`a wrong number went into ${p.name}'s grid`);
+      if (p.grid.some((d, i) => d && state.puzzle[i])) fail('a number went over a given one');
+    } else {
+      if (filled) fail(`${client.name} can see ${p.name}'s numbers`);
+      if (p.mask?.length !== 81 || [...p.mask].filter((x) => x === '1').length !== p.filled) fail(`${client.name} got a bad mask for ${p.name}`);
+    }
+    if (p.id !== you && p.wrong) fail(`${client.name} can see ${p.name}'s mistakes' numbers`);
+    if (state.limited && p.mistakes > MAX_MISTAKES) fail(`${p.name} kept going past ${MAX_MISTAKES} mistakes`);
   }
 }
 
@@ -290,6 +323,16 @@ async function playRound(clients, addBots = 0) {
     if (ids.length !== game.seats.length / 2 || ids.some((id) => state.players[id].team !== team)) fail('wrong pool winners');
     if (!state.balls.find((b) => b.id === 8).potted) fail('the pool game ended with the 8 still up');
     how = `${game.seats.length === 4 ? '2 vs 2, ' : ''}${state.shots} shots`;
+  }
+  if (game.kind === 'sudoku') {
+    const ids = results[0].winnerIds ?? [];
+    const { state } = clients[0].mirror;
+    if (clients.some((c) => !c.turns.includes('solve'))) fail('turn kinds missing');
+    const w = state.players.find((p) => p.solved);
+    if (w ? ids.length !== 1 || ids[0] !== w.id || w.filled !== state.empty : ids.length) fail('wrong Sudoku winner');
+    if (state.players.filter((p) => p.solved).length > 1) fail('more than one Sudoku winner');
+    for (const c of clients) checkSudoku(c);
+    how = `${state.level}, ${state.empty} cells, ${state.players.map((p) => `${p.filled}${p.mistakes ? `✕${p.mistakes}` : ''}`).join('/')}`;
   }
   if (game.kind === 'wordle') {
     const ids = results[0].winnerIds;
@@ -543,6 +586,23 @@ alice.send('words', { words: 5 });
 await fiveWords;
 await playRound(clients);
 await playRound(clients, 2);
+
+// Sudoku: everyone races on the same puzzle. Only the host sets the level.
+const toSudoku = alice.next('room', (m) => m.room.game === 'sudoku');
+alice.send('game', { game: 'sudoku' });
+if ((await toSudoku).room.level !== 'medium') fail('Sudoku should start at medium');
+bob2.send('level', { level: 'hard' });
+alice.send('level', { level: 'impossible' });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.level !== 'medium') fail('the level changed when it should not have');
+const easy = alice.next('room', (m) => m.room.level === 'easy');
+alice.send('level', { level: 'easy' });
+await easy;
+await playRound(clients);
+const hard = alice.next('room', (m) => m.room.level === 'hard');
+alice.send('level', { level: 'hard' });
+await hard;
+await playRound(clients);
 
 // Pool: two play, or four as two teams; anyone else watches. Three humans and two bots
 // make two teams of two (a bot sits out); then without the bots, two play and Cara watches.
