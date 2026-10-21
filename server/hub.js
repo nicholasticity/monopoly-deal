@@ -138,6 +138,8 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
       const { room, member } = conn;
       try {
         switch (msg.type) {
+          case 'ping':
+            return conn.send({ type: 'pong' });
           case 'create': {
             if (!allowEntry(ip)) return conn.send({ type: 'error', message: 'Too many attempts. Wait a minute and try again.', fatal: true });
             if (rooms.size >= MAX_ROOMS) return conn.send({ type: 'error', message: 'The server is full right now. Try again later.', fatal: true });

@@ -60,7 +60,8 @@ While you play:
   and skip, for everyone; the volume, mute and "Music off for me" are only yours. It plays
   as sound only. 🎵 opens a small card you can drag anywhere (play, skip, a volume slider,
   the queue and adding songs); ▼ puts it away completely while the music plays on, and the
-  🎵 button stays lit. See [Music](#music).
+  🎵 button stays lit. While someone in voice chat talks, the music dips under them. See
+  [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
   Judgement, to bid or play); in
@@ -132,6 +133,12 @@ connection details and never carries any audio.
   `http://192.168.…` LAN address is fine for the game but not for voice, so to talk use a
   tunnel or a host such as Render (both are https).
 - Headphones help: echo cancellation is on, but speakers can still feed back.
+- Bluetooth earbuds switch to call mode while their own microphone is on: mono and
+  phone-call quality for everything they play, so music sounds flat and may cut out.
+  Wired earphones don't have this problem.
+- Coming back to the game from another app or tab picks the sound, voice and music up
+  again at once, and reconnects if the phone dropped the connection meanwhile. (iPhones
+  pause a page's sound and microphone in the background; Android usually keeps them going.)
 - Some networks (strict office or mobile ones) block direct connections, and voice then says
   it couldn't connect to someone. A TURN server can relay the audio for them: set
   `ICE_SERVERS` on the server to a JSON list of servers, for example

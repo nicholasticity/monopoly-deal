@@ -13,6 +13,13 @@ const TICK_MS = 1500;
 // Tries at starting the song before deciding the browser wants a tap first.
 const AUTOPLAY_TRIES = 3;
 const KEYS = { volume: 'md-music-volume', muted: 'md-music-muted', off: 'md-music-off', pos: 'md-music-pos' };
+// While someone in voice chat talks, the music dips to this share of your volume, and
+// comes back up this long after they stop (so it doesn't pump between words), fading
+// in steps each way.
+const DUCK = 0.3;
+const DUCK_RELEASE_MS = 800;
+const FADE_STEP = 0.1;
+const FADE_MS = 40;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -49,6 +56,8 @@ export class RoomMusic {
     this.volume = Number(localStorage.getItem(KEYS.volume) ?? 70);
     this.muted = localStorage.getItem(KEYS.muted) === '1';
     this.expanded = false;
+    this.someoneTalking = false;
+    this.level = 1; // the share of your volume playing now (below 1 while ducked)
     this.player = null;
     this.ready = false;
     this.loadedKey = null;
@@ -235,9 +244,31 @@ export class RoomMusic {
 
   applyVolume() {
     if (!this.ready) return;
-    this.player.setVolume(this.volume);
+    this.player.setVolume(Math.round(this.volume * this.level));
     if (this.muted || this.volume === 0) this.player.mute();
     else this.player.unMute();
+  }
+
+  // Someone else in voice chat started or stopped talking: the music dips under them.
+  setDuck(talking) {
+    if (talking === this.someoneTalking) return;
+    this.someoneTalking = talking;
+    clearTimeout(this.releaseTimer);
+    if (talking) this.fadeTo(DUCK);
+    else this.releaseTimer = setTimeout(() => this.fadeTo(1), DUCK_RELEASE_MS);
+  }
+
+  // Eases the music to a share of your volume.
+  fadeTo(level) {
+    this.target = level;
+    if (this.fadeTimer) return;
+    const step = () => {
+      const gap = this.target - this.level;
+      this.level = Math.abs(gap) <= FADE_STEP ? this.target : this.level + Math.sign(gap) * FADE_STEP;
+      this.applyVolume();
+      this.fadeTimer = this.level === this.target ? null : setTimeout(step, FADE_MS);
+    };
+    step();
   }
 
   // Keeps this player to the room's song and place.
@@ -286,8 +317,9 @@ export class RoomMusic {
     if (this.state.playing) {
       if (now !== YTS.PLAYING && now !== YTS.BUFFERING) {
         // The browser may want a tap before it plays sound.
-        // The card comes out for that, even if it was put away.
-        if (++this.tries > AUTOPLAY_TRIES && this.tapBtn.classList.contains('hidden')) {
+        // The card comes out for that, even if it was put away. (In the background a
+        // phone may simply not play: that's not the browser wanting a tap.)
+        if (!document.hidden && ++this.tries > AUTOPLAY_TRIES && this.tapBtn.classList.contains('hidden')) {
           this.tapBtn.classList.remove('hidden');
           this.setExpanded(true);
         }
@@ -300,6 +332,12 @@ export class RoomMusic {
       this.player.pauseVideo();
       this.player.seekTo(this.state.pos, true);
     }
+  }
+
+  // The page is back from the background: catch up with the room straight away.
+  wake() {
+    this.tries = 0;
+    this.sync();
   }
 
   onPlayerState(s) {
@@ -323,6 +361,8 @@ export class RoomMusic {
 
   destroy() {
     clearInterval(this.tick);
+    clearTimeout(this.releaseTimer);
+    clearTimeout(this.fadeTimer);
     if (this.player && this.player !== 'loading') this.player.destroy?.();
     this.player = null;
     this.el.remove();

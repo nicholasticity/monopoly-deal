@@ -32,6 +32,8 @@ export class VoiceChat {
     this.onChange = () => {};
     // A problem worth telling the player about.
     this.onNotice = () => {};
+    // The microphone stopped while the page was in the background (phones do that).
+    this.onLost = () => {};
     this.iceServers = [];
     this.selfId = null;
     this.members = [];
@@ -45,6 +47,17 @@ export class VoiceChat {
 
   get active() {
     return !!this.stream;
+  }
+
+  // Leave voice if the microphone goes away (unplugged, or stopped by the phone).
+  watchMic(stream) {
+    stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+      if (this.stream !== stream) return;
+      const away = document.hidden;
+      this.leave();
+      if (away) this.onLost();
+      else this.onNotice('Your microphone was disconnected, so you left voice chat.');
+    });
   }
 
   // 'off', 'on' or 'muted'.
@@ -66,10 +79,7 @@ export class VoiceChat {
     if (this.closed) return stream.getTracks().forEach((t) => t.stop());
     this.stream = stream;
     this.muted = false;
-    stream.getAudioTracks()[0]?.addEventListener('ended', () => {
-      this.leave();
-      this.onNotice('Your microphone was disconnected, so you left voice chat.');
-    });
+    this.watchMic(stream);
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.selfMeter = this.meter(stream);
     this.timer = setInterval(() => this.listen(), 100);
@@ -259,8 +269,10 @@ export class VoiceChat {
     }
   }
 
+  // Sound held back until a tap, or stopped while the page was in the background
+  // (iOS calls that "interrupted"): start it again.
   resume() {
-    if (this.ctx?.state === 'suspended') this.ctx.resume();
+    if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {});
     for (const peer of this.peers.values()) if (peer.audio.srcObject && peer.audio.paused) peer.audio.play().catch(() => {});
   }
 }

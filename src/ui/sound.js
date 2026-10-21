@@ -90,7 +90,19 @@ class Sound {
       if (this.start()?.state !== 'running') return;
       for (const ev of ['pointerdown', 'keydown']) document.removeEventListener(ev, unlock, true);
     };
-    for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, unlock, true);
+    const waitForTap = () => {
+      for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, unlock, true);
+    };
+    waitForTap();
+    // Phones stop the sound while the page is in the background (iOS calls it
+    // "interrupted"). Back in view, start it again, or at the next tap if it won't yet.
+    document.addEventListener('visibilitychange', () => {
+      const ctx = this.ctx;
+      if (document.hidden || !ctx || ctx.state === 'running' || ctx.state === 'closed') return;
+      Promise.resolve(ctx.resume())
+        .catch(() => {})
+        .then(() => ctx.state !== 'running' && waitForTap());
+    });
   }
 
   start() {
@@ -105,7 +117,7 @@ class Sound {
       const data = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume()?.catch(() => {});
     return this.ctx;
   }
 

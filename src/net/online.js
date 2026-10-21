@@ -99,6 +99,20 @@ export class OnlineSession {
     this.voice.onNotice = (text) => this.notice(text);
     this.music = new RoomMusic({ send: (op, data) => this.send('music', { op, ...data }), toast: (text, kind) => this.notice(text, kind) });
     this.music.onChange = () => this.showMusic();
+    // Phones may stop the microphone while the game is in the background: back into
+    // voice on return (if the browser still allows the microphone without asking).
+    this.voice.onLost = () => sessionStorage.setItem(VOICE_KEY, '1');
+    // Back from another app or tab. Phones may have paused the sound or dropped the
+    // connection meanwhile, so pick it all up again at once.
+    this.onVisible = () => {
+      if (document.hidden || this.closed) return;
+      this.conn.wake();
+      this.voice.resume();
+      this.resumeVoice();
+      this.music.wake();
+    };
+    document.addEventListener('visibilitychange', this.onVisible);
+    window.addEventListener('pageshow', this.onVisible);
 
     this.conn = new Connection();
     this.conn.onOpen = () => this.join();
@@ -520,6 +534,7 @@ export class OnlineSession {
     const members = this.room?.members ?? [];
     this.hud.setVoice(state, talking.has(this.memberId));
     this.lobby.setVoice(state, talking);
+    this.music.setDuck([...talking].some((id) => id !== this.memberId));
     if (!this.mirror || this.needsAttach) return;
     this.view.setVoice(
       this.mirror.state.players.map((p) => {
@@ -646,6 +661,8 @@ export class OnlineSession {
     clearInterval(this.tick);
     this.voice.close();
     this.music.destroy();
+    document.removeEventListener('visibilitychange', this.onVisible);
+    window.removeEventListener('pageshow', this.onVisible);
     this.hud.musicBtn.classList.remove('on');
     sessionStorage.removeItem(VOICE_KEY);
     this.conn.close();
