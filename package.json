@@ -13,6 +13,7 @@
     "simulate:bingo": "node scripts/simulate-bingo.mjs",
     "simulate:wordle": "node scripts/simulate-wordle.mjs",
     "simulate:sudoku": "node scripts/simulate-sudoku.mjs",
+    "simulate:leastcount": "node scripts/simulate-leastcount.mjs",
     "simulate:pool": "node scripts/simulate-pool.mjs",
     "start": "node server/index.js",
     "test:online": "node scripts/online-smoke.mjs"

@@ -21,6 +21,9 @@ import { seatsFor } from '../src/pool/rules.js';
 import { SudokuGame } from '../src/sudoku/engine.js';
 import { SudokuAI } from '../src/sudoku/ai.js';
 import { LEVELS, DEFAULT_LEVEL } from '../src/sudoku/rules.js';
+import { LeastCountGame } from '../src/leastcount/engine.js';
+import { LeastCountAI } from '../src/leastcount/ai.js';
+import { ROUND_COUNTS, DEFAULT_ROUNDS } from '../src/leastcount/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, MAX_PLAYERS, TIMEOUTS, botDelay, paceFor, maxFor } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 import { videoId, QUEUE_MAX } from '../src/net/youtube.js';
@@ -56,7 +59,7 @@ export async function youtubeTitle(id) {
 const cleanTitle = (t) => String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
-const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI], sudoku: [SudokuGame, SudokuAI] };
+const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI], sudoku: [SudokuGame, SudokuAI], leastcount: [LeastCountGame, LeastCountAI] };
 // Decisions everyone makes at the same time (Bingo grids, Wordle guesses, Sudoku
 // numbers): each player sees only their own clock.
 const TOGETHER = new Set(['arrange', 'guess', 'cell']);
@@ -89,6 +92,8 @@ export class Room {
     this.scoring = DEFAULT_SCORING;
     // Sudoku: how hard the puzzle is.
     this.level = DEFAULT_LEVEL;
+    // Least Count: how many rounds a game is.
+    this.rounds = DEFAULT_ROUNDS;
     this.status = 'lobby';
     this.game = null;
     this.chat = [];
@@ -311,6 +316,12 @@ export class Room {
   setScoring(m, key) {
     if (!this.isHost(m) || this.status !== 'lobby' || !SCORING[key]) return;
     this.scoring = key;
+    this.broadcastRoom();
+  }
+
+  setRounds(m, n) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !ROUND_COUNTS.includes(n)) return;
+    this.rounds = n;
     this.broadcastRoom();
   }
 
@@ -552,7 +563,7 @@ export class Room {
     // In Wordle the speed is only how fast the bots think; the pauses stay put.
     const pace = paceFor(this.kind);
     const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
-    const game = new Engine({ players, view, words: this.words, scoring: this.scoring, level: this.level });
+    const game = new Engine({ players, view, words: this.words, scoring: this.scoring, level: this.level, rounds: this.rounds });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -626,13 +637,13 @@ export class Room {
       case 'turn':
         this.broadcast({ type: 'turn', playerId: data.player.id, what: data.what ?? null });
         break;
-      // Call Bridge and Judgement: a round's scores.
+      // Call Bridge, Judgement and Least Count: a round's scores.
       case 'round':
-        this.broadcast({ type: 'round', round: data.round, results: data.results });
+        this.broadcast({ type: 'round', round: data.round, results: data.results, caller: data.caller ?? null, caught: data.caught ?? false });
         break;
       case 'gameover': {
         const w = data.winner;
-        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku'].includes(game.kind)) {
+        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount'].includes(game.kind)) {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -769,6 +780,7 @@ export class Room {
       words: this.words,
       scoring: this.scoring,
       level: this.level,
+      rounds: this.rounds,
       max: maxFor(this.kind),
       // How many of the members would play if the game started now.
       seats: this.seatCount(),
@@ -874,6 +886,19 @@ class SeatController {
 
   stopGuess() {
     this.room.withdraw(this.m, 'guess');
+  }
+
+  // Least Count: Show, or a throw and a card to take (the deck, or one just thrown). The
+  // engine checks it and has the bot play if it won't do.
+  chooseThrow(game, me) {
+    const v = this.viewer;
+    const parse = (x) => {
+      if (!x || typeof x !== 'object') return null;
+      if (x.show === true) return { show: true };
+      const ids = Array.isArray(x.throw) ? x.throw.slice(0, 13).map((a) => v.real(a)) : null;
+      return { throw: ids, take: x.take === 'deck' ? 'deck' : v.real(x.take) };
+    };
+    return this.room.ask(this.m, 'throw', {}, () => this.m.ai.chooseThrow(game, me), parse);
   }
 
   // Sudoku: a number for a cell. The engine checks it against the answer.

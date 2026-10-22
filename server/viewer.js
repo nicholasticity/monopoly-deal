@@ -78,6 +78,35 @@ export class Viewer {
         cards,
       };
     }
+    if (game.kind === 'leastcount') {
+      // Only your own hand, until someone calls Show; then every hand is shown. The
+      // thrown cards and the wild card are face up.
+      const open = state.phase === 'show' || state.phase === 'scoring' || state.phase === 'over';
+      return {
+        players: state.players.map((p) => ({
+          id: p.id,
+          hand: p.hand.map((c) => ref(c, open || p.id === this.seat)),
+          score: p.score,
+          history: p.history,
+          total: open ? p.total : null,
+        })),
+        deck: state.deck.map((c) => ref(c, false)),
+        discard: state.discard.map(shown),
+        last: state.last && { playerId: state.last.playerId, cards: state.last.cards.map(shown) },
+        wildCard: shown(state.wildCard),
+        wild: state.wild,
+        round: state.round,
+        rounds: state.rounds,
+        handSize: state.handSize,
+        dealer: state.dealer,
+        current: state.current,
+        phase: state.phase,
+        caller: state.caller,
+        caught: state.caught,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'sudoku') {
       // While the race is on, only your own numbers: everyone else's grid shows which
       // cells they've filled (1) but not with what. The answer, and every grid, once it's over.

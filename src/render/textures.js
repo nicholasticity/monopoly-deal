@@ -476,6 +476,7 @@ function drawBack(ctx) {
 // Call Bridge's; Judgement's is the same but for the name.
 export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back', title: 'CALL BRIDGE' };
 export const JUDGEMENT_BACK = { key: 'playing-back-judgement', type: 'playing-back', title: 'JUDGEMENT' };
+export const LEASTCOUNT_BACK = { key: 'playing-back-leastcount', type: 'playing-back', title: 'LEAST COUNT' };
 
 const SUIT_RED = '#c8102e';
 // Four colours, so spades and clubs (and hearts and diamonds) are easy to tell apart.
@@ -1042,12 +1043,66 @@ function drawFantasyBack(ctx, card) {
   ctx.restore();
 }
 
+// Jokers (Least Count): the word down each corner, and a jester's cap with bells in the
+// middle, red or black (orange or violet in the fantasy deck, which calls them Jesters).
+const JOKER_INK = { red: SUIT_RED, black: '#1b1b24' };
+const FANTASY_JOKER_INK = { red: '#e8590c', black: '#5f3dc4' };
+function drawJoker(ctx, card) {
+  const color = (fantasy() ? FANTASY_JOKER_INK : JOKER_INK)[card.joker] ?? SUIT_RED;
+  const word = fantasy() ? 'JESTER' : 'JOKER';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const turn of [0, Math.PI]) {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(turn);
+    ctx.translate(-TEX_W / 2, -TEX_H / 2);
+    setFont(ctx, 40, '900');
+    [...word].forEach((ch, i) => ctx.fillText(ch, 52, 66 + i * 40));
+    ctx.restore();
+  }
+  // The cap: three points with a bell on each, over a band.
+  ctx.save();
+  ctx.translate(TEX_W / 2, TEX_H / 2 + 18);
+  const tips = [[-118, -96], [0, -150], [118, -96]];
+  ctx.beginPath();
+  ctx.moveTo(-110, 40);
+  ctx.quadraticCurveTo(-120, -20, tips[0][0], tips[0][1]);
+  ctx.quadraticCurveTo(-48, -40, tips[1][0], tips[1][1]);
+  ctx.quadraticCurveTo(48, -40, tips[2][0], tips[2][1]);
+  ctx.quadraticCurveTo(120, -20, 110, 40);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.fillStyle = '#f2b632';
+  for (const [x, y] of tips) {
+    ctx.beginPath();
+    ctx.arc(x, y, 20, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  rr(ctx, -122, 34, 244, 40, 14);
+  ctx.fill();
+  ctx.fillStyle = color;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.arc(i * 44, 54, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'alphabetic';
+  fitFont(ctx, word, 220, 44, '900');
+  ctx.fillText(word, TEX_W / 2, 470);
+}
+
 function drawPlaying(ctx, card) {
   base(ctx, '#fffdf8');
   rr(ctx, 10, 10, TEX_W - 20, TEX_H - 20, TEX_RADIUS - 8);
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#d9d4c7';
   ctx.stroke();
+  if (card.joker) return drawJoker(ctx, card);
   cornerIndex(ctx, card);
   if (card.rank === 14) {
     if (fantasy()) drawFantasyAce(ctx, card);

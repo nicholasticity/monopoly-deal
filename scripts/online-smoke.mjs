@@ -1,6 +1,6 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle, Sudoku and Pool. Also
+// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle, Sudoku, Least Count and Pool. Also
 // checks that no client ever sees a hidden card (or someone else's Bingo grid, Wordle letters or
 // Sudoku numbers).
 // Usage: node scripts/online-smoke.mjs
@@ -25,8 +25,11 @@ import { PoolAI } from '../src/pool/ai.js';
 import { SudokuMirror } from '../src/net/sudoku-mirror.js';
 import { SudokuAI } from '../src/sudoku/ai.js';
 import { MAX_MISTAKES } from '../src/sudoku/rules.js';
+import { LeastCountMirror } from '../src/net/leastcount-mirror.js';
+import { LeastCountAI } from '../src/leastcount/ai.js';
+import { showPoints, throwKind } from '../src/leastcount/rules.js';
 
-const MIRRORS = { deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror };
+const MIRRORS = { leastcount: LeastCountMirror, deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -52,6 +55,7 @@ class Client {
     this.wai = new WordleAI();
     this.pai = new PoolAI();
     this.sai = new SudokuAI();
+    this.lai = new LeastCountAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -157,6 +161,14 @@ class Client {
       case 'guess': return this.wai.chooseGuess(g, me);
       case 'shot': return this.pai.chooseShot(g, me, args);
       case 'cell': return this.sai.chooseMove(g, me);
+      case 'throw': {
+        const move = this.lai.chooseThrow(g, me);
+        return move.then((m) => {
+          if (!m.show && !throwKind(m.throw.map((id) => me.hand.find((c) => c.id === id)))) fail('a client made an illegal throw');
+          // Now and then something that won't do: the server has the bot play instead.
+          return Math.random() < 0.02 ? { throw: [123456], take: 'deck' } : m;
+        });
+      }
     }
     fail(`unknown request ${kind}`);
   }
@@ -170,6 +182,23 @@ class Client {
     responses[players[seat].hand.some((c) => c.action === 'justsayno') ? 'holding' : 'without']++;
   }
 
+  // Least Count: only your own hand until a Show, then every hand; thrown cards and the
+  // wild card face up; the deck always face down.
+  checkHiddenLeastCount() {
+    const { state, you } = this.mirror;
+    const open = ['show', 'scoring', 'over'].includes(state.phase);
+    for (const c of state.deck) if (!c.hidden) fail(`${this.name} can see a deck card`);
+    for (const c of [...state.discard, ...(state.last?.cards ?? []), ...(state.wildCard ? [state.wildCard] : [])]) if (c.hidden) fail(`${this.name} can't see a thrown card`);
+    for (const p of state.players) {
+      for (const c of p.hand) {
+        if (p.id === you || open) {
+          if (c.hidden) fail(`${this.name} can't see a card they should`);
+        } else if (!c.hidden || c.key) fail(`${this.name} can see ${p.name}'s hand`);
+      }
+      if (!open && p.total != null) fail(`${this.name} was told ${p.name}'s total`);
+    }
+  }
+
   checkHiddenSudoku() {
     checkSudoku(this);
   }
@@ -179,6 +208,7 @@ class Client {
     if (this.kind === 'bingo') return this.checkHiddenBingo();
     if (this.kind === 'wordle') return this.checkHiddenWordle();
     if (this.kind === 'sudoku') return this.checkHiddenSudoku();
+    if (this.kind === 'leastcount') return this.checkHiddenLeastCount();
     // Nothing is hidden at the pool table: just all sixteen balls.
     if (this.kind === 'pool') return this.mirror.state.balls.length === 16 || fail(`${this.name} sees ${this.mirror.state.balls.length} balls`);
     const { state, you } = this.mirror;
@@ -323,6 +353,23 @@ async function playRound(clients, addBots = 0) {
     if (ids.length !== game.seats.length / 2 || ids.some((id) => state.players[id].team !== team)) fail('wrong pool winners');
     if (!state.balls.find((b) => b.id === 8).potted) fail('the pool game ended with the 8 still up');
     how = `${game.seats.length === 4 ? '2 vs 2, ' : ''}${state.shots} shots`;
+  }
+  if (game.kind === 'leastcount') {
+    const ids = results[0].winnerIds;
+    const { state } = clients[0].mirror;
+    if (clients.some((c) => c.rounds.length !== state.rounds)) fail(`played ${clients[0].rounds.length} of ${state.rounds} rounds`);
+    if (clients.some((c) => !c.turns.includes('throw'))) fail('turn kinds missing');
+    // Every Show scored by the rules, the totals adding up, and the lowest winning.
+    for (const r of clients[0].rounds) {
+      const totals = Object.fromEntries(r.results.map((x) => [x.id, x.total]));
+      const { points, caught } = showPoints(totals, r.caller);
+      if (caught !== r.caught || r.results.some((x) => x.points !== points[x.id])) fail('a Show was scored wrong');
+    }
+    for (const p of state.players) if (p.score !== p.history.reduce((t, h) => t + h.points, 0)) fail(`${p.name}'s score is off`);
+    const low = Math.min(...state.players.map((p) => p.score));
+    if (state.players.some((p) => (p.score === low) !== ids.includes(p.id))) fail('wrong Least Count winners');
+    const caughtN = clients[0].rounds.filter((r) => r.caught).length;
+    how = `${state.rounds} rounds, ${caughtN} Show${caughtN === 1 ? '' : 's'} caught, scores ${state.players.map((p) => p.score).join('/')}`;
   }
   if (game.kind === 'sudoku') {
     const ids = results[0].winnerIds ?? [];
@@ -602,6 +649,19 @@ await playRound(clients);
 const hard = alice.next('room', (m) => m.room.level === 'hard');
 alice.send('level', { level: 'hard' });
 await hard;
+await playRound(clients);
+
+// Least Count: rounds of throwing and calling Show. Only the host sets how many rounds.
+const toLeastCount = alice.next('room', (m) => m.room.game === 'leastcount');
+alice.send('game', { game: 'leastcount' });
+if ((await toLeastCount).room.rounds !== 10) fail('Least Count should start at 10 rounds');
+bob2.send('rounds', { rounds: 15 });
+alice.send('rounds', { rounds: 7 });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.rounds !== 10) fail('the round count changed when it should not have');
+const fiveRounds = alice.next('room', (m) => m.room.rounds === 5);
+alice.send('rounds', { rounds: 5 });
+await fiveRounds;
 await playRound(clients);
 
 // Pool: two play, or four as two teams; anyone else watches. Three humans and two bots

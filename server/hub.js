@@ -172,6 +172,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'words': return room.setWords(member, msg.words);
           case 'scoring': return room.setScoring(member, msg.scoring);
           case 'level': return room.setLevel(member, msg.level);
+          case 'rounds': return room.setRounds(member, msg.rounds);
           case 'game': return room.setGame(member, msg.game);
           case 'start': return room.start(member);
           case 'stop': return room.stop(member);

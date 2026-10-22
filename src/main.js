@@ -5,6 +5,11 @@ import { BingoView } from './render/bingo-view.js';
 import { WordleView } from './render/wordle-view.js';
 import { PoolView } from './render/pool-view.js';
 import { SudokuView } from './render/sudoku-view.js';
+import { LeastCountView } from './render/leastcount-view.js';
+import * as LeastCountUI from './ui/leastcount.js';
+import { LeastCountGame } from './leastcount/engine.js';
+import { LeastCountAI } from './leastcount/ai.js';
+import { roundCount } from './leastcount/rules.js';
 import { Hud } from './ui/hud.js';
 import { HumanController } from './ui/human.js';
 import { TrickHuman, trickStatus, gameInfo, gameResult, scoreTable, turnToast } from './ui/tricks.js';
@@ -47,6 +52,7 @@ const views = {
   wordle: new WordleView(stage),
   pool: new PoolView(stage),
   sudoku: new SudokuView(stage),
+  leastcount: new LeastCountView(stage),
 };
 let kind = null;
 let view = null;
@@ -62,7 +68,7 @@ if (!localStorage.getItem('md-keys')) {
   localStorage.setItem('md-keys', '2');
 }
 const lastGame = localStorage.getItem('md-game');
-let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, scoring: localStorage.getItem('md-scoring') || DEFAULT_SCORING, level: levelOf(localStorage.getItem('md-level')), code: '' };
+let settings = { game: GAMES[lastGame] ? lastGame : DEFAULT_GAME, mode: 'solo', name: localStorage.getItem('md-name') || '', opponents: 3, words: DEFAULT_WORDS, scoring: localStorage.getItem('md-scoring') || DEFAULT_SCORING, level: levelOf(localStorage.getItem('md-level')), rounds: roundCount(Number(localStorage.getItem('md-rounds'))), code: '' };
 
 const activeHuman = () => (online ? online.human : human);
 
@@ -84,6 +90,7 @@ views.wordle.on('marked', () => sound.play('flip'));
 views.sudoku.on('submit', (move) => !!activeHuman()?.submit?.(move));
 views.sudoku.on('placed', () => sound.play('place'));
 views.sudoku.on('wrong', () => sound.play('no'));
+views.leastcount.on('show', () => activeHuman()?.show?.());
 // Pool online: the others see our cue as we aim.
 views.pool.on('aim', (aim) => online?.sendAim(aim));
 
@@ -107,6 +114,7 @@ hud.onGameInfo = () => {
   const g = online?.mirror ?? game;
   if (TRICK_GAMES.has(g?.kind)) hud.overlay({ title: 'Scores', body: scoreTable(g.state, online ? online.seat : 0) });
   if (g?.kind === 'wordle') hud.overlay({ title: 'Scores', body: WordleUI.scoreTable(g.state, online ? online.seat : 0) });
+  if (g?.kind === 'leastcount') hud.overlay({ title: 'Scores', body: LeastCountUI.scoreTable(g.state, online ? online.seat : 0) });
 };
 hud.onNewGame = () => (online ? online.confirmLeave() : startFlow());
 hud.onStopGame = () => online?.confirmStop();
@@ -120,6 +128,12 @@ function updateStatus() {
   if (game.kind === 'pool') {
     const { text, mine } = PoolUI.poolStatus(state, 0);
     hud.setStatus(text, mine);
+    return;
+  }
+  if (game.kind === 'leastcount') {
+    const { text, mine } = LeastCountUI.leastCountStatus(state, 0);
+    hud.setStatus(text, mine);
+    hud.setGameInfo(LeastCountUI.gameInfo(state), 'Scores');
     return;
   }
   if (game.kind === 'sudoku') {
@@ -167,13 +181,14 @@ function newGame(opts) {
     wordle: [WordleGame, WordleAI, WordleUI.WordleHuman],
     pool: [PoolGame, PoolAI, PoolUI.PoolHuman],
     sudoku: [SudokuGame, SudokuAI, SudokuUI.SudokuHuman],
+    leastcount: [LeastCountGame, LeastCountAI, LeastCountUI.LeastCountHuman],
   }[kind];
   human = new Human(hud, view);
   const players = [{ name: opts.name || 'You', isHuman: true, controller: human }];
   for (let i = 0; i < opts.opponents; i++) players.push({ name: BOT_NAMES[i], controller: new Bot({ delay: botDelay(kind) }) });
   // Wordle on your own has no clock: a word lasts until you get it or run out of guesses.
   const untimed = kind === 'wordle' && !opts.opponents;
-  game = new Engine({ players, view, words: opts.words, scoring: opts.scoring, level: opts.level, ...(untimed && { roundMs: 0 }) });
+  game = new Engine({ players, view, words: opts.words, scoring: opts.scoring, level: opts.level, rounds: opts.rounds, ...(untimed && { roundMs: 0 }) });
   // In Wordle the speed is only how fast the bots think, and pool's shots play out in real time.
   view.pace = paceFor(kind);
   hud.clearLog();
@@ -186,7 +201,7 @@ function newGame(opts) {
       cueLog(data.text, data.kind);
     } else if (type === 'toast') hud.toast(data.text, data.kind);
     // Call Bridge and Judgement: no chime for every card you play.
-    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
+    else if (type === 'turn' && data.player.isHuman) hud.yourTurn(data.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast, leastcount: LeastCountUI.turnToast }[kind] ?? turnToast)(data.what) : undefined, { quiet: data.what === 'play' });
     // Bingo: players get ready one by one while everyone arranges. Wordle and Sudoku:
     // moves come in from everyone at once.
     else if (type === 'state' && ['bingo', 'wordle', 'sudoku'].includes(current.kind)) view.layout();
@@ -214,6 +229,8 @@ async function onGameOver(winner) {
     await hud.showResult(PoolUI.gameResult(finished.state, 0));
   } else if (finished.kind === 'sudoku') {
     await hud.showResult(SudokuUI.gameResult(finished.state, 0));
+  } else if (finished.kind === 'leastcount') {
+    await hud.showResult(LeastCountUI.gameResult(finished.state, 0));
   } else {
     const sets = winner.piles.filter(R.isComplete).map((p) => p.color);
     const stats = `Finished on turn ${finished.state.turn} with ${[...new Set(sets)].length} complete sets.`;
@@ -271,6 +288,7 @@ async function startFlow(notice = null, home = false) {
   settings = { ...settings, ...opts, ...own, mode: opts.mode === 'solo' ? 'solo' : 'online' };
   localStorage.setItem('md-scoring', settings.scoring);
   localStorage.setItem('md-level', settings.level);
+  localStorage.setItem('md-rounds', settings.rounds);
   if (opts.mode === 'solo') {
     // Solo, the fantasy deck's guide comes before the deal, so nothing goes on behind it.
     if (TRICK_GAMES.has(kind)) await hud.showFantasyGuide();

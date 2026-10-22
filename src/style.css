@@ -1007,6 +1007,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   pointer-events: none;
 }
 .modal.dock { width: min(520px, 94vw); max-height: calc(100dvh - var(--dock-h, 110px) - 70px); pointer-events: auto; }
+/* Online: the time left, at the end of the prompt's title. */
+.modal.dock h2 { display: flex; align-items: center; gap: 10px; }
+.prompt-clock { margin-left: auto; padding: 2px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: var(--text); font-size: 0.85rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.prompt-clock.low { background: rgba(200, 16, 46, 0.85); color: #fff; }
 
 /* ---------- Call Bridge and Judgement prompts & scores ---------- */
 .jprompt { display: flex; flex-direction: column; gap: 10px; }
@@ -1937,3 +1941,43 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 @media (max-width: 640px), (max-height: 540px) {
   .tile-sudoku i { width: 13px; height: 13px; }
 }
+
+/* ---------- Least Count ---------- */
+
+.logo.leastcount { background: #8a3b12; letter-spacing: 0.04em; }
+.deal.lc-mark { display: inline-grid; place-items: center; width: 1.2em; height: 1.2em; border-radius: 50%; background: #f2b632; color: #2a1d00; font-weight: 900; font-size: 0.8em; }
+#hud.leastcount #piles, #hud.leastcount #turn-controls, #hud.leastcount #hint { display: none !important; }
+.board.leastcount { background: radial-gradient(ellipse at 50% 42%, #3d3324 0%, #261f16 55%, #110d09 100%); }
+.board.leastcount .mini-card { background: linear-gradient(160deg, #3a5a94, #1d3461); }
+#game-info .lc-wild { padding: 1px 7px; border-radius: 999px; background: #f2b632; color: #2a1d00; font-weight: 800; font-size: 0.85em; }
+
+/* The deck and the last throw take a tap on your turn; your picked cards stand up. */
+.card.pickable { pointer-events: auto; cursor: pointer; }
+.card.pickable .face { box-shadow: 0 0 0 3px rgba(242, 182, 50, 0.85), 0 8px 22px rgba(0, 0, 0, 0.45); }
+.card.picked .face { box-shadow: 0 0 0 4px #5fd68a, 0 14px 30px rgba(0, 0, 0, 0.5); }
+/* Worth nothing this round: a gold 0 under the corner index, on the edge a fanned hand leaves showing. */
+.card.zero::before { content: '0'; position: absolute; z-index: 3; left: 5%; top: 37%; width: 22%; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; background: #f2b632; color: #2a1d00; font: 900 34px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
+.lc-label { position: absolute; z-index: 5; transform: translateX(-50%); padding: 2px 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); color: var(--muted); font-size: 0.74rem; font-weight: 700; white-space: nowrap; pointer-events: none; }
+.lc-label.wild { color: #f2b632; }
+.lc-actions { position: absolute; z-index: 950; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.lc-hint { flex: 1; min-width: 0; padding: 6px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.55); color: var(--text); font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-hint.bad { color: #ff9a9a; }
+.lc-hint.ready { color: #8ff0b0; }
+.lc-show { pointer-events: auto; flex: none; padding: 8px 16px; font-weight: 900; letter-spacing: 0.02em; }
+.den-pill.lc-called { background: #f2b632; color: #2a1d00; }
+.den-pill.lc-called.caught { background: #c8102e; color: #fff; }
+.chip.lc-worth { font-weight: 800; color: #f2b632; }
+.board.small .lc-hint { font-size: 0.74rem; padding: 5px 8px; }
+
+/* Round scores: each hand as card marks. */
+.lc-verdict { margin: 0 0 10px; }
+.lc-verdict.caught { color: #ff9a9a; }
+.lcscores .lc-hand { text-align: left; white-space: normal; line-height: 1.7; }
+.lc-card { display: inline-flex; align-items: baseline; gap: 1px; padding: 0 4px; border-radius: 4px; background: #fffdf8; color: #1b1b24; font-size: 0.82rem; }
+.lc-card .suit { font-size: 0.95em; }
+.lc-card.zero { background: #f2b632; }
+.lc-joker { display: inline-block; padding: 0 4px; border-radius: 4px; background: #fffdf8; font-size: 0.72rem; font-weight: 800; }
+.lc-joker.red { color: #c8102e; }
+.lc-joker.black { color: #1b1b24; }
+.lc-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #f2b632; color: #2a1d00; font-size: 0.68rem; font-weight: 800; }
+.lc-tag.caught { background: #c8102e; color: #fff; }

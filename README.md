@@ -1,7 +1,8 @@
-# Monopoly Deal, Call Bridge, Judgement, Bingo, Wordle, Sudoku & Pool
+# Monopoly Deal, Call Bridge, Judgement, Least Count, Bingo, Wordle, Sudoku & Pool
 
-Seven games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
-the trick-taking games **Call Bridge** and **Judgement**, pen-and-paper **Bingo** (the 5×5,
+Eight games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+the trick-taking games **Call Bridge** and **Judgement**, the lowest-hand card game **Least
+Count**, pen-and-paper **Bingo** (the 5×5,
 1–25 kind), a **Wordle** race, a **Sudoku** race and 8-ball **Pool**. Pick one on the home screen, then play against 1–4 computer opponents on a
 2D table, or
 **online with friends**: create a room, send the
@@ -29,8 +30,9 @@ Other scripts:
 | `npm run simulate:judgement` | The same for Judgement (120 games): checks hand sizes, trumps, the dealer's ruled-out bid and all three scorings |
 | `npm run simulate:pool` | Checks the 8-ball rules and that a shot replays the same, then plays 40 bot games (1 vs 1 and 2 vs 2) |
 | `npm run simulate:wordle` | Checks Wordle's marking and word lists, how many guesses the bots take, and races bots through whole games |
+| `npm run simulate:leastcount` | Plays Least Count between bots (2, 4 and 6 players): checks every card is accounted for, every throw is legal and every Show is scored right, with round lengths and how often a Show is caught |
 | `npm run simulate:sudoku` | Checks every puzzle has one answer and that only right numbers go in, races bots on each level, and times how long a bot takes |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all seven over WebSocket |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all eight over WebSocket |
 
 ## Playing online with friends
 
@@ -42,8 +44,8 @@ Other scripts:
    **Start game** once there are at least 2 players. Up to 8 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal, Call Bridge, Judgement, Bingo, Wordle, Sudoku and Pool in the lobby between games (and pick
-Judgement's scoring, for Wordle 5, 10 or 20 words, or Sudoku's level). An invite link skips the game picker, because
+Deal, Call Bridge, Judgement, Least Count, Bingo, Wordle, Sudoku and Pool in the lobby between games
+(and pick Judgement's scoring, Least Count's rounds, for Wordle 5, 10 or 20 words, or Sudoku's level). An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
@@ -64,12 +66,13 @@ While you play:
   🎵 button stays lit. While someone in voice chat talks, the music dips under them. See
   [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
-  30 s for a Just Say No. In Call Bridge you have 45 s to call trumps, bid or play a card (in
-  Judgement, to bid or play); in
+  30 s for a Just Say No. In Call Bridge you have 2 minutes to call trumps or bid, and 90 s to
+  play a card (in Judgement, the same to bid or play; in Least Count, 45 s to throw or call Show); in
   Bingo, 60 s to arrange your grid and 30 s to call a number. A Wordle word stays open for
   3 minutes at most, with its own clock in your bar. In Sudoku, 5 minutes without putting in
   a number and a bot fills in for you. The
-  clock shows in the status bar for the last 30 s. If you miss a turn (or two prompts in a
+  clock shows in the status bar all along for your own decisions (and in the bid and trump
+  prompts), and for the last 30 s of anyone else's. If you miss a turn (or two prompts in a
   row) a bot plays for you until you press **I'm back**.
 - **Refresh or lose connection?** You get your seat back automatically. If you're gone for more
   than 15 s a bot covers for you until you return. Coming back from another tab, browser or
@@ -316,6 +319,31 @@ words are about 950 common words picked by hand; any of 12,500 words is accepted
 (from the MIT-licensed [word-list](https://github.com/sindresorhus/word-list) package; see
 `scripts/build-wordle-guesses.mjs`).
 
+### Least Count
+
+The fewest points wins: throw your high cards, keep the low ones, and call **Show** when
+you think your hand is the smallest.
+
+- Everyone gets 7 cards (one deck with two jokers; two decks for 6 to 8 players). Cards are
+  worth: Ace 1, 2–10 as marked, Jack 11, Queen 12, King 13, jokers 0.
+- **Wild card:** each round a card is turned up under the deck, and every card of its rank
+  counts 0 that round, like the jokers (they get a gold **0**).
+- **Your turn:** throw one card, a set (two or more of a rank), or a run (three or more in a
+  row in one suit, ace low; a joker can fill a gap), then take one card: the top of the
+  deck, or one of the cards the player before you just threw. Tap the cards to throw (they
+  stand up), then tap the deck or the card to take.
+- **Show:** instead of throwing, call Show (the button shows your hand's worth). Every hand
+  is laid out. Strictly the fewest points: you score 0 and everyone else scores their hand.
+  If anyone has as few or fewer, you're caught: 40 for you, 0 for them, and the rest score
+  their hands.
+- A game is 5, 10 or 15 rounds (on the start screen, or in the lobby online); the lowest
+  total after the last one wins, and a tie shares the win.
+
+Cards come in the classic or fantasy style, as in Call Bridge and Judgement (the fantasy
+deck's jokers are Jesters). Bots throw whatever leaves their hand lowest, take a card from
+the last throw when it's low or makes a pair, and call Show when their hand is low for how
+few cards the others hold; about one Show in five gets caught.
+
 ### Sudoku
 
 A race: everyone fills in the same puzzle at the same time.
@@ -407,6 +435,10 @@ src/
     rules.js     marking a guess, the keyboard's colours, game lengths
     engine.js    each word a race: asks everyone for guesses at once
     ai.js        computer opponents (guess a word that fits, at a person's pace)
+  leastcount/  Least Count's rules, engine and AI
+    rules.js     card values, the wild rank, what can be thrown, and how a Show scores
+    engine.js    deals, turns (throw then take), Show, rounds and the lowest total
+    ai.js        computer opponents (the throw that leaves the lowest hand; when to Show)
   sudoku/    Sudoku's rules, engine and AI
     rules.js     the grid, the solver and the puzzle maker (one answer; levels)
     engine.js    one puzzle raced: asks everyone for numbers at once, checks each
@@ -417,6 +449,7 @@ src/
     bingo-view.js      the Bingo table: player bars, the calls and your grid
     wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
     sudoku-view.js     the Sudoku table: player bars, your grid, notes and the number pad
+    leastcount-view.js the Least Count table: the deck, the wild card, the throws and your hand
     pool-view.js       the pool table on a canvas: shots replayed, aiming and power
     textures.js  card faces (both decks) drawn on canvas
     deck-style.js  Call Bridge’s and Judgement’s card style (classic or fantasy suits)
@@ -427,6 +460,7 @@ src/
     bingo.js     Bingo's grid arranging and calling, status line and result
     wordle.js    Wordle's guesses, status line, scores and result
     sudoku.js    Sudoku's moves, status line and result
+    leastcount.js  Least Count's turns, round scores, status line and result
     pool.js      Pool's shots, status line and result
     lobby.js     online room lobby
     chat.js      room chat panel
@@ -438,6 +472,7 @@ src/
     bingo-mirror.js      and for a Bingo game
     wordle-mirror.js     and for a Wordle game
     sudoku-mirror.js     and for a Sudoku game
+    leastcount-mirror.js and for a Least Count game
     pool-mirror.js       and for a Pool game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
     music.js       the room's music: the YouTube player kept in step with the room
@@ -455,6 +490,7 @@ scripts/
   simulate-bingo.mjs      and for Bingo
   simulate-wordle.mjs     and for Wordle
   simulate-sudoku.mjs     and for Sudoku
+  simulate-leastcount.mjs and for Least Count
   simulate-pool.mjs       and for Pool
   build-wordle-guesses.mjs  regenerates src/wordle/guesses.js from the word-list package
   online-smoke.mjs headless multiplayer games over real sockets
@@ -467,7 +503,8 @@ same way, with `chooseTrump`, `chooseBid` and `choosePlay` (Judgement's only ask
 `chooseBid` and `choosePlay`), and so does Bingo's, with
 `arrangeGrid` (asked of everyone at once) and `chooseCall`. Wordle's asks everyone for
 `chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over;
-Sudoku's the same with `chooseMove` (a number for a cell) and `stopMove`. Pool's asks `chooseShot`: a direction, a power, and
+Sudoku's the same with `chooseMove` (a number for a cell) and `stopMove`. Least Count's asks
+`chooseThrow` in turn: Show, or a throw and the card to take. Pool's asks `chooseShot`: a direction, a power, and
 with ball in hand where the cue ball goes.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
@@ -475,5 +512,5 @@ to that player's browser as a `request` and waits for the `response`, falling ba
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `SudokuHuman`, `PoolHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `SudokuHuman`, `LeastCountHuman`, `PoolHuman`)
 used for solo play.
