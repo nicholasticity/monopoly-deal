@@ -2,7 +2,9 @@
 // the queue and where the song is (play, pause, skip, add, remove: anyone in the room
 // may); each browser plays it in YouTube's own player and keeps to the room's place.
 // Its controls are a card you can drag about, opened with the 🎵 buttons and put away
-// with ▼ (the music plays on; nothing stays on screen). Only the sound is wanted, so the
+// with ▼ (the music plays on; nothing stays on screen). While there's a song, a talk
+// button floats by the hand: hold it and the music goes down for everyone, so you can
+// be heard; let go and it comes back. Only the sound is wanted, so the
 // player itself is always out of sight. Volume, mute and "music off" are this browser's
 // own.
 import { videoId, playlistId } from './youtube.js';
@@ -13,11 +15,9 @@ const TICK_MS = 1500;
 // Tries at starting the song before deciding the browser wants a tap first.
 const AUTOPLAY_TRIES = 3;
 const KEYS = { volume: 'md-music-volume', muted: 'md-music-muted', off: 'md-music-off', pos: 'md-music-pos' };
-// While someone in voice chat talks, the music dips to this share of your volume, and
-// comes back up this long after they stop (so it doesn't pump between words), fading
+// While anyone holds the talk button, the music is at this share of your volume, fading
 // in steps each way.
 const DUCK = 0.15;
-const DUCK_RELEASE_MS = 800;
 const FADE_STEP = 0.1;
 const FADE_MS = 40;
 
@@ -47,16 +47,20 @@ function youtubeAPI() {
 }
 
 export class RoomMusic {
-  // send(op, data): to the room. toast(text, kind): a note on screen.
-  constructor({ send, toast }) {
+  // send(op, data): to the room. toast(text, kind): a note on screen. self(): your
+  // member id in the room.
+  constructor({ send, toast, self = () => null }) {
     this.send = send;
     this.toast = toast;
+    this.self = self;
     this.state = { queue: [], playing: false, pos: 0, at: 0 };
     this.on = localStorage.getItem(KEYS.off) !== '1';
     this.volume = Number(localStorage.getItem(KEYS.volume) ?? 70);
     this.muted = localStorage.getItem(KEYS.muted) === '1';
     this.expanded = false;
-    this.someoneTalking = false;
+    // Who's holding the talk button ({ id, name }), and whether you are.
+    this.talking = [];
+    this.holding = false;
     this.level = 1; // the share of your volume playing now (below 1 while ducked)
     this.player = null;
     this.ready = false;
@@ -150,6 +154,39 @@ export class RoomMusic {
     card.append(head, this.tapBtn, this.screenEl, body);
     document.body.appendChild(card);
     this.draggable(head);
+    this.buildTalk();
+  }
+
+  // The talk button: held down (mouse, finger or the space bar), the music is down for
+  // everyone in the room.
+  buildTalk() {
+    const b = (this.talkBtn = el('button', 'music-talk hidden'));
+    b.title = 'Hold to turn the music down for everyone while you talk';
+    const press = (e) => {
+      e.preventDefault();
+      b.setPointerCapture?.(e.pointerId);
+      this.hold(true);
+    };
+    const release = () => this.hold(false);
+    b.addEventListener('pointerdown', press);
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, release);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+    b.addEventListener('keydown', (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), this.hold(true)));
+    b.addEventListener('keyup', (e) => (e.key === ' ' || e.key === 'Enter') && this.hold(false));
+    // Switching away mid-press lets go.
+    this.letGo = () => this.hold(false);
+    window.addEventListener('blur', this.letGo);
+    document.addEventListener('visibilitychange', this.letGo);
+    document.body.appendChild(b);
+  }
+
+  hold(on) {
+    if (on === this.holding || (on && !this.current)) return;
+    this.holding = on;
+    this.send('talk', { on });
+    // Down at once for you; back up when the room says nobody's holding it.
+    if (on) this.fadeTo(DUCK);
+    this.render();
   }
 
   // A playlist (or mix): its songs are read by a player of its own, out of sight, and
@@ -285,7 +322,19 @@ export class RoomMusic {
       }),
     );
     if (!this.state.queue.length) this.queueEl.append(el('li', 'q-empty', 'The queue is empty.'));
+    this.renderTalk();
     this.onChange();
+  }
+
+  renderTalk() {
+    const b = this.talkBtn;
+    if (!b) return;
+    const others = this.talking.filter((t) => t.id !== this.self()).map((t) => t.name);
+    b.classList.toggle('hidden', !this.current);
+    b.classList.toggle('on', this.holding);
+    b.classList.toggle('others', !this.holding && others.length > 0);
+    const text = this.holding ? '🎙️ Talking · music down' : others.length ? `🔉 ${others.join(', ')} talking` : '🎙️ Hold to talk';
+    if (b.textContent !== text) b.textContent = text;
   }
 
   // ---------- the room's music ----------
@@ -293,6 +342,9 @@ export class RoomMusic {
   // From the server: the queue and where the first song is.
   apply(msg) {
     this.state = { queue: msg.queue ?? [], playing: !!msg.playing, pos: Number(msg.pos) || 0, at: Date.now() };
+    this.talking = Array.isArray(msg.talking) ? msg.talking : [];
+    if (!this.current) this.holding = false;
+    this.fadeTo(this.talking.length || this.holding ? DUCK : 1);
     this.render();
     this.sync();
   }
@@ -302,15 +354,6 @@ export class RoomMusic {
     this.player.setVolume(Math.round(this.volume * this.level));
     if (this.muted || this.volume === 0) this.player.mute();
     else this.player.unMute();
-  }
-
-  // Someone in voice chat (you included) started or stopped talking: the music dips under them.
-  setDuck(talking) {
-    if (talking === this.someoneTalking) return;
-    this.someoneTalking = talking;
-    clearTimeout(this.releaseTimer);
-    if (talking) this.fadeTo(DUCK);
-    else this.releaseTimer = setTimeout(() => this.fadeTo(1), DUCK_RELEASE_MS);
   }
 
   // Eases the music to a share of your volume.
@@ -416,8 +459,10 @@ export class RoomMusic {
 
   destroy() {
     clearInterval(this.tick);
-    clearTimeout(this.releaseTimer);
     clearTimeout(this.fadeTimer);
+    window.removeEventListener('blur', this.letGo);
+    document.removeEventListener('visibilitychange', this.letGo);
+    this.talkBtn?.remove();
     if (this.player && this.player !== 'loading') this.player.destroy?.();
     this.player = null;
     this.el.remove();

@@ -105,7 +105,7 @@ export class OnlineSession {
     this.voice = new VoiceChat((type, data) => this.send(type, data));
     this.voice.onChange = () => this.showVoice();
     this.voice.onNotice = (text) => this.notice(text);
-    this.music = new RoomMusic({ send: (op, data) => this.send('music', { op, ...data }), toast: (text, kind) => this.notice(text, kind) });
+    this.music = new RoomMusic({ send: (op, data) => this.send('music', { op, ...data }), toast: (text, kind) => this.notice(text, kind), self: () => this.memberId });
     this.music.onChange = () => this.showMusic();
     // Phones may stop the microphone while the game is in the background: back into
     // voice on return (if the browser still allows the microphone without asking).
@@ -548,7 +548,6 @@ export class OnlineSession {
     const members = this.room?.members ?? [];
     this.hud.setVoice(state, talking.has(this.memberId));
     this.lobby.setVoice(state, talking);
-    this.music.setDuck(talking.size > 0);
     if (!this.mirror || this.needsAttach) return;
     this.view.setVoice(
       this.mirror.state.players.map((p) => {

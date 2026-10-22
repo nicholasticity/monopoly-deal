@@ -63,8 +63,9 @@ While you play:
   and skip, for everyone; the volume, mute and "Music off for me" are only yours. It plays
   as sound only. 🎵 opens a small card you can drag anywhere (play, skip, a volume slider,
   the queue and adding songs); ▼ puts it away completely while the music plays on, and the
-  🎵 button stays lit. While someone in voice chat talks, the music dips under them. See
-  [Music](#music).
+  🎵 button stays lit. While a song plays, a **🎙️ Hold to talk** button floats above your
+  hand: hold it and the music goes down for everyone in the room, so you can be heard; let
+  go and it comes back (it says who's talking). See [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Call Bridge you have 2 minutes to call trumps or bid, and 90 s to
   play a card (in Judgement, the same to bid or play; in Least Count, 45 s to throw or call Show); in

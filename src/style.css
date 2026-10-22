@@ -1833,6 +1833,27 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .music-queue .q-empty { color: var(--muted); justify-content: center; }
 .music-queue button { padding: 1px 6px; }
 .music-off { align-self: flex-start; }
+/* The talk button: floats over the table's right side, above the hand. */
+.music-talk {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--hand-h, 120px) + 18px);
+  z-index: 14;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(16, 22, 19, 0.85);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.music-talk.on { background: #2f9e44; border-color: #8ce99a; transform: scale(1.06); }
+.music-talk.others { border-color: rgba(255, 215, 94, 0.6); color: var(--gold); }
 @media (max-width: 640px), (max-height: 540px) {
   .music { width: 220px; padding: 5px 6px; }
 }

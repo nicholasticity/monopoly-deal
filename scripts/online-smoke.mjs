@@ -489,7 +489,14 @@ const manyLine = bob.next('chat', (m) => m.text.includes('added 4 songs from a p
 const manyDead = alice.next('toast', (m) => m.text.includes('1 song from the playlist'));
 alice.send('music', { op: 'addMany', ids: ['aaaaaaaaaaa', 'deadvideo00', 'bbbbbbbbbbb', 'bad id!', 'ccccccccccc'] });
 await Promise.all([many, manyLine, manyDead]);
-console.log('  music: a shared queue, titles, bad links refused, pause/play and one skip at a time, playlists');
+// The talk button: while anyone holds it, everyone is told who (and the music goes down).
+const talkOn = bob.next('music', (m) => m.talking?.length === 1 && m.talking[0].name === 'Alice');
+alice.send('music', { op: 'talk', on: true });
+await talkOn;
+const talkOff = bob.next('music', (m) => Array.isArray(m.talking) && !m.talking.length);
+alice.send('music', { op: 'talk', on: false });
+await talkOff;
+console.log('  music: a shared queue, titles, bad links refused, pause/play and one skip at a time, playlists, talk button');
 // Left playing: Cara, joining later, hears it too.
 
 // Non-hosts can't start or add bots.

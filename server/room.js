@@ -55,6 +55,9 @@ export async function youtubeTitle(id) {
     return null;
   }
 }
+// Longest one press of the room music's talk button keeps the music down (a button
+// held down and forgotten, or a release that never arrives).
+const TALK_MAX_MS = 60_000;
 // Titles end up on other players' screens (as plain text), so keep them short and clean.
 const cleanTitle = (t) => String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
@@ -108,7 +111,8 @@ export class Room {
     // a queue of { key, vid, title, by } whose first is playing (or paused), and where:
     // pos seconds in at time `at` (ms).
     this.titleOf = titleOf;
-    this.music = { queue: [], playing: false, pos: 0, at: Date.now(), next: 1 };
+    // talking: members holding the talk button (id -> release timer), the music down for everyone.
+    this.music = { queue: [], playing: false, pos: 0, at: Date.now(), next: 1, talking: new Map() };
   }
 
   // ---------- membership ----------
@@ -213,6 +217,7 @@ export class Room {
   disconnected(m) {
     m.conn = null;
     m.voice = null;
+    this.setTalking(m, false);
     clearTimeout(m.dropTimer);
     if (this.status === 'playing' && m.seat >= 0) {
       m.dropTimer = setTimeout(() => {
@@ -234,6 +239,7 @@ export class Room {
   leave(m, verb = 'left') {
     clearTimeout(m.dropTimer);
     m.voice = null;
+    this.setTalking(m, false);
     if (m.conn) {
       const conn = m.conn;
       m.conn = null;
@@ -370,7 +376,19 @@ export class Room {
   musicMessage() {
     const m = this.music;
     const pos = m.pos + (m.playing ? (Date.now() - m.at) / 1000 : 0);
-    return { type: 'music', queue: m.queue.map(({ key, vid, title, by }) => ({ key, vid, title, by })), playing: m.playing, pos };
+    const talking = [...m.talking.keys()].map((id) => this.member(id)).filter(Boolean).map(({ id, name }) => ({ id, name }));
+    return { type: 'music', queue: m.queue.map(({ key, vid, title, by }) => ({ key, vid, title, by })), playing: m.playing, pos, talking };
+  }
+
+  // Someone pressed (or let go of) the music's talk button: while anyone holds it, the
+  // music is down for everyone. A press lasts TALK_MAX_MS at most.
+  setTalking(m, on) {
+    const talking = this.music.talking;
+    const was = talking.has(m.id);
+    clearTimeout(talking.get(m.id));
+    if (on) talking.set(m.id, setTimeout(() => !this.closed && this.setTalking(m, false), TALK_MAX_MS));
+    else talking.delete(m.id);
+    if (was !== on && !this.closed) this.broadcast(this.musicMessage());
   }
 
   // Anyone in the room may change the music: add a song, play, pause, skip, take one
@@ -378,6 +396,13 @@ export class Room {
   // so the first to say so moves the queue on and the rest are ignored.
   musicOp(m, v) {
     const now = Date.now();
+    // The talk button is pressed and let go often, so it has its own (looser) limit.
+    if (v?.op === 'talk') {
+      m.talkTimes = (m.talkTimes ?? []).filter((t) => now - t < 10_000);
+      if (v.on === true && m.talkTimes.length >= 30) return;
+      m.talkTimes.push(now);
+      return this.setTalking(m, v.on === true);
+    }
     m.musicTimes = (m.musicTimes ?? []).filter((t) => now - t < 10_000);
     if (m.musicTimes.length >= 12) return;
     m.musicTimes.push(now);
