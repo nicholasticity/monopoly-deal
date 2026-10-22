@@ -53,8 +53,6 @@ export class RoomMusic {
     this.send = send;
     this.toast = toast;
     this.self = self;
-    // The talk button pressed or let go (voice chat opens the microphone for it).
-    this.onHold = () => {};
     this.state = { queue: [], playing: false, pos: 0, at: 0 };
     this.on = localStorage.getItem(KEYS.off) !== '1';
     this.volume = Number(localStorage.getItem(KEYS.volume) ?? 70);
@@ -75,11 +73,6 @@ export class RoomMusic {
 
   get current() {
     return this.state.queue[0] ?? null;
-  }
-
-  // Music is playing here now (so voice chat goes push to talk).
-  get playingHere() {
-    return this.on && !!this.current && this.state.playing;
   }
 
   // Where the room's song is now (s).
@@ -191,7 +184,6 @@ export class RoomMusic {
     if (on === this.holding || (on && !this.current)) return;
     this.holding = on;
     this.send('talk', { on });
-    this.onHold(on);
     // Down at once for you; back up when the room says nobody's holding it.
     if (on) this.fadeTo(DUCK);
     this.render();
