@@ -1833,11 +1833,13 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .music-queue .q-empty { color: var(--muted); justify-content: center; }
 .music-queue button { padding: 1px 6px; }
 .music-off { align-self: flex-start; }
-/* The talk button: floats over the table's right side, above the hand. */
+/* The talk button: floats at the table's right side, where the table on show puts it
+   (--talk-top or --talk-bottom: by default just above the hand). */
 .music-talk {
   position: fixed;
   right: 14px;
-  bottom: calc(var(--hand-h, 120px) + 18px);
+  top: var(--talk-top, auto);
+  bottom: var(--talk-bottom, calc(var(--hand-h, 120px) + 18px));
   z-index: 14;
   padding: 10px 16px;
   border-radius: 999px;
@@ -1854,6 +1856,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 .music-talk.on { background: #2f9e44; border-color: #8ce99a; transform: scale(1.06); }
 .music-talk.others { border-color: rgba(255, 215, 94, 0.6); color: var(--gold); }
+@media (max-aspect-ratio: 1/1), (max-width: 640px) {
+  .music-talk { padding: 8px 14px; }
+}
 @media (max-width: 640px), (max-height: 540px) {
   .music { width: 220px; padding: 5px 6px; }
 }

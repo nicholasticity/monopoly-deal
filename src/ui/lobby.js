@@ -263,9 +263,9 @@ export class Lobby {
 
   // The voice chat button, and who in the list is talking right now.
   setVoice(state, talking) {
-    this.voiceBtn.textContent = state === 'off' ? '🎙️ Join voice' : state === 'muted' ? '🎙️ Mic off' : '🎙️ Mic on';
+    this.voiceBtn.textContent = { off: '🎙️ Join voice', muted: '🎙️ Mic off', ptt: '🎙️ Hold to talk' }[state] ?? '🎙️ Mic on';
     this.voiceBtn.classList.toggle('on', state === 'on');
-    this.voiceBtn.classList.toggle('mic-off', state === 'muted');
+    this.voiceBtn.classList.toggle('mic-off', state === 'muted' || state === 'ptt');
     for (const [id, row] of this.rows) row.classList.toggle('talking', talking.has(id));
   }
 

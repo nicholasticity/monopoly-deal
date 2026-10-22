@@ -282,9 +282,26 @@ export class TableView {
       const vars = document.documentElement.style;
       vars.setProperty('--hand-h', `${Math.round(this.geo.hand.visible)}px`);
       vars.setProperty('--dock-h', `${Math.round(this.geo.dock ?? this.geo.hand.visible)}px`);
+      const talk = this.talkSpot();
+      vars.setProperty('--talk-top', talk.top != null ? `${Math.round(talk.top)}px` : 'auto');
+      vars.setProperty('--talk-bottom', talk.bottom != null ? `${Math.round(talk.bottom)}px` : 'auto');
     }
     if (snap) this.snap(() => this.layout());
     else this.layout();
+  }
+
+  // Where the room music's talk button floats on this table, at the right edge: { top }
+  // or { bottom } (CSS px of the window), clear of everything you play with. Here, just
+  // above the hand (and on tall screens the status line that sits on it).
+  talkSpot() {
+    const g = this.geo;
+    return { bottom: g.hand.visible + (g.portrait ? this.inset.bottom + 10 : 18) };
+  }
+
+  // The bottom of the opponents' bars (the panels after yours).
+  barsBottom() {
+    const bars = this.geo.panels.slice(1);
+    return bars.length ? Math.max(...bars.map((r) => r.y + r.h)) : this.inset.top;
   }
 
   // Runs a layout with transitions off, so cards jump straight to their spots.

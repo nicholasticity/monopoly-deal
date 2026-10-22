@@ -248,10 +248,10 @@ export class Hud {
   setVoice(state, talking = false) {
     const b = this.voiceBtn;
     b.classList.toggle('on', state === 'on');
-    b.classList.toggle('mic-off', state === 'muted');
+    b.classList.toggle('mic-off', state === 'muted' || state === 'ptt');
     b.classList.toggle('talking', talking);
-    b.querySelector('.txt').textContent = state === 'off' ? 'Voice' : state === 'muted' ? 'Mic off' : 'Mic on';
-    b.title = state === 'off' ? 'Join voice chat' : state === 'muted' ? 'Voice chat · your mic is off (M)' : 'Voice chat · your mic is on (M)';
+    b.querySelector('.txt').textContent = { off: 'Voice', muted: 'Mic off', ptt: 'Hold to talk' }[state] ?? 'Mic on';
+    b.title = { off: 'Join voice chat', muted: 'Voice chat · your mic is off (M)', ptt: 'Voice chat · music is on, so hold 🎙️ Hold to talk to speak' }[state] ?? 'Voice chat · your mic is on (M)';
   }
 
   setChatDock(open) {

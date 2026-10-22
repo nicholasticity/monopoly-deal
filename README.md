@@ -139,9 +139,12 @@ connection details and never carries any audio.
   `http://192.168.…` LAN address is fine for the game but not for voice, so to talk use a
   tunnel or a host such as Render (both are https).
 - Headphones help: echo cancellation is on, but speakers can still feed back.
-- Bluetooth earbuds switch to call mode while their own microphone is on: mono and
-  phone-call quality for everything they play, so music sounds flat and may cut out.
-  Wired earphones don't have this problem.
+- Bluetooth earbuds switch to call mode while their own microphone is open (even muted):
+  mono and phone-call quality for everything they play, so music sounds flat. So while the
+  room's music plays, voice chat is **push to talk**: the microphone is let go of, and only
+  opened while you hold **🎙️ Hold to talk** (which also turns the music down for everyone).
+  When the music stops or pauses, your mic is open again. Earbuds take a moment to switch
+  when the mic opens, so start talking just after pressing. You still hear everyone else.
 - Coming back to the game from another app or tab picks the sound, voice and music up
   again at once, and reconnects if the phone dropped the connection meanwhile. (iPhones
   pause a page's sound and microphone in the background; Android usually keeps them going.)

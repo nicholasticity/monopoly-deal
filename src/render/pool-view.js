@@ -443,6 +443,12 @@ export class PoolView extends TableView {
     for (const e of [this.cardsEl, this.powerEl, this.wheelEl, this.hintEl]) e.classList.add('hidden');
   }
 
+  // On wide screens the table reaches down into the corners: the talk button goes up at
+  // the right, beside the players' cards.
+  talkSpot() {
+    return this.geo.portrait ? super.talkSpot() : { top: this.inset.top + 10 };
+  }
+
   // ---------- geometry ----------
 
   // The cards across the top, then the table as big as fits with the cue on its left

@@ -90,6 +90,12 @@ export class BingoView extends TableView {
     this.layout();
   }
 
+  // On tall screens your grid fills the bottom: the talk button goes up under the
+  // opponents' bars.
+  talkSpot() {
+    return this.geo.portrait ? { top: this.barsBottom() + 10 } : super.talkSpot();
+  }
+
   // ---------- geometry ----------
 
   // Opponents' bars across the top (two to a row on tall screens), your grid at the

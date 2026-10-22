@@ -156,6 +156,12 @@ export class TrickView extends TableView {
     this.root.classList.remove('bars');
   }
 
+  // On tall screens prompts (the bid, trumps) and Least Count's Show button rise from
+  // the hand, so the talk button goes up under the opponents' bars instead.
+  talkSpot() {
+    return this.geo.portrait ? { top: this.barsBottom() + 10 } : super.talkSpot();
+  }
+
   handRows(cards, width, cw) {
     return cards > 8 && (width - 2 * TRAY_PAD - cw) / (cards - 1) < ONE_ROW * cw ? 2 : 1;
   }

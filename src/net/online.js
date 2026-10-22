@@ -107,6 +107,8 @@ export class OnlineSession {
     this.voice.onNotice = (text) => this.notice(text);
     this.music = new RoomMusic({ send: (op, data) => this.send('music', { op, ...data }), toast: (text, kind) => this.notice(text, kind), self: () => this.memberId });
     this.music.onChange = () => this.showMusic();
+    // While music plays here, voice chat is push to talk, on the music's talk button.
+    this.music.onHold = (on) => this.voice.hold(on);
     // Phones may stop the microphone while the game is in the background: back into
     // voice on return (if the browser still allows the microphone without asking).
     this.voice.onLost = () => sessionStorage.setItem(VOICE_KEY, '1');
@@ -489,7 +491,9 @@ export class OnlineSession {
       'Voice chat',
       [
         { label: others.length ? `With ${others.join(', ')}` : 'Nobody else is in voice yet', value: null, disabled: true },
-        { label: this.voice.muted ? 'Unmute my mic' : 'Mute my mic', value: 'mute' },
+        this.voice.ptt
+          ? { label: 'Music is on: hold 🎙️ Hold to talk to speak', value: null, disabled: true }
+          : { label: this.voice.muted ? 'Unmute my mic' : 'Mute my mic', value: 'mute' },
         { label: 'Leave voice chat', value: 'leave' },
       ],
       { below: true },
@@ -504,6 +508,7 @@ export class OnlineSession {
   // The M key.
   toggleMute() {
     if (!this.voice.active) return;
+    if (this.voice.ptt) return this.hud.toast('Music is on: hold 🎙️ Hold to talk to speak.', 'info', 2000);
     this.voice.setMuted(!this.voice.muted);
     this.hud.toast(this.voice.muted ? 'Mic muted' : 'Mic on', 'info', 1200);
   }
@@ -562,6 +567,11 @@ export class OnlineSession {
     const on = this.music.on && !!this.music.current;
     this.hud.musicBtn.classList.toggle('on', on);
     this.lobby.musicBtn.classList.toggle('on', on);
+    const ptt = this.music.playingHere;
+    if (ptt !== this.voice.ptt) {
+      this.voice.setPtt(ptt);
+      if (this.voice.active) this.notice(ptt ? 'Music is playing, so voice chat is push to talk: hold 🎙️ Hold to talk to speak.' : 'The music stopped: your mic is open again.', 'info');
+    }
   }
 
   // Lobby notes and in-game toasts: the lobby covers the toasts.
