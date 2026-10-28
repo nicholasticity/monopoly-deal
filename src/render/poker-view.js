@@ -157,10 +157,10 @@ export class PokerView extends TrickView {
     const cw = clamp(Math.min(hw, (W - 24) / 7, (boardH - 28) / RATIO), 34, hw);
     // Five fixed community slots, centred. The turn and the river fill the next
     // slot; nothing already dealt slides over to make room.
-    const gap = cw * 0.16;
-    const span = 5 * cw + 4 * gap;
+    const boardGap = cw * 0.16;
+    const span = 5 * cw + 4 * boardGap;
     const left = w / 2 - span / 2;
-    const board = { x: w / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH, gap, left, span };
+    const board = { x: w / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH, gap: boardGap, left, span };
     // New cards are born at geo.discard (objFor). That is the deck, so a deal glides.
     const deck = { x: left - cw * 0.62, y: board.y, w: cw * 0.86 };
     this.geo = { portrait, small, head, inner: small ? 6 : 10, panels, hand, board, actionH, actionTop, deck, discard: deck, dock: h - panels[0].y };
