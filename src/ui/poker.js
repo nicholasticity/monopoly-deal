@@ -132,7 +132,7 @@ export function pokerStatus(state, seat) {
     const names = (state.winners ?? []).map((p) => name(p.id));
     return { text: names.length === 1 ? `${names[0]} won the table` : `${nameList(names)} split the table`, mine: false };
   }
-  if (state.phase === 'showdown') return { text: esc(state.result?.text ?? 'Showdown'), mine: false };
+  if (state.phase === 'showdown' || state.phase === 'between') return { text: esc(state.result?.text ?? 'Showdown'), mine: false };
   if (mine) {
     const opts = legalActions(state, seat);
     const what = opts.call ? `call ${chipText(opts.call)}, raise or fold` : 'check or bet';

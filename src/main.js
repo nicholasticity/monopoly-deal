@@ -43,7 +43,7 @@ import { DEFAULT_WORDS } from './wordle/rules.js';
 import * as R from './game/rules.js';
 import { BOT_NAMES, GAMES, DEFAULT_GAME, TRICK_GAMES, botDelay, paceFor } from './game/settings.js';
 import { OnlineSession, setRoomInURL } from './net/online.js';
-import { cueMoves, cueLog, cueTricks, sound } from './ui/sound.js';
+import { cueMoves, cueLog, cueTricks, cuePoker, sound } from './ui/sound.js';
 
 const hud = new Hud();
 // A table for each game on the one stage; only the current game's is on show.
@@ -90,6 +90,8 @@ views.deal.on('moves', cueMoves);
 views.deal.on('piles', (deck, discard) => hud.setPiles(deck, discard));
 views.callbridge.on('moves', cueTricks);
 views.judgement.on('moves', cueTricks);
+views.poker.on('moves', cuePoker);
+views.poker.on('coin', (n) => sound.play('coin', n));
 views.bingo.on('cell', (i) => activeHuman()?.onCell?.(i));
 views.wordle.on('submit', (word) => !!activeHuman()?.submit?.(word));
 views.wordle.on('marked', () => sound.play('flip'));

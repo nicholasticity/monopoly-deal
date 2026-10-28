@@ -3,7 +3,7 @@
 // face down by their name, and the community cards with the pot in the middle.
 // On your turn the buttons under your bar are fold, check or call, and a bet or raise.
 import { TrickView } from './trick-view.js';
-import { RATIO, div, setBox, clamp, esc, AVATARS } from './view.js';
+import { RATIO, MOVE_MS, div, setBox, offsetIn, clamp, r1, esc, AVATARS } from './view.js';
 import { POKER_BACK } from './textures.js';
 import { legalActions, sizing, chipText } from '../poker/rules.js';
 
@@ -19,8 +19,9 @@ export class PokerView extends TrickView {
     this.handlers.action = () => {};
     this.felt = div('pk-felt', this.panelLayer);
     this.potEl = div('pk-pot', this.panelLayer);
-    this.resultEl = div('pk-result hidden', this.panelLayer);
-    this.actions = div('pk-actions hidden', this.panelLayer);
+    this.resultEl = div('pk-result', this.panelLayer);
+    this.actions = div('pk-actions', this.panelLayer);
+    this.pendingCoins = 0;
     this.actions.innerHTML = `
       <div class="pk-row">
         <button type="button" data-act="fold" class="ghost">Fold</button>
@@ -90,9 +91,11 @@ export class PokerView extends TrickView {
   detach() {
     this.acting = false;
     this.actKey = '';
-    this.actions.classList.add('hidden');
-    this.resultEl.classList.add('hidden');
+    this.pendingCoins = 0;
+    this.actions.classList.remove('on');
+    this.resultEl.classList.remove('on');
     this.potEl.textContent = '';
+    for (const el of this.cardLayer.querySelectorAll('.pk-fly')) el.remove();
     super.detach();
   }
 
@@ -103,7 +106,7 @@ export class PokerView extends TrickView {
     this.panels = game.state.players.map((_, i) => {
       const el = div('seat-panel', this.panelLayer);
       el.style.setProperty('--c', AVATARS[i % AVATARS.length]);
-      return { el, head: div('seat-head', el), html: '' };
+      return { el, head: div('seat-head', el), html: '', bet: null, won: null, betAt: null, stackAt: null, seen: false };
     });
   }
 
@@ -151,9 +154,15 @@ export class PokerView extends TrickView {
     const boardTop = oppBottom + (small ? 48 : 62);
     const boardBottom = panels[0].y - 8;
     const boardH = Math.max(64, boardBottom - boardTop);
-    const cw = clamp(Math.min(hw, (W - 48) / 6.2, (boardH - 28) / RATIO), 34, hw);
-    const board = { x: w / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH };
-    const deck = { x: board.x, y: board.y, w: cw * 0.86 };
+    const cw = clamp(Math.min(hw, (W - 24) / 7, (boardH - 28) / RATIO), 34, hw);
+    // Five fixed community slots, centred. The turn and the river fill the next
+    // slot; nothing already dealt slides over to make room.
+    const gap = cw * 0.16;
+    const span = 5 * cw + 4 * gap;
+    const left = w / 2 - span / 2;
+    const board = { x: w / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH, gap, left, span };
+    // New cards are born at geo.discard (objFor). That is the deck, so a deal glides.
+    const deck = { x: left - cw * 0.62, y: board.y, w: cw * 0.86 };
     this.geo = { portrait, small, head, inner: small ? 6 : 10, panels, hand, board, actionH, actionTop, deck, discard: deck, dock: h - panels[0].y };
     this.layoutKey = `poker:${portrait ? 'tall' : 'wide'}:${n}:${small}`;
     this.root.style.setProperty('--head', `${head}px`);
@@ -193,35 +202,48 @@ export class PokerView extends TrickView {
     const betting = BETTING.has(state.phase);
     this.root.classList.toggle('my-turn', this.acting && betting && state.current === this.seat);
     this.finishLayout();
+    if (this.pendingCoins) {
+      this.handlers.coin?.(this.pendingCoins);
+      this.pendingCoins = 0;
+    }
   }
 
   layoutBoard(state) {
-    const { board } = this.geo;
+    const { board, deck } = this.geo;
     const cards = state.board;
-    const n = cards.length;
     const cw = board.w;
-    const gap = cw * 0.14;
-    const span = n ? n * cw + Math.max(0, n - 1) * gap : 0;
-    const left = board.x - span / 2;
-    cards.forEach((card, i) => {
-      const obj = this.objFor(card);
-      obj.zone = { zone: 'board' };
-      this.place(obj, left + cw / 2 + i * (cw + gap), board.y, cw, { z: 420 + i });
-      obj.live = false;
-      obj.el.classList.remove('live');
-      obj.el.classList.remove('dim');
-    });
-    const showDeck = state.deck.length > 0 && state.phase !== 'over';
-    const dx = n ? left - cw * 0.85 : board.x;
+    const gathering = state.phase === 'between';
+    if (gathering) {
+      for (const card of cards) this.placeOnDeck(card, false);
+    } else {
+      cards.forEach((card, i) => {
+        const obj = this.objFor(card);
+        obj.zone = { zone: 'board' };
+        const x = board.left + cw / 2 + i * (cw + board.gap);
+        this.place(obj, x, board.y, cw, { z: 420 + i });
+        obj.el.classList.remove('dim');
+      });
+    }
+    // The stub stays in one place. It shows while cards are coming off it and
+    // while bets are live, and fades out when the hand is being gathered.
+    const showDeck = state.deck.length > 0 && (state.phase === 'deal' || BETTING.has(state.phase));
     state.deck.forEach((card, i) => {
       const obj = this.objFor(card);
       obj.zone = { zone: 'deck' };
       const lift = Math.min(i, 16) * 0.18;
-      this.place(obj, dx - lift * 0.3, board.y - lift, cw * 0.82, { up: false, gone: !showDeck, z: 8 + i });
+      this.place(obj, deck.x - lift * 0.3, deck.y - lift, deck.w, { up: false, gone: !showDeck, z: 8 + i });
     });
-    const feltW = Math.min(this.size.w - 24, Math.max(span + cw * 2.4, cw * 5.2));
-    const feltH = cw * RATIO + (this.geo.small ? 36 : 52);
+    const feltW = Math.min(this.size.w - 16, board.span + cw * 2.6);
+    const feltH = cw * RATIO + (this.geo.small ? 44 : 58);
     setBox(this.felt, { x: board.x - feltW / 2, y: board.y - feltH / 2, w: feltW, h: feltH });
+  }
+
+  // A card already on the table, sent back to the deck face down so it can fade there.
+  placeOnDeck(card, faceUp) {
+    const d = this.geo.deck;
+    const obj = this.objFor(card);
+    obj.zone = { zone: 'deck' };
+    this.place(obj, d.x, d.y, d.w, { up: faceUp, gone: true, z: 80 });
   }
 
   layoutPanel(p, i, zi) {
@@ -230,10 +252,11 @@ export class PokerView extends TrickView {
     const { state } = this.game;
     setBox(panel.el, r);
     const mine = zi === 0;
+    const celebrating = state.phase === 'showdown' || state.phase === 'between';
     const wonPot = !!state.result?.pots?.some((pot) => pot.winners.includes(p.id));
     panel.el.classList.toggle('me', mine);
     panel.el.classList.toggle('active', state.current === i && BETTING.has(state.phase));
-    panel.el.classList.toggle('winner', (state.phase === 'over' && state.winners.includes(p)) || (state.phase === 'showdown' && wonPot));
+    panel.el.classList.toggle('winner', (state.phase === 'over' && state.winners.includes(p)) || (celebrating && wonPot));
     panel.el.classList.toggle('folded', p.folded);
     panel.el.classList.toggle('out', p.out);
     panel.el.classList.toggle('compact', r.w < 220);
@@ -246,26 +269,78 @@ export class PokerView extends TrickView {
     const bb = state.bb === i ? '<span class="den-pill pk-blind" title="Big blind">BB</span>' : '';
     const status = p.out ? '<span class="den-pill pk-out">Out</span>' : p.folded ? '<span class="den-pill pk-fold">Fold</span>' : p.allIn ? '<span class="den-pill pk-allin">All-in</span>' : '';
     const bet = p.bet ? `<span class="chip play" title="In front this street">${chipText(p.bet)}</span>` : '';
-    const won = state.phase === 'showdown' && p.won ? `<span class="chip money" title="Collected this hand">+${chipText(p.won)}</span>` : '';
+    const won = celebrating && p.won ? `<span class="chip money" title="Collected this hand">+${chipText(p.won)}</span>` : '';
     const html = `<span class="avatar">${esc(initial)}</span><span class="seat-name">${tag}${esc(p.name)}</span><span class="mic"></span>${you}${dealer}${sb}${bb}${status}<span class="chips">${bet}${won}<span class="chip score" title="Stack">${chipText(p.stack)}</span></span>`;
+    const fromBet = panel.betAt;
+    const prevBet = panel.bet;
+    const prevWon = panel.won;
     if (html !== panel.html) {
       panel.head.innerHTML = html;
       panel.html = html;
+      panel.stackAt = this.chipAt(panel, '.chip.score');
+      panel.betAt = this.chipAt(panel, '.chip.play');
     }
+    // Chips glide the way banked money and taken tricks do: from the stack to the
+    // bet, from the bet into the pot, and from the pot back to a winner.
+    if (panel.seen && !this.snapping) {
+      const added = p.bet - (prevBet || 0);
+      if (added > 0 && panel.stackAt && panel.betAt) this.flyChip(panel.stackAt, panel.betAt, chipText(added));
+      else if (added < 0 && fromBet) this.flyChip(fromBet, panel.betAt || this.potAt(), chipText(-added));
+      const gained = (p.won || 0) - (prevWon || 0);
+      if (gained > 0 && panel.stackAt) this.flyChip(this.potAt(), panel.stackAt, `+${chipText(gained)}`);
+    }
+    panel.seen = true;
+    panel.bet = p.bet;
+    panel.won = p.won || 0;
+  }
+
+  chipAt(panel, sel) {
+    const chip = panel.head.querySelector(sel);
+    if (!chip?.offsetWidth) return null;
+    const at = offsetIn(chip, this.root);
+    return { x: at.x + chip.offsetWidth / 2, y: at.y + chip.offsetHeight / 2 };
+  }
+
+  potAt() {
+    const { board, small } = this.geo;
+    const ch = board.w * RATIO;
+    const potH = small ? 32 : 38;
+    return { x: board.x, y: board.y - ch / 2 - 2 - potH / 2 };
+  }
+
+  // A chip token on the same glide as a card (MOVE_MS, the shared easing).
+  flyChip(from, to, text) {
+    if (!from || !to || Math.hypot(to.x - from.x, to.y - from.y) < 12) return;
+    const el = div('pk-fly', this.cardLayer, text);
+    const at = (p) => `translate(${r1(p.x)}px, ${r1(p.y)}px) translate(-50%, -50%)`;
+    el.style.transition = 'none';
+    el.style.transform = at(from);
+    void el.offsetWidth;
+    el.style.transition = '';
+    el.style.transform = at(to);
+    setTimeout(() => {
+      el.style.opacity = '0';
+    }, MOVE_MS - 90);
+    setTimeout(() => el.remove(), MOVE_MS + 80);
+    this.pendingCoins += 1;
   }
 
   layoutHand(p, show) {
     const g = this.geo.hand;
     const cards = p.hole;
-    const n = cards.length;
+    if (this.game.state.phase === 'between') {
+      for (const card of cards) this.placeOnDeck(card, false);
+    }
     const cw = g.cw;
     const ch = cw * RATIO;
+    // Two fixed slots, so the first hole card stays put when the second arrives.
     const step = cw * 0.72;
-    const span = n ? cw + step * Math.max(n - 1, 0) : cw * 2;
+    const span = cw + step;
     const trayW = this.geo.portrait ? g.x1 - g.x0 : Math.min(g.x1 - g.x0, Math.max(span, cw * 2.4) + 24);
     const cx = clamp(this.size.w / 2, g.x0 + trayW / 2, g.x1 - trayW / 2);
     setBox(this.tray, { x: cx - trayW / 2, y: g.top, w: trayW, h: g.h });
     const folded = p.folded;
+    if (this.game.state.phase === 'between') return;
     cards.forEach((card, i) => {
       const x = cx - span / 2 + cw / 2 + i * step;
       let y = g.top + g.h / 2;
@@ -276,7 +351,7 @@ export class PokerView extends TrickView {
       }
       const obj = this.objFor(card);
       obj.zone = { zone: 'hand', playerId: p.id };
-      this.place(obj, x, y, size, { rot: (i - (n - 1) / 2) * 3, z: 640 + i, up: show });
+      this.place(obj, x, y, size, { rot: (i - 0.5) * 3, z: 640 + i, up: show });
       obj.el.classList.toggle('dim', folded);
     });
   }
@@ -285,16 +360,32 @@ export class PokerView extends TrickView {
     const r = this.geo.panels[zi];
     const cards = p.hole;
     const { state } = this.game;
-    const open = state.revealed && !p.folded;
-    const muck = p.folded || !cards.length;
+    const gathering = state.phase === 'between';
+    const open = state.revealed && !p.folded && !gathering;
+    const muck = !gathering && (p.folded || !cards.length);
     const cw = Math.min(this.geo.board.w * 0.62, r.w * 0.28, 46);
     const ch = cw * RATIO;
+    const head = this.geo.head;
+    const avatar = head * 0.66;
+    const ax = r.x + this.geo.inner + avatar / 2;
+    const ay = r.y + head / 2;
     cards.forEach((card, i) => {
+      if (gathering) {
+        this.placeOnDeck(card, false);
+        return;
+      }
       const obj = this.objFor(card);
+      if (muck) {
+        // Folded cards shrink into the avatar, the way an opponent's hand does
+        // in Monopoly Deal and a taken trick does in Call Bridge.
+        obj.zone = { zone: 'muck', playerId: p.id };
+        this.place(obj, ax, ay, 16, { up: false, gone: true, z: 80 + i });
+        return;
+      }
       obj.zone = { zone: 'ohand', playerId: p.id };
-      const x = r.x + r.w / 2 + (i - (cards.length - 1) / 2) * cw * 0.62;
+      const x = r.x + r.w / 2 + (i - 0.5) * cw * 0.62;
       const y = r.y + r.h + ch * 0.42;
-      this.place(obj, x, y, cw, { up: open && !card.hidden, gone: muck, z: 500 + i });
+      this.place(obj, x, y, cw, { up: open && !card.hidden, gone: false, z: 500 + i });
       obj.el.classList.toggle('dim', false);
     });
     if (open && state.result?.pots?.some((pot) => pot.winners.includes(p.id)) && cards.length) {
@@ -306,7 +397,7 @@ export class PokerView extends TrickView {
   layoutChrome(state, me) {
     const { board, panels, actionH } = this.geo;
     const inFront = state.players.reduce((s, p) => s + p.bet, 0);
-    const settled = state.phase === 'showdown' || state.phase === 'over';
+    const settled = state.phase === 'showdown' || state.phase === 'between' || state.phase === 'over';
     const total = settled ? state.pot : state.pot + inFront;
     const street = STREET[state.phase] ?? '';
     const potLine = state.hand ? `Pot ${chipText(total)}` : 'Pot';
@@ -318,20 +409,18 @@ export class PokerView extends TrickView {
     const potH = this.geo.small ? 32 : 38;
     setBox(this.potEl, { x: board.x - potW / 2, y: board.y - ch / 2 - potH - 2, w: potW, h: potH });
 
-    const result = (state.phase === 'showdown' || state.phase === 'over') && state.result?.text ? state.result.text : '';
-    this.resultEl.classList.toggle('hidden', !result);
+    const result = settled && state.result?.text ? state.result.text : '';
+    this.resultEl.classList.toggle('on', !!result);
     if (result && this.resultEl.textContent !== result) this.resultEl.textContent = result;
-    if (result) {
-      const rw = Math.min(this.size.w - 24, 480);
-      const rh = this.geo.small ? 48 : 40;
-      setBox(this.resultEl, { x: board.x - rw / 2, y: board.y + ch / 2 + 6, w: rw, h: rh });
-    }
+    const rw = Math.min(this.size.w - 24, 480);
+    const rh = this.geo.small ? 48 : 40;
+    setBox(this.resultEl, { x: board.x - rw / 2, y: board.y + ch / 2 + 6, w: rw, h: rh });
 
-    const betting = this.acting && BETTING.has(state.phase) && me && state.current === me.id;
-    this.actions.classList.toggle('hidden', !betting);
-    if (!betting) return;
     const bar = panels[0];
     setBox(this.actions, { x: bar.x, y: this.geo.actionTop, w: bar.w, h: actionH - 6 });
+    const betting = this.acting && BETTING.has(state.phase) && me && state.current === me.id;
+    this.actions.classList.toggle('on', !!betting);
+    if (!betting) return;
     const opts = legalActions(state, me.id);
     this.foldBtn.hidden = !opts.fold;
     this.checkBtn.hidden = !opts.check;

@@ -732,4 +732,4 @@ export class TableView {
 }
 
 // Shared with the trick-taking games' table (trick-view.js).
-export { W0, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc, sleep };
+export { W0, RATIO, MOVE_MS, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc, sleep };

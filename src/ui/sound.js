@@ -207,6 +207,22 @@ export function cueLog(text, kind) {
 }
 
 // The same for Call Bridge and Judgement: dealing, playing to the trick and taking it.
+// Hold'em uses the same card zones: off the deck, into a muck, and home to shuffle.
+export function cuePoker(moves) {
+  let draw = 0;
+  let home = 0;
+  let muck = 0;
+  for (const { from, to } of moves) {
+    if (!from || !to) continue;
+    if (from.zone === 'deck' && (to.zone === 'hand' || to.zone === 'ohand' || to.zone === 'board')) draw++;
+    else if (to.zone === 'deck' && from.zone !== 'deck') home++;
+    else if (to.zone === 'muck') muck++;
+  }
+  if (draw) sound.play('draw', draw);
+  if (muck) sound.play('place', muck);
+  if (home) sound.play('shuffle');
+}
+
 export function cueTricks(moves) {
   const counts = new Map();
   let taken = false;

@@ -182,7 +182,9 @@ export class PokerGame {
 
   async playHand() {
     const { state } = this;
-    const n = state.players.length;
+    // The same cards fly home before the next shuffle, so the table can glide
+    // them instead of throwing the elements away. Presentation only.
+    await this.gatherToDeck();
     for (const p of state.players) {
       p.hole = [];
       p.bet = 0;
@@ -205,7 +207,7 @@ export class PokerGame {
     state.bb = null;
     state.current = -1;
     state.hand += 1;
-    let deck = buildDeck();
+    let deck = state.deck.length === 52 ? state.deck : buildDeck();
     if (this.order) {
       deck = stackDeck(deck, this.order);
       this.order = null;
@@ -217,12 +219,11 @@ export class PokerGame {
     const dealer = state.players[state.button];
     this.log(`Hand ${state.hand} · ${dealer.name} ${verb(dealer, 'deals', 'deal')} · blinds ${chipText(state.smallBlind)}/${chipText(state.bigBlind)}.`, 'turn');
     state.phase = 'blinds';
-    this.postBlinds(seated);
-    await this.sync(320);
+    await this.postBlinds(seated);
 
     state.phase = 'deal';
-    this.dealHoles(seated);
-    await this.sync(380);
+    await this.dealHoles(seated);
+    await this.sync(320);
 
     for (const street of STREETS) {
       if (street.deal) {
@@ -230,11 +231,8 @@ export class PokerGame {
           await this.finishHand(true);
           return;
         }
-        this.sweep();
-        this.dealBoard(street.deal);
-        state.phase = street.phase;
-        this.logBoard();
-        await this.sync(420);
+        await this.collectBets();
+        await this.revealBoard(street.deal, street.phase);
       } else {
         state.phase = 'preflop';
       }
@@ -248,7 +246,25 @@ export class PokerGame {
     await this.finishHand(true);
   }
 
-  postBlinds(seated) {
+  // Cards already on the felt glide back to the deck, then the same objects are
+  // shuffled. One beat, like a trick being taken home in Call Bridge.
+  async gatherToDeck() {
+    const { state } = this;
+    if (!state.board.length && !state.players.some((p) => p.hole.length)) return;
+    state.phase = 'between';
+    state.current = -1;
+    // 750ms at the table's 0.6 pace is the 450ms card glide, so the fade can finish.
+    await this.sync(750);
+    const cards = [...state.deck, ...state.board];
+    state.board = [];
+    for (const p of state.players) {
+      cards.push(...p.hole);
+      p.hole = [];
+    }
+    state.deck = cards;
+  }
+
+  async postBlinds(seated) {
     const { state } = this;
     const hu = seated.length === 2;
     const sb = hu ? state.players[state.button] : state.players[this.nextWithChips(state.button)];
@@ -256,9 +272,12 @@ export class PokerGame {
     state.sb = sb.id;
     state.bb = bb.id;
     this.post(sb, state.smallBlind, 'small blind');
+    state.toCall = sb.bet;
+    await this.sync(220);
     this.post(bb, state.bigBlind, 'big blind');
     state.toCall = Math.max(sb.bet, bb.bet);
     state.minRaise = state.bigBlind;
+    await this.sync(280);
   }
 
   post(p, amount, label) {
@@ -270,7 +289,9 @@ export class PokerGame {
     this.log(`${p.name} ${verb(p, 'posts', 'post')} the ${label}, ${chipText(pay)}.${p.allIn ? ' All-in.' : ''}`);
   }
 
-  dealHoles(seated) {
+  // One card each at a time, starting left of the button. Same pop order as a
+  // single batch; the pause is Call Bridge's deal (one card, then a short sync).
+  async dealHoles(seated) {
     const { state } = this;
     const ids = new Set(seated.map((p) => p.id));
     let seat = state.button;
@@ -279,12 +300,26 @@ export class PokerGame {
         seat = (seat + 1) % state.players.length;
         if (!ids.has(seat)) continue;
         state.players[seat].hole.push(state.deck.pop());
+        await this.sync(60);
       }
     }
   }
 
-  dealBoard(k) {
-    for (let i = 0; i < k; i++) this.state.board.push(this.state.deck.pop());
+  // Flop cards leave the deck a beat apart so each one is seen in flight.
+  async dealBoard(k) {
+    for (let i = 0; i < k; i++) {
+      this.state.board.push(this.state.deck.pop());
+      if (i < k - 1) await this.sync(k > 1 ? 150 : 60);
+    }
+  }
+
+  async revealBoard(k, phase) {
+    const { state } = this;
+    state.phase = 'deal';
+    await this.dealBoard(k);
+    state.phase = phase;
+    this.logBoard();
+    await this.sync(420);
   }
 
   logBoard() {
@@ -335,6 +370,8 @@ export class PokerGame {
       idx = (p.id + 1) % n;
       state.current = p.id;
       this.emit('turn', { player: p, what: 'act' });
+      // The highlight moves before anyone acts, the way a trick game's turn does.
+      await this.sync(0);
       const move = this.check(p, await this.ask(p.controller.chooseAction(this, p)));
       const result = perform(state, p.id, move);
       this.logAction(p, result);
@@ -378,32 +415,24 @@ export class PokerGame {
     state.minRaise = state.bigBlind;
   }
 
+  // Let those chips glide into the pot before the next cards or the payout.
+  async collectBets() {
+    const had = this.state.players.some((p) => p.bet > 0);
+    this.sweep();
+    if (had) await this.sync(400);
+  }
+
   async dealRemaining() {
     const { state } = this;
-    if (state.board.length < 3) {
-      this.dealBoard(3 - state.board.length);
-      state.phase = 'flop';
-      this.logBoard();
-      await this.sync(420);
-    }
-    if (state.board.length < 4) {
-      this.dealBoard(1);
-      state.phase = 'turn';
-      this.logBoard();
-      await this.sync(360);
-    }
-    if (state.board.length < 5) {
-      this.dealBoard(1);
-      state.phase = 'river';
-      this.logBoard();
-      await this.sync(360);
-    }
+    if (state.board.length < 3) await this.revealBoard(3 - state.board.length, 'flop');
+    if (state.board.length < 4) await this.revealBoard(1, 'turn');
+    if (state.board.length < 5) await this.revealBoard(1, 'river');
   }
 
   // revealed: show the hole cards and name the hands. Otherwise someone folded out.
   async finishHand(wantShow) {
     const { state } = this;
-    this.sweep();
+    await this.collectBets();
     const remain = this.remain();
     const revealed = wantShow && remain.length >= 2;
     if (revealed && state.board.length < 5) await this.dealRemaining();
