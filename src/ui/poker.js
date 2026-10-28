@@ -85,6 +85,18 @@ export class PokerHuman {
   endTurn() {}
 
   onCardClick() {}
+
+  // The cards stay on the table. Next hand deals again before the timer.
+  handOver() {
+    const view = this.view;
+    view.setHolding(true);
+    return new Promise((resolve) => {
+      view.handlers.next = () => {
+        view.setHolding(false);
+        resolve();
+      };
+    });
+  }
 }
 
 // Stacks, highest first once the game is over.

@@ -215,6 +215,9 @@ export class OnlineSession {
       case 'request':
         this.onRequest(msg);
         break;
+      case 'nexthand':
+        this.offerNextHand(msg.hand);
+        break;
       case 'cancel':
         if (this.req?.id === msg.reqId) this.dropRequest();
         break;
@@ -326,6 +329,16 @@ export class OnlineSession {
     this.chat.mount(this.hud.chatDock);
     this.hud.setHost(this.isHost);
     this.applyTags();
+  }
+
+  // The server is holding a showdown. Next hand tells it this seat has read the result.
+  offerNextHand(hand) {
+    if (!Number.isInteger(hand) || !this.view?.setHolding) return;
+    this.view.setHolding(true);
+    this.view.handlers.next = () => {
+      this.view.noteNextSent();
+      this.send('nexthand', { hand });
+    };
   }
 
   onState(snap) {

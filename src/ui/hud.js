@@ -911,6 +911,7 @@ export class Hud {
   showRules() {
     const body = el('div', 'rules');
     body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES, leastcount: LEASTCOUNT_RULES, poker: POKER_RULES }[this.game] ?? DEAL_RULES;
+    if (this.game === 'poker') body.querySelector('.pk-ranks-slot')?.replaceWith(handRankings());
     // The fantasy deck's guide stays here after "Don't show this again".
     if ((TRICK_GAMES.has(this.game) || this.game === 'poker') && deckStyle() === 'fantasy') {
       body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
@@ -1007,6 +1008,39 @@ const LEASTCOUNT_RULES = `
       </ul>
       <p class="muted">Tip: the fewer cards the others hold, the riskier a Show. Your hand's worth shows in your bar, and the round counter in the top bar opens the scores.</p>`;
 
+// Five-card examples, strongest first. The pictures are this screen's deck.
+const HAND_RANKS = [
+  { name: 'Royal flush', blurb: 'Ace, king, queen, jack and ten, all one suit.', cards: [[14, 'spades'], [13, 'spades'], [12, 'spades'], [11, 'spades'], [10, 'spades']] },
+  { name: 'Straight flush', blurb: 'Five in a row, all one suit.', cards: [[9, 'hearts'], [8, 'hearts'], [7, 'hearts'], [6, 'hearts'], [5, 'hearts']] },
+  { name: 'Four of a kind', blurb: 'All four cards of one rank.', cards: [[9, 'spades'], [9, 'hearts'], [9, 'diamonds'], [9, 'clubs'], [13, 'spades']] },
+  { name: 'Full house', blurb: 'Three of a kind, plus a pair.', cards: [[13, 'spades'], [13, 'hearts'], [13, 'diamonds'], [4, 'clubs'], [4, 'spades']] },
+  { name: 'Flush', blurb: 'Five of one suit, not in a row.', cards: [[14, 'diamonds'], [11, 'diamonds'], [8, 'diamonds'], [4, 'diamonds'], [2, 'diamonds']] },
+  { name: 'Straight', blurb: 'Five in a row, any suits. A-2-3-4-5 is the lowest.', cards: [[8, 'clubs'], [7, 'spades'], [6, 'diamonds'], [5, 'hearts'], [4, 'clubs']] },
+  { name: 'Three of a kind', blurb: 'Three cards of one rank.', cards: [[7, 'spades'], [7, 'hearts'], [7, 'diamonds'], [13, 'clubs'], [2, 'spades']] },
+  { name: 'Two pair', blurb: 'Two different pairs.', cards: [[12, 'spades'], [12, 'hearts'], [8, 'diamonds'], [8, 'clubs'], [14, 'clubs']] },
+  { name: 'One pair', blurb: 'Two cards of one rank.', cards: [[14, 'spades'], [14, 'hearts'], [13, 'diamonds'], [7, 'clubs'], [3, 'spades']] },
+  { name: 'High card', blurb: 'Nothing paired. The highest card wins.', cards: [[14, 'spades'], [11, 'diamonds'], [9, 'clubs'], [6, 'hearts'], [2, 'spades']] },
+];
+
+function handRankings() {
+  const byKey = new Map(playingDeck().map((c) => [c.key, c]));
+  const wrap = el('div', 'pk-ranks');
+  wrap.appendChild(el('p', null, '<b>Hand rankings</b> · strongest first'));
+  HAND_RANKS.forEach((row, i) => {
+    const item = el('div', 'pk-rank');
+    item.appendChild(el('span', 'pk-rank-n', String(i + 1)));
+    const cards = el('div', 'pk-rank-cards');
+    for (const [rank, suit] of row.cards) cards.appendChild(thumb(byKey.get(`${suit}-${rank}`)));
+    const copy = el('div', 'pk-rank-copy');
+    copy.appendChild(el('b', null, esc(row.name)));
+    copy.appendChild(el('span', 'muted', esc(row.blurb)));
+    item.appendChild(cards);
+    item.appendChild(copy);
+    wrap.appendChild(item);
+  });
+  return wrap;
+}
+
 const POKER_RULES = `
       <p><b>Goal:</b> win every chip. No-limit Texas Hold’em, with play money.</p>
       <ul>
@@ -1015,9 +1049,10 @@ const POKER_RULES = `
         <li>Two cards each, then betting <b>pre-flop</b>, on the <b>flop</b> (3 cards), the <b>turn</b> (1) and the <b>river</b> (1). No burn cards.</li>
         <li><b>Check</b> when nothing is owed. <b>Call</b> to match the bet. <b>Bet</b> at least the big blind, or <b>raise</b> by at least the last full bet or raise. <b>All-in</b> pushes the rest of your stack. A short all-in does not reopen raising for anyone who has already acted. <b>Fold</b> gives up the hand.</li>
         <li><b>Side pots:</b> you can only win as much as you put in. A tie splits that pot, and an odd chip goes to the first of the winners sitting left of the button. Folded hands stay hidden.</li>
-        <li>At <b>showdown</b> the best five cards from your two hole cards and the board win. Hands, highest first: royal flush, straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, one pair, high card. Ace is high, and the wheel (A-2-3-4-5) is the lowest straight.</li>
-        <li>A player with no chips is out. The last stack wins; a tie shares it. Online, you have 45 seconds to act.</li>
+        <li>At <b>showdown</b> the best five cards from your two hole cards and the board win. The hands are ranked below, strongest first. Ace is high, and the wheel (A-2-3-4-5) is the lowest straight.</li>
+        <li>A player with no chips is out. The last stack wins; a tie shares it. Online, you have 45 seconds to act. After a hand, <b>Next hand</b> deals again; otherwise the cards stay up for a few seconds so everyone can read them.</li>
       </ul>
+      <div class="pk-ranks-slot"></div>
       <p class="muted">On your turn: Fold, Check or Call, and a slider for the bet (Min, ½ pot, Pot). F folds, C checks or calls, R bets the minimum, A is all-in, and ← → move the slider. The hand counter in the top bar opens the stacks.</p>`;
 
 const SUDOKU_RULES = `

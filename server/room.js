@@ -661,6 +661,7 @@ export class Room {
     this.fixHost();
     this.broadcast({ type: 'lobby' });
     this.broadcastRoom();
+    this.nextReady?.clear();
     this.checkEmpty();
   }
 
@@ -712,6 +713,20 @@ export class Room {
   sendState(m) {
     if (!m.conn || !this.game) return;
     m.conn.send({ type: 'state', ...this.viewerFor(m).snapshot(this.game, m.known) });
+  }
+
+  // A seated player can cut a showdown short. The hand still waits for everyone
+  // who was asked, or for the engine's timer, whichever comes first.
+  armNext(member, hand, fn) {
+    (this.nextReady ??= new Map()).set(member, { hand, fn });
+    member.conn?.send({ type: 'nexthand', hand });
+  }
+
+  readyNext(member, hand) {
+    const cur = this.nextReady?.get(member);
+    if (!cur || !Number.isInteger(hand) || cur.hand !== hand) return;
+    this.nextReady.delete(member);
+    cur.fn();
   }
 
   // ---------- remote decisions ----------
@@ -955,6 +970,14 @@ class SeatController {
       return Number.isInteger(v.to) ? { action, to: v.to } : { action };
     };
     return this.room.ask(this.m, 'act', {}, () => this.m.ai.chooseAction(game, me), parse);
+  }
+
+  // Showdown. Resolves when this player taps Next hand. Absent when they're away,
+  // so a dropped connection doesn't hold the table past the timer.
+  handOver(game) {
+    if (!this.m.conn || this.m.away || this.m.left) return null;
+    const hand = game.state.hand;
+    return new Promise((resolve) => this.room.armNext(this.m, hand, resolve));
   }
 
   // Sudoku: a number for a cell. The engine checks it against the answer.

@@ -38,6 +38,17 @@ const STREETS = [
   { phase: 'river', deal: 1 },
 ];
 
+// How long the result stays up, in the same units as every other pause (the table
+// multiplies by its pace, 0.6). The first beat is the chip glide into the winner
+// (~0.5s). A showdown then stays about eight seconds: the hole cards, the hand,
+// and the pot. A fold-out stays about five: who won, and the chips. Call Bridge
+// and Least Count hold a round's scores the same way, and anyone at the table can
+// tap Next hand to deal again sooner. Online, the hand waits until every player
+// has tapped, or until this time is up.
+const SHOW_FLIGHT = 800;
+const SHOW_REST = 12500;
+const FOLD_REST = 7500;
+
 export class PokerGame {
   // stack / blinds: presets (rules.js). order: card keys to deal first, for tests.
   // maxHands: stop after this many hands (the safety cap, or 1 in a test).
@@ -442,7 +453,16 @@ export class PokerGame {
     state.current = -1;
     state.result = result;
     this.log(result.text, revealed ? 'win' : 'line');
-    await this.sync(revealed ? 2000 : 1100);
+    // Paint the hands and start the chips, then let anyone at the table skip the
+    // reading time. Online, the hand moves on once every player has tapped, or when
+    // the time is up, so one tap can't hide the cards for the others.
+    await this.sync(0);
+    const reading = state.players.map((p) => p.controller.handOver?.(this, result)).filter(Boolean);
+    const early = reading.length ? Promise.all(reading) : null;
+    await this.sync(SHOW_FLIGHT);
+    const rest = revealed ? SHOW_REST : FOLD_REST;
+    if (early) await this.ask(Promise.race([early, this.sync(rest)]));
+    else await this.sync(rest);
   }
 
   award(revealed) {

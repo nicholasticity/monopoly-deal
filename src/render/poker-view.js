@@ -20,6 +20,23 @@ export class PokerView extends TrickView {
     this.felt = div('pk-felt', this.panelLayer);
     this.potEl = div('pk-pot', this.panelLayer);
     this.resultEl = div('pk-result', this.panelLayer);
+    this.resultEl.innerHTML = '<span class="pk-result-text"></span><button type="button" class="pk-next primary">Next hand</button>';
+    this.resultText = this.resultEl.querySelector('.pk-result-text');
+    this.nextBtn = this.resultEl.querySelector('.pk-next');
+    this.holding = false;
+    this.handlers.next = null;
+    this.onNextKey = (e) => {
+      if (!this.holding || this.nextBtn.disabled || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.closest?.('input, textarea')) return;
+      if (document.querySelector('#modal-layer .modal-backdrop')) return;
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      this.skipHold();
+    };
+    this.nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.skipHold();
+    });
     this.actions = div('pk-actions', this.panelLayer);
     this.pendingCoins = 0;
     this.actions.innerHTML = `
@@ -88,12 +105,40 @@ export class PokerView extends TrickView {
     if (this.raiseBtn.textContent !== label) this.raiseBtn.textContent = label;
   }
 
+  // Next hand sits where Fold was. A click that ends the hand can land on it, so
+  // taps in the first moment are ignored and the result stays up to be read.
+  skipHold() {
+    if (!this.holding || this.nextBtn.disabled || Date.now() < this.holdArmedAt) return;
+    this.handlers.next?.();
+  }
+
+  // The showdown is being read. Next hand (or Enter) deals again before the timer.
+  setHolding(on) {
+    this.holding = !!on;
+    this.holdArmedAt = this.holding ? Date.now() + 700 : 0;
+    if (!this.holding) this.handlers.next = null;
+    this.nextBtn.disabled = false;
+    this.nextBtn.textContent = 'Next hand';
+    document.removeEventListener('keydown', this.onNextKey);
+    if (this.holding) document.addEventListener('keydown', this.onNextKey);
+    if (this.game) this.layout();
+  }
+
+  // Online, once you've tapped and the others haven't yet.
+  noteNextSent() {
+    this.nextBtn.disabled = true;
+    this.nextBtn.textContent = 'Waiting…';
+  }
+
   detach() {
     this.acting = false;
     this.actKey = '';
     this.pendingCoins = 0;
+    this.holding = false;
+    this.handlers.next = null;
+    document.removeEventListener('keydown', this.onNextKey);
     this.actions.classList.remove('on');
-    this.resultEl.classList.remove('on');
+    this.resultEl.classList.remove('on', 'hold');
     this.potEl.textContent = '';
     for (const el of this.cardLayer.querySelectorAll('.pk-fly')) el.remove();
     super.detach();
@@ -420,9 +465,18 @@ export class PokerView extends TrickView {
 
     const bar = panels[0];
     const result = settled && state.result?.text ? state.result.text : '';
+    if (this.holding && state.phase !== 'showdown') {
+      this.holding = false;
+      this.handlers.next = null;
+      this.nextBtn.disabled = false;
+      this.nextBtn.textContent = 'Next hand';
+      document.removeEventListener('keydown', this.onNextKey);
+    }
+    const hold = this.holding && state.phase === 'showdown';
     this.resultEl.classList.toggle('on', !!result);
-    if (result && this.resultEl.textContent !== result) {
-      this.resultEl.textContent = result;
+    this.resultEl.classList.toggle('hold', hold);
+    if (result && this.resultText.textContent !== result) {
+      this.resultText.textContent = result;
       this.resultEl.title = result;
     }
     // The showdown line takes the button row, so it doesn't cover the name or the board.

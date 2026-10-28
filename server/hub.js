@@ -166,6 +166,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'leave': return room.leave(member);
           case 'chat': return room.say(member, msg.text);
           case 'response': return room.respond(member, msg.reqId, msg.value);
+          case 'nexthand': return room.readyNext(member, msg.hand);
           case 'back': return room.back(member);
           case 'addBot': return room.addBot(member);
           case 'kick': return room.kick(member, msg.id);

@@ -228,6 +228,31 @@ function total(game) {
   return game.state.players.reduce((s, p) => s + p.stack, 0);
 }
 
+test('the table is asked to move on after a hand', async () => {
+  let asked = 0;
+  const you = {
+    async chooseAction() { return { action: 'fold' }; },
+    handOver() {
+      asked++;
+      return Promise.resolve();
+    },
+  };
+  const game = new PokerGame({
+    button: 0,
+    stack: 200,
+    smallBlind: 10,
+    bigBlind: 20,
+    maxHands: 1,
+    players: [
+      { name: 'You', isHuman: true, controller: you },
+      { name: 'B', controller: queue([{ action: 'fold' }]) },
+    ],
+  });
+  await game.run();
+  assert.equal(asked, 1);
+  assert.equal(game.state.phase, 'over');
+});
+
 test('folding to the big blind pays them the small blind', async () => {
   const game = new PokerGame({
     button: 0,
