@@ -2087,6 +2087,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   font-weight: 700;
   font-size: 0.86rem;
   line-height: 1.25;
+  overflow: hidden;
   pointer-events: none;
 }
 .pk-actions {
@@ -2100,6 +2101,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .pk-bet input[type='range'] { flex: 1; min-width: 36px; accent-color: #f2b632; }
 .pk-amt { flex: none; min-width: 3.4em; text-align: right; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .board.small .pk-row button { padding: 5px 6px; font-size: 0.76rem; }
+.board.small .pk-result { font-size: 0.74rem; }
 .den-pill.pk-blind { background: #1d3461; color: #fff; }
 .den-pill.pk-fold { background: #6b3030; color: #fff; }
 .den-pill.pk-allin { background: #8a3b12; color: #fff; }

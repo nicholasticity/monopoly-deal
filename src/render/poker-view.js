@@ -159,10 +159,19 @@ export class PokerView extends TrickView {
     // slot; nothing already dealt slides over to make room.
     const boardGap = cw * 0.16;
     const span = 5 * cw + 4 * boardGap;
-    const left = w / 2 - span / 2;
-    const board = { x: w / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH, gap: boardGap, left, span };
+    const deckW = cw * 0.86;
+    // Keep the deck fully on the felt. On a narrow window that shifts the five
+    // slots right as a group, so a dealt card still has a fixed slot.
+    let rowLeft = (w - span) / 2;
+    let deckX = rowLeft - cw * 0.62;
+    const minDeck = pad + deckW / 2 + 2;
+    if (deckX < minDeck) {
+      deckX = minDeck;
+      rowLeft = Math.min(deckX + cw * 0.62, Math.max(pad, w - pad - span));
+    }
+    const board = { x: rowLeft + span / 2, y: boardTop + Math.min(boardH * 0.62, boardH - cw * RATIO * 0.55), w: cw, top: boardTop, h: boardH, gap: boardGap, left: rowLeft, span };
     // New cards are born at geo.discard (objFor). That is the deck, so a deal glides.
-    const deck = { x: left - cw * 0.62, y: board.y, w: cw * 0.86 };
+    const deck = { x: deckX, y: board.y, w: deckW };
     this.geo = { portrait, small, head, inner: small ? 6 : 10, panels, hand, board, actionH, actionTop, deck, discard: deck, dock: h - panels[0].y };
     this.layoutKey = `poker:${portrait ? 'tall' : 'wide'}:${n}:${small}`;
     this.root.style.setProperty('--head', `${head}px`);
@@ -409,14 +418,17 @@ export class PokerView extends TrickView {
     const potH = this.geo.small ? 32 : 38;
     setBox(this.potEl, { x: board.x - potW / 2, y: board.y - ch / 2 - potH - 2, w: potW, h: potH });
 
+    const bar = panels[0];
     const result = settled && state.result?.text ? state.result.text : '';
     this.resultEl.classList.toggle('on', !!result);
-    if (result && this.resultEl.textContent !== result) this.resultEl.textContent = result;
-    const rw = Math.min(this.size.w - 24, 480);
-    const rh = this.geo.small ? 48 : 40;
-    setBox(this.resultEl, { x: board.x - rw / 2, y: board.y + ch / 2 + 6, w: rw, h: rh });
+    if (result && this.resultEl.textContent !== result) {
+      this.resultEl.textContent = result;
+      this.resultEl.title = result;
+    }
+    // The showdown line takes the button row, so it doesn't cover the name or the board.
+    const rw = Math.min(bar.w, this.size.w - 24);
+    setBox(this.resultEl, { x: bar.x + (bar.w - rw) / 2, y: this.geo.actionTop, w: rw, h: actionH - 6 });
 
-    const bar = panels[0];
     setBox(this.actions, { x: bar.x, y: this.geo.actionTop, w: bar.w, h: actionH - 6 });
     const betting = this.acting && BETTING.has(state.phase) && me && state.current === me.id;
     this.actions.classList.toggle('on', !!betting);
