@@ -1,8 +1,8 @@
-# Monopoly Deal, Call Bridge, Judgement, Least Count, Bingo, Wordle, Sudoku & Pool
+# Monopoly Deal, Call Bridge, Judgement, Least Count, Poker, Bingo, Wordle, Sudoku & Pool
 
-Eight games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
+Nine games in one browser app, in plain JavaScript with no frameworks: **Monopoly Deal**,
 the trick-taking games **Call Bridge** and **Judgement**, the lowest-hand card game **Least
-Count**, pen-and-paper **Bingo** (the 5×5,
+Count**, no-limit Texas Hold’em **Poker**, pen-and-paper **Bingo** (the 5×5,
 1–25 kind), a **Wordle** race, a **Sudoku** race and 8-ball **Pool**. Pick one on the home screen, then play against 1–4 computer opponents on a
 2D table, or
 **online with friends**: create a room, send the
@@ -31,8 +31,10 @@ Other scripts:
 | `npm run simulate:pool` | Checks the 8-ball rules and that a shot replays the same, then plays 40 bot games (1 vs 1 and 2 vs 2) |
 | `npm run simulate:wordle` | Checks Wordle's marking and word lists, how many guesses the bots take, and races bots through whole games |
 | `npm run simulate:leastcount` | Plays Least Count between bots (2, 4 and 6 players): checks every card is accounted for, every throw is legal and every Show is scored right, with round lengths and how often a Show is caught |
+| `npm run simulate:poker` | Plays no-limit Hold’em between bots (2, 3, 4 and 6 players) and checks chips are conserved and the biggest stack wins |
 | `npm run simulate:sudoku` | Checks every puzzle has one answer and that only right numbers go in, races bots on each level, and times how long a bot takes |
-| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all eight over WebSocket |
+| `npm test` | Hand rankings, side pots and a few full Hold’em hands |
+| `npm run test:online` | Headless multiplayer test: scripted clients play full games of all nine over WebSocket |
 
 ## Playing online with friends
 
@@ -44,8 +46,8 @@ Other scripts:
    **Start game** once there are at least 2 players. Up to 8 can play.
 
 A room plays the game you picked on the home screen. The host can switch between Monopoly
-Deal, Call Bridge, Judgement, Least Count, Bingo, Wordle, Sudoku and Pool in the lobby between games
-(and pick Judgement's scoring, Least Count's rounds, for Wordle 5, 10 or 20 words, or Sudoku's level). An invite link skips the game picker, because
+Deal, Call Bridge, Judgement, Least Count, Poker, Bingo, Wordle, Sudoku and Pool in the lobby between games
+(and pick Judgement's scoring, Least Count's rounds, Poker's starting stack and blinds, for Wordle 5, 10 or 20 words, or Sudoku's level). An invite link skips the game picker, because
 the room decides the game.
 
 While you play:
@@ -68,7 +70,8 @@ While you play:
   go and it comes back (it says who's talking). See [Music](#music).
 - Each decision has a time limit: 90 s per play on your turn, 45 s to pay or discard and
   30 s for a Just Say No. In Call Bridge you have 2 minutes to call trumps or bid, and 90 s to
-  play a card (in Judgement, the same to bid or play; in Least Count, 45 s to throw or call Show); in
+  play a card (in Judgement, the same to bid or play; in Least Count, 45 s to throw or call Show; in
+  Poker, 45 s to act); in
   Bingo, 60 s to arrange your grid and 30 s to call a number. A Wordle word stays open for
   3 minutes at most, with its own clock in your bar. In Sudoku, 5 minutes without putting in
   a number and a bot fills in for you. The
@@ -345,6 +348,40 @@ deck's jokers are Jesters). Bots throw whatever leaves their hand lowest, take a
 the last throw when it's low or makes a pair, and call Show when their hand is low for how
 few cards the others hold; about one Show in five gets caught.
 
+The gold **0** on a joker or a wild card is that card's points. On the game list the same
+idea is written **0 pts** beside the title: the aim is a hand worth nothing.
+
+### Poker
+
+No-limit Texas Hold’em with play money. The last stack wins.
+
+- **Defaults:** 1,000 chips each, blinds 10 small / 20 big. Other stacks are 200 (a short
+  game), 500 and 2,000; other blinds are 5/10 and 25/50. Pick them on the start screen, or
+  in the lobby online (only the host). Two to five play against the computer; up to eight
+  online.
+- The **button** deals and moves one seat clockwise each hand. Heads-up, the button posts
+  the small blind and acts first before the flop, last after it. With three or more, the
+  small blind is left of the button and the big blind left of that.
+- Two cards each, then betting pre-flop, on the flop (3), the turn (1) and the river (1).
+  No burn cards. You only see your own hole cards until showdown; folded hands stay hidden.
+- Check when nothing is owed. Call to match. Bet at least the big blind, or raise by at
+  least the last full bet or raise. All-in pushes the rest of your stack. A short all-in
+  does not reopen raising for anyone who has already acted. Fold gives up the hand.
+- Side pots: you can only win as much as you put in. A tie splits that pot, and an odd chip
+  goes to the first of the winners sitting left of the button.
+- At showdown the best five cards from your two hole cards and the board win. Highest
+  first: royal flush, straight flush, four of a kind, full house, flush, straight, three of
+  a kind, two pair, one pair, high card. Ace is high; A-2-3-4-5 is the lowest straight.
+- A player with no chips is out. Play continues until one player has every chip.
+
+On your turn the buttons sit under your name: Fold, Check or Call, and a slider (Min, ½
+pot, Pot). **F** folds, **C** checks or calls, **R** bets the minimum, **A** is all-in, and
+the arrow keys move the slider. The hand counter in the top bar opens the stacks. Cards use
+the same classic or fantasy deck as Call Bridge. Online you have 45 seconds to act.
+
+Nothing new is required to host it: the same `npm run dev`, or `npm run build && npm start`,
+serves Poker along with the other games.
+
 ### Sudoku
 
 A race: everyone fills in the same puzzle at the same time.
@@ -440,6 +477,10 @@ src/
     rules.js     card values, the wild rank, what can be thrown, and how a Show scores
     engine.js    deals, turns (throw then take), Show, rounds and the lowest total
     ai.js        computer opponents (the throw that leaves the lowest hand; when to Show)
+  poker/     No-limit Texas Hold'em: rules, engine and AI
+    rules.js     hand rankings, betting, side pots (defaults: 1,000 chips, blinds 10/20)
+    engine.js    blinds, streets, showdown, the button and busting players out
+    ai.js        computer opponents (their own hole cards and the board only)
   sudoku/    Sudoku's rules, engine and AI
     rules.js     the grid, the solver and the puzzle maker (one answer; levels)
     engine.js    one puzzle raced: asks everyone for numbers at once, checks each
@@ -451,6 +492,7 @@ src/
     wordle-view.js     the Wordle table: player bars, your guesses and the keyboard
     sudoku-view.js     the Sudoku table: player bars, your grid, notes and the number pad
     leastcount-view.js the Least Count table: the deck, the wild card, the throws and your hand
+    poker-view.js      the Hold'em table: hole cards, the board, the pot and the action buttons
     pool-view.js       the pool table on a canvas: shots replayed, aiming and power
     textures.js  card faces (both decks) drawn on canvas
     deck-style.js  Call Bridge’s and Judgement’s card style (classic or fantasy suits)
@@ -462,6 +504,7 @@ src/
     wordle.js    Wordle's guesses, status line, scores and result
     sudoku.js    Sudoku's moves, status line and result
     leastcount.js  Least Count's turns, round scores, status line and result
+    poker.js     Hold'em's buttons, status line, stacks and result
     pool.js      Pool's shots, status line and result
     lobby.js     online room lobby
     chat.js      room chat panel
@@ -474,6 +517,7 @@ src/
     wordle-mirror.js     and for a Wordle game
     sudoku-mirror.js     and for a Sudoku game
     leastcount-mirror.js and for a Least Count game
+    poker-mirror.js      and for a Poker game
     pool-mirror.js       and for a Pool game
     voice.js       voice chat: microphone, browser-to-browser calls, who's talking
     music.js       the room's music: the YouTube player kept in step with the room
@@ -492,6 +536,7 @@ scripts/
   simulate-wordle.mjs     and for Wordle
   simulate-sudoku.mjs     and for Sudoku
   simulate-leastcount.mjs and for Least Count
+  simulate-poker.mjs      and for Poker
   simulate-pool.mjs       and for Pool
   build-wordle-guesses.mjs  regenerates src/wordle/guesses.js from the word-list package
   online-smoke.mjs headless multiplayer games over real sockets
@@ -505,7 +550,7 @@ same way, with `chooseTrump`, `chooseBid` and `choosePlay` (Judgement's only ask
 `arrangeGrid` (asked of everyone at once) and `chooseCall`. Wordle's asks everyone for
 `chooseGuess` at once, again after each guess, and calls `stopGuess` when the word is over;
 Sudoku's the same with `chooseMove` (a number for a cell) and `stopMove`. Least Count's asks
-`chooseThrow` in turn: Show, or a throw and the card to take. Pool's asks `chooseShot`: a direction, a power, and
+`chooseThrow` in turn: Show, or a throw and the card to take. Poker's asks `chooseAction`: fold, check, call, bet, raise or all-in. Pool's asks `chooseShot`: a direction, a power, and
 with ball in hand where the cue ball goes.
 
 Online, the server runs that same engine. A human seat's controller forwards each decision
@@ -513,5 +558,5 @@ to that player's browser as a `request` and waits for the `response`, falling ba
 on timeout or disconnect. After every change the server sends each player a snapshot of the
 table in which other players' hidden cards carry no details and fresh ids, so the browser
 can't peek. The client applies snapshots to a mirror game that the existing table view and
-HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `SudokuHuman`, `LeastCountHuman`, `PoolHuman`)
+HUD read from, and answers requests with the same `HumanController` (or `TrickHuman`, `BingoHuman`, `WordleHuman`, `SudokuHuman`, `LeastCountHuman`, `PokerHuman`, `PoolHuman`)
 used for solo play.

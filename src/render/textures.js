@@ -477,6 +477,7 @@ function drawBack(ctx) {
 export const PLAYING_BACK = { key: 'playing-back', type: 'playing-back', title: 'CALL BRIDGE' };
 export const JUDGEMENT_BACK = { key: 'playing-back-judgement', type: 'playing-back', title: 'JUDGEMENT' };
 export const LEASTCOUNT_BACK = { key: 'playing-back-leastcount', type: 'playing-back', title: 'LEAST COUNT' };
+export const POKER_BACK = { key: 'playing-back-poker', type: 'playing-back', title: "HOLD'EM" };
 
 const SUIT_RED = '#c8102e';
 // Four colours, so spades and clubs (and hearts and diamonds) are easy to tell apart.

@@ -8,7 +8,9 @@ import { WordleMirror } from './wordle-mirror.js';
 import { PoolMirror } from './pool-mirror.js';
 import { SudokuMirror } from './sudoku-mirror.js';
 import { LeastCountMirror } from './leastcount-mirror.js';
+import { PokerMirror } from './poker-mirror.js';
 import * as LeastCountUI from '../ui/leastcount.js';
+import * as PokerUI from '../ui/poker.js';
 import * as SudokuUI from '../ui/sudoku.js';
 import * as PoolUI from '../ui/pool.js';
 import { HumanController } from '../ui/human.js';
@@ -95,6 +97,8 @@ export class OnlineSession {
       scoring: (scoring) => this.send('scoring', { scoring }),
       level: (level) => this.send('level', { level }),
       rounds: (rounds) => this.send('rounds', { rounds }),
+      stack: (stack) => this.send('stack', { stack }),
+      blinds: (blinds) => this.send('blinds', { blinds }),
       game: (game) => this.send('game', { game }),
       start: () => this.send('start'),
       leave: () => this.confirmLeave(),
@@ -199,7 +203,7 @@ export class OnlineSession {
         this.hud.toast(msg.text, msg.kind);
         break;
       case 'turn':
-        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast, leastcount: LeastCountUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
+        if (msg.playerId === this.seat) this.hud.yourTurn(msg.what ? ({ bingo: BingoUI.turnToast, wordle: WordleUI.turnToast, pool: PoolUI.turnToast, sudoku: SudokuUI.turnToast, leastcount: LeastCountUI.turnToast, poker: PokerUI.turnToast }[this.kind] ?? turnToast)(msg.what) : undefined);
         break;
       case 'round':
         this.onRound(msg);
@@ -303,7 +307,7 @@ export class OnlineSession {
       this.gameNo = msg.gameNo;
       this.seat = msg.you;
       this.setKind(msg.kind);
-      const Mirror = TRICK_GAMES.has(this.kind) ? TrickMirror : ({ bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror, leastcount: LeastCountMirror }[this.kind] ?? MirrorGame);
+      const Mirror = TRICK_GAMES.has(this.kind) ? TrickMirror : ({ bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror, leastcount: LeastCountMirror, poker: PokerMirror }[this.kind] ?? MirrorGame);
       this.mirror = new Mirror(msg.seats, msg.you, this.kind);
       this.needsAttach = true;
       this.waiting = null;
@@ -314,7 +318,7 @@ export class OnlineSession {
       if (!this.justJoined) this.hud.clearLog();
       // The fantasy deck's guide when a game starts (not on a rejoin). The game goes on
       // meanwhile; the guide sits above the prompts.
-      if (TRICK_GAMES.has(this.kind) && !this.justJoined) this.hud.showFantasyGuide();
+      if ((TRICK_GAMES.has(this.kind) || this.kind === 'poker') && !this.justJoined) this.hud.showFantasyGuide();
     }
     this.inGame = true;
     this.gameoverOpen = false;
@@ -353,7 +357,7 @@ export class OnlineSession {
     if (this.req?.id === msg.reqId) return;
     this.dropRequest();
     const g = this.mirror;
-    const Human = TRICK_GAMES.has(g.kind) ? TrickHuman : ({ bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman, pool: PoolUI.PoolHuman, sudoku: SudokuUI.SudokuHuman, leastcount: LeastCountUI.LeastCountHuman }[g.kind] ?? HumanController);
+    const Human = TRICK_GAMES.has(g.kind) ? TrickHuman : ({ bingo: BingoUI.BingoHuman, wordle: WordleUI.WordleHuman, pool: PoolUI.PoolHuman, sudoku: SudokuUI.SudokuHuman, leastcount: LeastCountUI.LeastCountHuman, poker: PokerUI.PokerHuman }[g.kind] ?? HumanController);
     const human = new Human(this.hud, this.view);
     const req = { id: msg.reqId, kind: msg.kind };
     this.req = req;
@@ -401,6 +405,9 @@ export class OnlineSession {
       case 'throw':
         value = await human.chooseThrow(g, me);
         break;
+      case 'act':
+        value = await human.chooseAction(g, me);
+        break;
       default:
         return;
     }
@@ -440,10 +447,10 @@ export class OnlineSession {
     const winner = state?.players[msg.winnerId];
     if (!winner) return;
     this.gameoverOpen = true;
-    if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount'].includes(this.mirror.kind)) {
+    if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount', 'poker'].includes(this.mirror.kind)) {
       state.winners = msg.winnerIds.map((id) => state.players[id]);
       state.phase = 'over';
-      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult, pool: PoolUI.gameResult, sudoku: SudokuUI.gameResult, leastcount: LeastCountUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
+      const result = ({ bingo: BingoUI.gameResult, wordle: WordleUI.gameResult, pool: PoolUI.gameResult, sudoku: SudokuUI.gameResult, leastcount: LeastCountUI.gameResult, poker: PokerUI.gameResult }[this.mirror.kind] ?? gameResult)(state, this.seat);
       await this.hud.showResult({ ...result, buttonLabel: 'Back to lobby' });
     } else {
       await this.hud.showGameOver(winner, winner.id === this.seat, msg.stats, 'Back to lobby');
@@ -591,6 +598,12 @@ export class OnlineSession {
       const { text, mine } = LeastCountUI.leastCountStatus(state, this.seat);
       this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
       this.hud.setGameInfo(LeastCountUI.gameInfo(state), 'Scores');
+      return;
+    }
+    if (this.mirror.kind === 'poker') {
+      const { text, mine } = PokerUI.pokerStatus(state, this.seat);
+      this.hud.setStatus((mine || state.phase === 'over' ? '' : watching) + text + (state.phase === 'over' ? '' : clock), mine);
+      this.hud.setGameInfo(PokerUI.gameInfo(state), 'Stacks');
       return;
     }
     // Sudoku's clock is on the table too.

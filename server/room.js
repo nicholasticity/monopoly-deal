@@ -24,6 +24,9 @@ import { LEVELS, DEFAULT_LEVEL } from '../src/sudoku/rules.js';
 import { LeastCountGame } from '../src/leastcount/engine.js';
 import { LeastCountAI } from '../src/leastcount/ai.js';
 import { ROUND_COUNTS, DEFAULT_ROUNDS } from '../src/leastcount/rules.js';
+import { PokerGame } from '../src/poker/engine.js';
+import { PokerAI } from '../src/poker/ai.js';
+import { STACKS, DEFAULT_STACK, BLINDS, DEFAULT_BLINDS, blindsKey } from '../src/poker/rules.js';
 import { GAMES, DEFAULT_GAME, BOT_NAMES, MAX_PLAYERS, TIMEOUTS, botDelay, paceFor, maxFor } from '../src/game/settings.js';
 import { Viewer } from './viewer.js';
 import { videoId, QUEUE_MAX } from '../src/net/youtube.js';
@@ -62,7 +65,7 @@ const TALK_MAX_MS = 60_000;
 const cleanTitle = (t) => String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 const ACTION_KINDS = new Set(['bank', 'property', 'moveWild', 'rent', 'action', 'end']);
 // Each game's engine and bot.
-const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI], sudoku: [SudokuGame, SudokuAI], leastcount: [LeastCountGame, LeastCountAI] };
+const ENGINES = { deal: [Game, AIController], callbridge: [CallBridgeGame, CallBridgeAI], judgement: [JudgementGame, JudgementAI], bingo: [BingoGame, BingoAI], wordle: [WordleGame, WordleAI], pool: [PoolGame, PoolAI], sudoku: [SudokuGame, SudokuAI], leastcount: [LeastCountGame, LeastCountAI], poker: [PokerGame, PokerAI] };
 // Decisions everyone makes at the same time (Bingo grids, Wordle guesses, Sudoku
 // numbers): each player sees only their own clock.
 const TOGETHER = new Set(['arrange', 'guess', 'cell']);
@@ -97,6 +100,9 @@ export class Room {
     this.level = DEFAULT_LEVEL;
     // Least Count: how many rounds a game is.
     this.rounds = DEFAULT_ROUNDS;
+    // Poker: starting stack and blinds (10/20 on 1,000).
+    this.stack = DEFAULT_STACK;
+    this.blinds = blindsKey(DEFAULT_BLINDS);
     this.status = 'lobby';
     this.game = null;
     this.chat = [];
@@ -328,6 +334,19 @@ export class Room {
   setRounds(m, n) {
     if (!this.isHost(m) || this.status !== 'lobby' || !ROUND_COUNTS.includes(n)) return;
     this.rounds = n;
+    this.broadcastRoom();
+  }
+
+  setStack(m, n) {
+    const stack = Number(n);
+    if (!this.isHost(m) || this.status !== 'lobby' || !STACKS.includes(stack)) return;
+    this.stack = stack;
+    this.broadcastRoom();
+  }
+
+  setBlinds(m, key) {
+    if (!this.isHost(m) || this.status !== 'lobby' || !BLINDS.some((b) => blindsKey(b) === key)) return;
+    this.blinds = key;
     this.broadcastRoom();
   }
 
@@ -588,7 +607,7 @@ export class Room {
     // In Wordle the speed is only how fast the bots think; the pauses stay put.
     const pace = paceFor(this.kind);
     const view = { sync: (g, ms) => sleep(ms * pace * this.timeScale) };
-    const game = new Engine({ players, view, words: this.words, scoring: this.scoring, level: this.level, rounds: this.rounds });
+    const game = new Engine({ players, view, words: this.words, scoring: this.scoring, level: this.level, rounds: this.rounds, stack: this.stack, blinds: this.blinds });
     this.game = game;
     this.status = 'playing';
     game.on((type, data) => this.onGameEvent(game, type, data));
@@ -668,7 +687,7 @@ export class Room {
         break;
       case 'gameover': {
         const w = data.winner;
-        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount'].includes(game.kind)) {
+        if (['callbridge', 'judgement', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount', 'poker'].includes(game.kind)) {
           this.broadcast({ type: 'gameover', winnerId: w.id, winnerIds: data.winners.map((p) => p.id) });
           break;
         }
@@ -806,6 +825,8 @@ export class Room {
       scoring: this.scoring,
       level: this.level,
       rounds: this.rounds,
+      stack: this.stack,
+      blinds: this.blinds,
       max: maxFor(this.kind),
       // How many of the members would play if the game started now.
       seats: this.seatCount(),
@@ -924,6 +945,16 @@ class SeatController {
       return { throw: ids, take: x.take === 'deck' ? 'deck' : v.real(x.take) };
     };
     return this.room.ask(this.m, 'throw', {}, () => this.m.ai.chooseThrow(game, me), parse);
+  }
+
+  // Poker. The engine checks the action and has the bot play if it won't do.
+  chooseAction(game, me) {
+    const parse = (v) => {
+      if (!v || typeof v !== 'object') return null;
+      const action = typeof v.action === 'string' ? v.action : '';
+      return Number.isInteger(v.to) ? { action, to: v.to } : { action };
+    };
+    return this.room.ask(this.m, 'act', {}, () => this.m.ai.chooseAction(game, me), parse);
   }
 
   // Sudoku: a number for a cell. The engine checks it against the answer.
