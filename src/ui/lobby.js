@@ -4,6 +4,7 @@ import { WORD_COUNTS } from '../wordle/rules.js';
 import { SCORING } from '../judgement/rules.js';
 import { LEVELS } from '../sudoku/rules.js';
 import { ROUND_COUNTS } from '../leastcount/rules.js';
+import { STACKS, BLINDS, blindsKey } from '../poker/rules.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -34,7 +35,7 @@ async function copyText(text, input) {
 }
 
 export class Lobby {
-  // actions: { addBot, kick(id), words(n), scoring(key), level(key), rounds(n), game(kind), start, leave, rules, voice(button), music }
+  // actions: { addBot, kick(id), words(n), scoring(key), level(key), rounds(n), stack(n), blinds(key), game(kind), start, leave, rules, voice(button), music }
   constructor(chat, actions) {
     this.chat = chat;
     this.actions = actions;
@@ -147,12 +148,31 @@ export class Lobby {
       this.roundsSeg.appendChild(b);
     }
     this.roundsRow.append(el('span', null, 'Rounds'), this.roundsSeg);
+    // Poker: starting stack and blinds.
+    this.stackRow = el('div', 'opt-row');
+    this.stackSeg = el('div', 'seg');
+    for (const n of STACKS) {
+      const b = el('button', null, n.toLocaleString('en-US'));
+      b.dataset.v = String(n);
+      b.addEventListener('click', () => this.isHost && this.actions.stack(n));
+      this.stackSeg.appendChild(b);
+    }
+    this.stackRow.append(el('span', null, 'Stack'), this.stackSeg);
+    this.blindsRow = el('div', 'opt-row');
+    this.blindsSeg = el('div', 'seg');
+    for (const b of BLINDS) {
+      const btn = el('button', null, blindsKey(b));
+      btn.dataset.v = blindsKey(b);
+      btn.addEventListener('click', () => this.isHost && this.actions.blinds(blindsKey(b)));
+      this.blindsSeg.appendChild(btn);
+    }
+    this.blindsRow.append(el('span', null, 'Blinds'), this.blindsSeg);
     // Pool: who plays.
     this.poolHint = el('p', 'muted small pool-hint', 'Pool is one on one, or two against two with four players (partners alternate). Anyone else watches.');
     this.startBtn = el('button', 'primary big', 'Start game');
     this.startBtn.addEventListener('click', () => this.actions.start());
     this.waitEl = el('p', 'muted waiting-host');
-    left.append(this.countEl, this.listEl, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.levelRow, this.roundsRow, this.poolHint, this.startBtn, this.waitEl);
+    left.append(this.countEl, this.listEl, gameRow, this.wordsRow, this.scoringRow, this.scoringHint, this.levelRow, this.roundsRow, this.stackRow, this.blindsRow, this.poolHint, this.startBtn, this.waitEl);
 
     const right = el('div', 'lobby-right');
     right.appendChild(el('div', 'section-title', 'Chat'));
@@ -244,7 +264,9 @@ export class Lobby {
     this.scoringHint.textContent = SCORING[room.scoring]?.hint ?? '';
     this.levelRow.style.display = room.game === 'sudoku' ? '' : 'none';
     this.roundsRow.style.display = room.game === 'leastcount' ? '' : 'none';
-    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)], [this.scoringSeg, room.scoring], [this.levelSeg, room.level], [this.roundsSeg, String(room.rounds)]]) {
+    const poker = room.game === 'poker';
+    this.stackRow.style.display = this.blindsRow.style.display = poker ? '' : 'none';
+    for (const [seg, value] of [[this.gameSeg, room.game], [this.wordsSeg, String(room.words)], [this.scoringSeg, room.scoring], [this.levelSeg, room.level], [this.roundsSeg, String(room.rounds)], [this.stackSeg, String(room.stack)], [this.blindsSeg, room.blinds]]) {
       for (const b of seg.children) {
         b.classList.toggle('on', b.dataset.v === value);
         b.disabled = (!host || room.status !== 'lobby') && b.dataset.v !== value;

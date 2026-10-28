@@ -14,6 +14,8 @@
     "simulate:wordle": "node scripts/simulate-wordle.mjs",
     "simulate:sudoku": "node scripts/simulate-sudoku.mjs",
     "simulate:leastcount": "node scripts/simulate-leastcount.mjs",
+    "simulate:poker": "node scripts/simulate-poker.mjs",
+    "test": "node --test tests/poker.test.js",
     "simulate:pool": "node scripts/simulate-pool.mjs",
     "start": "node server/index.js",
     "test:online": "node scripts/online-smoke.mjs"

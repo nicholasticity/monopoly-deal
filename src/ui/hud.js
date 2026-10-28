@@ -6,6 +6,7 @@ import { buildDeck as playingDeck, SUIT_ORDER } from '../callbridge/cards.js';
 import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, rankName, restyle } from '../render/deck-style.js';
 import { GAMES, TRICK_GAMES, PLAYING_CARD_GAMES } from '../game/settings.js';
 import { buildDeck as leastCountDeck, ROUND_COUNTS, DEFAULT_ROUNDS, CAUGHT } from '../leastcount/rules.js';
+import { STACKS, DEFAULT_STACK, BLINDS, DEFAULT_BLINDS, blindsKey } from '../poker/rules.js';
 import { SCORING, DEFAULT_SCORING } from '../judgement/rules.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
 import { LEVELS, DEFAULT_LEVEL, MAX_MISTAKES } from '../sudoku/rules.js';
@@ -23,7 +24,10 @@ const BRANDS = {
   callbridge: () => `<span class="logo callbridge">CALL BRIDGE</span><span class="deal suits">${suitLogo()}</span>`,
   // Judgement: hands from 7 cards down to 1 and back.
   judgement: '<span class="logo judgement">JUDGEMENT</span><span class="deal judgement-mark">7·1·7</span>',
-  leastcount: '<span class="logo leastcount">LEAST COUNT</span><span class="deal lc-mark">0</span>',
+  // The aim is a hand worth nothing. "0 pts" reads as that, in the same gold type as
+  // Judgement's 7·1·7; a bare gold coin of 0 looked like an empty count badge.
+  leastcount: '<span class="logo leastcount">LEAST COUNT</span><span class="deal lc-mark" title="The aim: a hand worth 0">0<span class="lc-unit">pts</span></span>',
+  poker: '<span class="logo poker">POKER</span><span class="deal poker-mark">HOLD’EM</span>',
   pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
   bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
   wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
@@ -183,7 +187,7 @@ export class Hud {
     this.brandEl.innerHTML = brand(kind);
     this.title = document.title = GAMES[kind].name;
     // Call Bridge and Judgement share their HUD pieces ("tricks").
-    for (const k of ['tricks', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount']) this.hudEl.classList.toggle(k, k === 'tricks' ? TRICK_GAMES.has(kind) : kind === k);
+    for (const k of ['tricks', 'bingo', 'wordle', 'pool', 'sudoku', 'leastcount', 'poker']) this.hudEl.classList.toggle(k, k === 'tricks' ? TRICK_GAMES.has(kind) : kind === k);
     // The deck and discard counts come back with the next Monopoly Deal game.
     this.pilesEl.classList.add('idle');
     this.setGameInfo('');
@@ -690,6 +694,7 @@ export class Hud {
         callbridge: ['spades-14', 'hearts-13', 'diamonds-12'].map((key) => playing.find((c) => c.key === key)),
         judgement: ['clubs-7', 'diamonds-11', 'hearts-14'].map((key) => playing.find((c) => c.key === key)),
         leastcount: ['hearts-14', 'spades-2', 'joker-red'].map((key) => leastCountDeck().find((c) => c.key === key)),
+        poker: ['spades-14', 'hearts-14', 'diamonds-13'].map((key) => playing.find((c) => c.key === key)),
       };
       for (const [kind, info] of Object.entries(GAMES)) {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
@@ -740,8 +745,10 @@ export class Hud {
           <p class="muted small" id="opt-scoring-hint"></p>
           <div class="opt-row" id="opt-words-row"><span>Words</span><div class="seg" id="opt-words">${WORD_COUNTS.map((n) => `<button data-v="${n}" class="${n === defaults.words ? 'on' : ''}">${n}</button>`).join('')}</div></div>
           <div class="opt-row" id="opt-rounds-row"><span>Rounds</span><div class="seg" id="opt-rounds">${ROUND_COUNTS.map((n) => `<button data-v="${n}" class="${n === (ROUND_COUNTS.includes(defaults.rounds) ? defaults.rounds : DEFAULT_ROUNDS) ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+          <div class="opt-row" id="opt-stack-row"><span>Stack</span><div class="seg" id="opt-stack">${STACKS.map((n) => `<button data-v="${n}" class="${n === (STACKS.includes(defaults.stack) ? defaults.stack : DEFAULT_STACK) ? 'on' : ''}">${n.toLocaleString('en-US')}</button>`).join('')}</div></div>
+          <div class="opt-row" id="opt-blinds-row"><span>Blinds</span><div class="seg" id="opt-blinds">${BLINDS.map((b) => `<button data-v="${blindsKey(b)}" class="${blindsKey(b) === (BLINDS.some((x) => blindsKey(x) === defaults.blinds) ? defaults.blinds : blindsKey(DEFAULT_BLINDS)) ? 'on' : ''}">${blindsKey(b)}</button>`).join('')}</div></div>
           <div class="opt-row" id="opt-level-row"><span>Level</span><div class="seg" id="opt-level">${Object.entries(LEVELS).map(([k, l]) => `<button data-v="${k}" class="${k === level ? 'on' : ''}" title="${l.hint}">${l.name}</button>`).join('')}</div></div>
-          <button class="primary big" id="opt-start">${pool ? 'Rack them up' : ['bingo', 'wordle', 'sudoku'].includes(this.game) ? 'Start the game' : 'Deal the cards'}</button>
+          <button class="primary big" id="opt-start">${pool ? 'Rack them up' : this.game === 'poker' ? 'Shuffle up' : ['bingo', 'wordle', 'sudoku'].includes(this.game) ? 'Start the game' : 'Deal the cards'}</button>
         </div>
         <div class="start-online">
           <button class="primary big" id="opt-create">Create a room</button>
@@ -772,6 +779,10 @@ export class Hud {
       // Least Count: how many rounds.
       const roundsPick = seg('#opt-rounds');
       $b('#opt-rounds-row').hidden = this.game !== 'leastcount';
+      // Poker: starting stack and blinds.
+      const stackPick = seg('#opt-stack');
+      const blindsPick = seg('#opt-blinds');
+      $b('#opt-stack-row').hidden = $b('#opt-blinds-row').hidden = this.game !== 'poker';
       // Judgement: how a round scores, with a line on what the choice means.
       const scoring = seg('#opt-scoring');
       const showScoring = () => ($b('#opt-scoring-hint').textContent = SCORING[scoring()].hint);
@@ -811,7 +822,7 @@ export class Hud {
 
       const finish = (choice) => {
         close();
-        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), scoring: scoring(), level: levelPick(), rounds: Number(roundsPick()), code: codeInput.value, ...choice });
+        resolve({ name: nameInput.value.trim(), opponents: Number(opp()), words: Number(words()), scoring: scoring(), level: levelPick(), rounds: Number(roundsPick()), stack: Number(stackPick()), blinds: blindsPick(), code: codeInput.value, ...choice });
       };
       const onlineName = () => {
         const name = nameInput.value.trim();
@@ -899,9 +910,10 @@ export class Hud {
 
   showRules() {
     const body = el('div', 'rules');
-    body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES, leastcount: LEASTCOUNT_RULES }[this.game] ?? DEAL_RULES;
+    body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES, leastcount: LEASTCOUNT_RULES, poker: POKER_RULES }[this.game] ?? DEAL_RULES;
+    if (this.game === 'poker') body.querySelector('.pk-ranks-slot')?.replaceWith(handRankings());
     // The fantasy deck's guide stays here after "Don't show this again".
-    if (TRICK_GAMES.has(this.game) && deckStyle() === 'fantasy') {
+    if ((TRICK_GAMES.has(this.game) || this.game === 'poker') && deckStyle() === 'fantasy') {
       body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
       body.appendChild(fantasyGuide());
     }
@@ -995,6 +1007,53 @@ const LEASTCOUNT_RULES = `
         <li>When the deck runs out, the thrown cards are shuffled into a new one.</li>
       </ul>
       <p class="muted">Tip: the fewer cards the others hold, the riskier a Show. Your hand's worth shows in your bar, and the round counter in the top bar opens the scores.</p>`;
+
+// Five-card examples, strongest first. The pictures are this screen's deck.
+const HAND_RANKS = [
+  { name: 'Royal flush', blurb: 'Ace, king, queen, jack and ten, all one suit.', cards: [[14, 'spades'], [13, 'spades'], [12, 'spades'], [11, 'spades'], [10, 'spades']] },
+  { name: 'Straight flush', blurb: 'Five in a row, all one suit.', cards: [[9, 'hearts'], [8, 'hearts'], [7, 'hearts'], [6, 'hearts'], [5, 'hearts']] },
+  { name: 'Four of a kind', blurb: 'All four cards of one rank.', cards: [[9, 'spades'], [9, 'hearts'], [9, 'diamonds'], [9, 'clubs'], [13, 'spades']] },
+  { name: 'Full house', blurb: 'Three of a kind, plus a pair.', cards: [[13, 'spades'], [13, 'hearts'], [13, 'diamonds'], [4, 'clubs'], [4, 'spades']] },
+  { name: 'Flush', blurb: 'Five of one suit, not in a row.', cards: [[14, 'diamonds'], [11, 'diamonds'], [8, 'diamonds'], [4, 'diamonds'], [2, 'diamonds']] },
+  { name: 'Straight', blurb: 'Five in a row, any suits. A-2-3-4-5 is the lowest.', cards: [[8, 'clubs'], [7, 'spades'], [6, 'diamonds'], [5, 'hearts'], [4, 'clubs']] },
+  { name: 'Three of a kind', blurb: 'Three cards of one rank.', cards: [[7, 'spades'], [7, 'hearts'], [7, 'diamonds'], [13, 'clubs'], [2, 'spades']] },
+  { name: 'Two pair', blurb: 'Two different pairs.', cards: [[12, 'spades'], [12, 'hearts'], [8, 'diamonds'], [8, 'clubs'], [14, 'clubs']] },
+  { name: 'One pair', blurb: 'Two cards of one rank.', cards: [[14, 'spades'], [14, 'hearts'], [13, 'diamonds'], [7, 'clubs'], [3, 'spades']] },
+  { name: 'High card', blurb: 'Nothing paired. The highest card wins.', cards: [[14, 'spades'], [11, 'diamonds'], [9, 'clubs'], [6, 'hearts'], [2, 'spades']] },
+];
+
+function handRankings() {
+  const byKey = new Map(playingDeck().map((c) => [c.key, c]));
+  const wrap = el('div', 'pk-ranks');
+  wrap.appendChild(el('p', null, '<b>Hand rankings</b> · strongest first'));
+  HAND_RANKS.forEach((row, i) => {
+    const item = el('div', 'pk-rank');
+    item.appendChild(el('span', 'pk-rank-n', String(i + 1)));
+    const cards = el('div', 'pk-rank-cards');
+    for (const [rank, suit] of row.cards) cards.appendChild(thumb(byKey.get(`${suit}-${rank}`)));
+    const copy = el('div', 'pk-rank-copy');
+    copy.appendChild(el('b', null, esc(row.name)));
+    copy.appendChild(el('span', 'muted', esc(row.blurb)));
+    item.appendChild(cards);
+    item.appendChild(copy);
+    wrap.appendChild(item);
+  });
+  return wrap;
+}
+
+const POKER_RULES = `
+      <p><b>Goal:</b> win every chip. No-limit Texas Hold’em, with play money.</p>
+      <ul>
+        <li><b>Defaults:</b> 1,000 chips each, blinds 10 small / 20 big. Other stacks are 200, 500 and 2,000; other blinds are 5/10 and 25/50. Pick them on the start screen, or in the lobby online. Two to five play against the computer; up to eight online.</li>
+        <li>The <b>button</b> deals and moves one seat clockwise each hand (heads-up, the button posts the small blind and acts first before the flop, last after it). With three or more, the small blind is left of the button and the big blind left of that.</li>
+        <li>Two cards each, then betting <b>pre-flop</b>, on the <b>flop</b> (3 cards), the <b>turn</b> (1) and the <b>river</b> (1). No burn cards.</li>
+        <li><b>Check</b> when nothing is owed. <b>Call</b> to match the bet. <b>Bet</b> at least the big blind, or <b>raise</b> by at least the last full bet or raise. <b>All-in</b> pushes the rest of your stack. A short all-in does not reopen raising for anyone who has already acted. <b>Fold</b> gives up the hand.</li>
+        <li><b>Side pots:</b> you can only win as much as you put in. A tie splits that pot, and an odd chip goes to the first of the winners sitting left of the button. Folded hands stay hidden.</li>
+        <li>At <b>showdown</b> the best five cards from your two hole cards and the board win. The hands are ranked below, strongest first. Ace is high, and the wheel (A-2-3-4-5) is the lowest straight.</li>
+        <li>A player with no chips is out. The last stack wins; a tie shares it. Online, you have 45 seconds to act. After a hand, <b>Next hand</b> deals again; otherwise the cards stay up for a few seconds so everyone can read them.</li>
+      </ul>
+      <div class="pk-ranks-slot"></div>
+      <p class="muted">On your turn: Fold, Check or Call, and a slider for the bet (Min, ½ pot, Pot). F folds, C checks or calls, R bets the minimum, A is all-in, and ← → move the slider. The hand counter in the top bar opens the stacks.</p>`;
 
 const SUDOKU_RULES = `
       <p><b>Goal:</b> fill the grid so that every <b>row</b>, every <b>column</b> and every <b>3×3 box</b> has each number from 1 to 9 exactly once.</p>

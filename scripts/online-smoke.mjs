@@ -1,6 +1,6 @@
 // End-to-end check of the multiplayer server: headless clients create and join a
 // room, then play whole games over real WebSockets using the AI on their mirrored
-// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle, Sudoku, Least Count and Pool. Also
+// (redacted) state: Monopoly Deal, then Call Bridge, Judgement, Bingo, Wordle, Sudoku, Least Count, Poker and Pool. Also
 // checks that no client ever sees a hidden card (or someone else's Bingo grid, Wordle letters or
 // Sudoku numbers).
 // Usage: node scripts/online-smoke.mjs
@@ -27,9 +27,11 @@ import { SudokuAI } from '../src/sudoku/ai.js';
 import { MAX_MISTAKES } from '../src/sudoku/rules.js';
 import { LeastCountMirror } from '../src/net/leastcount-mirror.js';
 import { LeastCountAI } from '../src/leastcount/ai.js';
+import { PokerMirror } from '../src/net/poker-mirror.js';
+import { PokerAI } from '../src/poker/ai.js';
 import { showPoints, throwKind } from '../src/leastcount/rules.js';
 
-const MIRRORS = { leastcount: LeastCountMirror, deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror };
+const MIRRORS = { leastcount: LeastCountMirror, deal: MirrorGame, callbridge: TrickMirror, judgement: TrickMirror, bingo: BingoMirror, wordle: WordleMirror, pool: PoolMirror, sudoku: SudokuMirror, poker: PokerMirror };
 
 const server = http.createServer();
 // Scripted clients answer instantly, far faster than the per-socket message limit allows.
@@ -56,6 +58,7 @@ class Client {
     this.pai = new PoolAI();
     this.sai = new SudokuAI();
     this.lai = new LeastCountAI();
+    this.pkai = new PokerAI();
     this.handlers = [];
     this.turns = [];
     this.rounds = [];
@@ -161,6 +164,7 @@ class Client {
       case 'guess': return this.wai.chooseGuess(g, me);
       case 'shot': return this.pai.chooseShot(g, me, args);
       case 'cell': return this.sai.chooseMove(g, me);
+      case 'act': return this.pkai.chooseAction(g, me);
       case 'throw': {
         const move = this.lai.chooseThrow(g, me);
         return move.then((m) => {
@@ -203,7 +207,27 @@ class Client {
     checkSudoku(this);
   }
 
+  // Poker: your own hole cards until showdown, then every hand that didn't fold.
+  // The board is face up; the deck never is.
+  checkHiddenPoker() {
+    const { state, you } = this.mirror;
+    const open = !!state.revealed;
+    const dealt = state.deck.length + state.board.length + state.players.reduce((s, p) => s + p.hole.length, 0);
+    if (state.hand && dealt !== 52) fail(`${this.name} is missing cards (${dealt})`);
+    for (const c of state.deck) if (!c.hidden || c.key) fail(`${this.name} can see a deck card`);
+    for (const c of state.board) if (c.hidden || !c.key) fail(`${this.name} can't see a community card`);
+    for (const p of state.players) {
+      const show = p.id === you || (open && !p.folded);
+      for (const c of p.hole) {
+        if (show) {
+          if (c.hidden || !c.key) fail(`${this.name} can't see a hole card they should`);
+        } else if (!c.hidden || c.key) fail(`${this.name} can see ${p.name}'s hole cards`);
+      }
+    }
+  }
+
   checkHidden() {
+    if (this.kind === 'poker') return this.checkHiddenPoker();
     if (this.kind === 'callbridge' || this.kind === 'judgement') return this.checkHiddenTricks();
     if (this.kind === 'bingo') return this.checkHiddenBingo();
     if (this.kind === 'wordle') return this.checkHiddenWordle();
@@ -353,6 +377,18 @@ async function playRound(clients, addBots = 0) {
     if (ids.length !== game.seats.length / 2 || ids.some((id) => state.players[id].team !== team)) fail('wrong pool winners');
     if (!state.balls.find((b) => b.id === 8).potted) fail('the pool game ended with the 8 still up');
     how = `${game.seats.length === 4 ? '2 vs 2, ' : ''}${state.shots} shots`;
+  }
+  if (game.kind === 'poker') {
+    const ids = results[0].winnerIds;
+    const { state } = clients[0].mirror;
+    if (!ids?.includes(results[0].winnerId)) fail('Poker winners missing');
+    if (clients.some((c) => !c.turns.includes('act'))) fail('poker turns missing');
+    const sum = state.players.reduce((s, p) => s + p.stack, 0);
+    const expected = state.players.length * host.room.stack;
+    if (sum !== expected) fail(`poker chips ${sum} !== ${expected}`);
+    const best = Math.max(...state.players.map((p) => p.stack));
+    if (state.players.some((p) => (p.stack === best) !== ids.includes(p.id))) fail('wrong poker winners');
+    how = `stacks ${state.players.map((p) => p.stack).join('/')}`;
   }
   if (game.kind === 'leastcount') {
     const ids = results[0].winnerIds;
@@ -670,6 +706,24 @@ const fiveRounds = alice.next('room', (m) => m.room.rounds === 5);
 alice.send('rounds', { rounds: 5 });
 await fiveRounds;
 await playRound(clients);
+
+// Poker: no-limit Hold'em. Only the host sets the stack and the blinds. A short stack
+// and big blinds so the table finishes inside the smoke test.
+const toPoker = alice.next('room', (m) => m.room.game === 'poker');
+alice.send('game', { game: 'poker' });
+const pokerRoom = (await toPoker).room;
+if (pokerRoom.stack !== 1000 || pokerRoom.blinds !== '10/20') fail(`Poker should start at 1,000 and 10/20 (got ${pokerRoom.stack} ${pokerRoom.blinds})`);
+bob2.send('stack', { stack: 2000 });
+bob2.send('blinds', { blinds: '5/10' });
+alice.send('stack', { stack: 50 });
+alice.send('blinds', { blinds: '1/2' });
+await new Promise((r) => setTimeout(r, 200));
+if (alice.room.stack !== 1000 || alice.room.blinds !== '10/20') fail('the stakes changed when they should not have');
+const shortTable = alice.next('room', (m) => m.room.stack === 200 && m.room.blinds === '25/50');
+alice.send('stack', { stack: 200 });
+alice.send('blinds', { blinds: '25/50' });
+await shortTable;
+if ((await playRound(clients)).kind !== 'poker') fail('the game did not switch to Poker');
 
 // Pool: two play, or four as two teams; anyone else watches. Three humans and two bots
 // make two teams of two (a bot sits out); then without the bots, two play and Cara watches.

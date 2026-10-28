@@ -166,6 +166,7 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'leave': return room.leave(member);
           case 'chat': return room.say(member, msg.text);
           case 'response': return room.respond(member, msg.reqId, msg.value);
+          case 'nexthand': return room.readyNext(member, msg.hand);
           case 'back': return room.back(member);
           case 'addBot': return room.addBot(member);
           case 'kick': return room.kick(member, msg.id);
@@ -173,6 +174,8 @@ export function attachGameServer(httpServer, { path = '/ws', log = console.log, 
           case 'scoring': return room.setScoring(member, msg.scoring);
           case 'level': return room.setLevel(member, msg.level);
           case 'rounds': return room.setRounds(member, msg.rounds);
+          case 'stack': return room.setStack(member, msg.stack);
+          case 'blinds': return room.setBlinds(member, msg.blinds);
           case 'game': return room.setGame(member, msg.game);
           case 'start': return room.start(member);
           case 'stop': return room.stop(member);

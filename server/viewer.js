@@ -78,6 +78,42 @@ export class Viewer {
         cards,
       };
     }
+    if (game.kind === 'poker') {
+      // Your own hole cards only, until showdown. Folded hands stay hidden. The
+      // board is face up; the rest of the deck is not.
+      const open = !!state.revealed;
+      return {
+        players: state.players.map((p) => ({
+          id: p.id,
+          hole: p.hole.map((c) => ref(c, p.id === this.seat || (open && !p.folded))),
+          stack: p.stack,
+          bet: p.bet,
+          folded: !!p.folded,
+          allIn: !!p.allIn,
+          out: !!p.out,
+          canRaise: p.canRaise !== false,
+          handName: open && !p.folded ? p.handName : null,
+          won: p.won || 0,
+        })),
+        deck: state.deck.map((c) => ref(c, false)),
+        board: state.board.map(shown),
+        button: state.button,
+        sb: state.sb,
+        bb: state.bb,
+        current: state.current,
+        phase: state.phase,
+        pot: state.pot,
+        toCall: state.toCall,
+        minRaise: state.minRaise,
+        hand: state.hand,
+        smallBlind: state.smallBlind,
+        bigBlind: state.bigBlind,
+        revealed: open,
+        result: state.result,
+        winners: state.winners.map((p) => p.id),
+        cards,
+      };
+    }
     if (game.kind === 'leastcount') {
       // Only your own hand, until someone calls Show; then every hand is shown. The
       // thrown cards and the wild card are face up.
