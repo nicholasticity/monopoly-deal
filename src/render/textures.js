@@ -1,6 +1,6 @@
 // Draws card faces onto 2D canvases. Cached per card key (and deck style).
 import { COLORS, COLOR_ORDER, ACTIONS } from '../game/cards.js';
-import { deckStyle, rankText, rankName } from './deck-style.js';
+import { DECK_STYLES, deckStyle, rankText, rankName } from './deck-style.js';
 
 export const TEX_W = 400;
 export const TEX_H = 560;
@@ -485,7 +485,8 @@ const SUIT_INK = { spades: '#1b1b24', hearts: SUIT_RED, clubs: '#13803a', diamon
 // The fantasy deck: violet moons, orange suns, green clovers and blue stars.
 const FANTASY_INK = { spades: '#5f3dc4', hearts: '#e8590c', clubs: '#2f9e44', diamonds: '#1864ab' };
 const fantasy = () => deckStyle() === 'fantasy';
-const suitColor = (suit) => (fantasy() ? FANTASY_INK : SUIT_INK)[suit];
+const colours = () => deckStyle() === 'colours';
+const suitColor = (suit) => (colours() ? DECK_STYLES.colours.suits[suit].ink : (fantasy() ? FANTASY_INK : SUIT_INK)[suit]);
 
 // A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
 // same everywhere (font glyphs vary). color: other than the suit's own.
@@ -1097,7 +1098,50 @@ function drawJoker(ctx, card) {
   ctx.fillText(word, TEX_W / 2, 470);
 }
 
+// The colours deck: the suit is the card's colour. No pip, no suit glyph — the rank
+// (2–10, then D, C, B, A) is printed in that colour on a pale wash of the same hue.
+function drawColourFace(ctx, card) {
+  const { ink, wash } = DECK_STYLES.colours.suits[card.suit];
+  const text = rankText(card.rank);
+  base(ctx, wash);
+  frame(ctx, ink, 14, 10);
+  ctx.fillStyle = ink;
+  ctx.textAlign = 'center';
+  for (const turn of [0, Math.PI]) {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(turn);
+    ctx.translate(-TEX_W / 2, -TEX_H / 2);
+    ctx.textBaseline = 'middle';
+    fitFont(ctx, text, 108, text.length > 1 ? 64 : 78, '800');
+    ctx.fillText(text, 72, 78);
+    ctx.restore();
+  }
+  ctx.textBaseline = 'middle';
+  fitFont(ctx, text, 300, text.length > 1 ? 188 : 248, '800');
+  ctx.fillText(text, TEX_W / 2, TEX_H / 2 + 6);
+}
+
+// Four colour dots and the game's name. The dots are the suits; they are not symbols.
+function drawColourBack(ctx, card) {
+  base(ctx, '#1c2836');
+  frame(ctx, '#f2b632', 18, 6);
+  const suits = ['spades', 'hearts', 'clubs', 'diamonds'];
+  suits.forEach((suit, i) => {
+    ctx.beginPath();
+    ctx.arc(TEX_W / 2 + (i - 1.5) * 52, TEX_H / 2 - 36, 16, 0, Math.PI * 2);
+    ctx.fillStyle = DECK_STYLES.colours.suits[suit].ink;
+    ctx.fill();
+  });
+  ctx.fillStyle = '#f4f1e8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fitFont(ctx, card.title, 250, 40, '900');
+  ctx.fillText(card.title, TEX_W / 2, TEX_H / 2 + 28);
+}
+
 function drawPlaying(ctx, card) {
+  if (colours() && !card.joker) return drawColourFace(ctx, card);
   base(ctx, '#fffdf8');
   rr(ctx, 10, 10, TEX_W - 20, TEX_H - 20, TEX_RADIUS - 8);
   ctx.lineWidth = 3;
@@ -1120,6 +1164,7 @@ function drawPlaying(ctx, card) {
 
 function drawPlayingBack(ctx, card) {
   if (fantasy()) return drawFantasyBack(ctx, card);
+  if (colours()) return drawColourBack(ctx, card);
   base(ctx, '#1d3461');
   rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
   ctx.lineWidth = 6;

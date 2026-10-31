@@ -3,7 +3,7 @@
 // card, and the scores between rounds. Also the score tables and status line, shared by
 // solo and online play. Judgement's state says kind: 'judgement'; Call Bridge's doesn't.
 import { SUIT_ORDER } from '../callbridge/cards.js';
-import { suitLook, rankText } from '../render/deck-style.js';
+import { DECK_STYLES, deckStyle, suitLook, rankText } from '../render/deck-style.js';
 import * as R from '../callbridge/rules.js';
 import * as OH from '../judgement/rules.js';
 import { AVATARS } from '../render/view.js';
@@ -146,7 +146,8 @@ export class TrickHuman {
     const { state } = p.game;
     if (!R.legalCards(p.me.hand, state.trick).some((c) => c.id === card.id)) {
       const led = suitLook(R.ledSuit(state.trick));
-      this.hud.toast(`Follow suit: play a ${led.symbol}\uFE0E ${led.one}.`, 'warn');
+      const glyph = DECK_STYLES[deckStyle()].swatch ? '' : `${led.symbol}\uFE0E `;
+      this.hud.toast(`Follow suit: play a ${glyph}${led.one}.`, 'warn');
       return;
     }
     this.pending = null;

@@ -4,7 +4,7 @@
 import { TableView, RATIO, TRAY_PAD, TRAY_GAP, AVATARS, div, setBox, offsetIn, clamp, r1, esc } from './view.js';
 import { cardImageURL, PLAYING_BACK } from './textures.js';
 import { SUIT_ORDER } from '../callbridge/cards.js';
-import { suitLook } from './deck-style.js';
+import { DECK_STYLES, deckStyle, suitLook } from './deck-style.js';
 import { legalCards, trickWinner, bidState } from '../callbridge/rules.js';
 import { bidState as exactBidState } from '../judgement/rules.js';
 
@@ -331,10 +331,12 @@ export class TrickView extends TableView {
     if (!suit) return;
     const { trick } = this.geo;
     const size = Math.min(2 * trick.ry + trick.w * RATIO, 2 * trick.rx + trick.w) * 0.6;
-    const text = `${suit.symbol}\uFE0E`;
+    const word = !!DECK_STYLES[deckStyle()].swatch;
+    const text = word ? suit.name : `${suit.symbol}\uFE0E`;
     if (this.trumpEl.textContent !== text) this.trumpEl.textContent = text;
+    this.trumpEl.classList.toggle('word', word);
     for (const key of SUIT_ORDER) this.trumpEl.classList.toggle(key, key === state.trump);
-    this.trumpEl.style.fontSize = `${r1(size)}px`;
+    this.trumpEl.style.fontSize = `${r1(word ? size * 0.38 : size)}px`;
     setBox(this.trumpEl, { x: trick.x - size / 2, y: trick.y - size / 2, w: size, h: size });
   }
 }

@@ -18,7 +18,7 @@ export const DEFAULT_GAME = 'deal';
 
 // The trick-taking games: Call Bridge and Judgement share a table, prompts and deck.
 export const TRICK_GAMES = new Set(['callbridge', 'judgement']);
-// The games played with the 52-card deck, in the deck style picked (classic or fantasy).
+// The games played with the 52-card deck, in the deck style picked (classic, fantasy or colours).
 export const PLAYING_CARD_GAMES = new Set([...TRICK_GAMES, 'leastcount', 'poker']);
 
 // Enough for a full online room (seven besides the host); solo play has up to four.

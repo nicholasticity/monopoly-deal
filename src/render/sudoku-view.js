@@ -1,6 +1,7 @@
 // The Sudoku table, built on the Monopoly Deal one but with no cards: a bar per
 // opponent (how far they've got, and which cells they've filled as a tiny grid, without
-// the numbers), your bar with the clock and your mistakes, your grid, and a number pad.
+// the numbers), your bar with the same cells-filled count (marked You), the clock and
+// your mistakes, your grid, and a number pad.
 // Picking happens here: tap a cell, then a number (or type it). A number goes to the
 // 'submit' handler (the human controller), which says whether it took it; the engine's
 // answer (in, or a mistake) comes back in the state. Pencil notes stay in this browser.
@@ -344,7 +345,12 @@ export class SudokuView extends TableView {
     const tag = p.tag ? `<span class="tag">${p.tag}</span>` : '';
     const initial = [...p.name.trim()][0]?.toUpperCase() ?? '?';
     const status = p.solved ? '<span class="chip got">✓ Done</span>' : p.done ? '<span class="chip out">✗ Out</span>' : '';
-    const progress = !mine && !p.solved ? `<span class="chip" title="Cells filled">${p.filled}/${state.empty}</span>` : '';
+    // Same count as everyone else (cells filled of the cells that started empty). Yours
+    // is on your own bar, marked You, and updates whenever the state does.
+    const yours = mine && p.isHuman;
+    const progress = state.phase !== 'setup' && !p.solved
+      ? `<span class="chip sprog" title="Cells filled">${yours ? '<i>You</i>' : ''}${p.filled}/${state.empty}</span>`
+      : '';
     const limit = state.limited ? `/${MAX_MISTAKES}` : '';
     const mistakes = state.phase === 'setup' ? '' : `<span class="chip smiss${p.mistakes ? ' some' : ''}" title="Mistakes">✕ ${p.mistakes}${mine ? limit : ''}</span>`;
     const clockChip = mine ? '<span class="chip wclock"></span>' : '';

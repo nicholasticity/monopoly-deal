@@ -912,6 +912,7 @@ export class Hud {
     const body = el('div', 'rules');
     body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES, leastcount: LEASTCOUNT_RULES, poker: POKER_RULES }[this.game] ?? DEAL_RULES;
     if (this.game === 'poker') body.querySelector('.pk-ranks-slot')?.replaceWith(handRankings());
+    if (deckStyle() === 'colours' && PLAYING_CARD_GAMES.has(this.game)) body.prepend(colourOrderNote(this.game));
     // The fantasy deck's guide stays here after "Don't show this again".
     if ((TRICK_GAMES.has(this.game) || this.game === 'poker') && deckStyle() === 'fantasy') {
       body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
@@ -1008,6 +1009,17 @@ const LEASTCOUNT_RULES = `
       </ul>
       <p class="muted">Tip: the fewer cards the others hold, the riskier a Show. Your hand's worth shows in your bar, and the round counter in the top bar opens the scores.</p>`;
 
+// One line on the Colours deck, in the games whose rules talk about rank order.
+function colourOrderNote(game) {
+  const suits = 'Suits are colours only: <b>blue</b>, <b>red</b>, <b>green</b> and <b>amber</b>, with no symbols.';
+  const text = game === 'leastcount'
+    ? `<b>Colours deck:</b> the face cards read <b>D, C, B, A</b> (jack, queen, king, ace). Points are unchanged: <b>A 1</b>, 2–10 as marked, <b>D 11, C 12, B 13</b>. ${suits}`
+    : game === 'judgement'
+      ? `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). Trump turns go blue, amber, green, red, then no trumps. ${suits}`
+      : `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). ${suits}`;
+  return el('p', null, text);
+}
+
 // Five-card examples, strongest first. The pictures are this screen's deck.
 const HAND_RANKS = [
   { name: 'Royal flush', blurb: 'Ace, king, queen, jack and ten, all one suit.', cards: [[14, 'spades'], [13, 'spades'], [12, 'spades'], [11, 'spades'], [10, 'spades']] },
@@ -1032,8 +1044,9 @@ function handRankings() {
     const cards = el('div', 'pk-rank-cards');
     for (const [rank, suit] of row.cards) cards.appendChild(thumb(byKey.get(`${suit}-${rank}`)));
     const copy = el('div', 'pk-rank-copy');
+    const blurb = deckStyle() === 'colours' && row.name === 'Royal flush' ? 'A, B, C, D and 10, all one colour.' : row.blurb;
     copy.appendChild(el('b', null, esc(row.name)));
-    copy.appendChild(el('span', 'muted', esc(row.blurb)));
+    copy.appendChild(el('span', 'muted', esc(blurb)));
     item.appendChild(cards);
     item.appendChild(copy);
     wrap.appendChild(item);
