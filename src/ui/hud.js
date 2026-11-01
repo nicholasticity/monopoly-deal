@@ -1,11 +1,11 @@
 // DOM overlay: status bar, log, toasts, hover preview, popup menus and modals.
 import { cardImageURL, isFlipped, MONEY_COLORS } from '../render/textures.js';
-import { ACTIONS } from '../game/cards.js';
+import { ACTIONS, buildDeck } from '../game/cards.js';
 import * as R from '../game/rules.js';
 import { buildDeck as playingDeck, SUIT_ORDER } from '../callbridge/cards.js';
 import { DECK_STYLES, deckStyle, setDeckStyle, suitLook, rankName, restyle } from '../render/deck-style.js';
 import { GAMES, TRICK_GAMES, PLAYING_CARD_GAMES } from '../game/settings.js';
-import { ROUND_COUNTS, DEFAULT_ROUNDS, CAUGHT } from '../leastcount/rules.js';
+import { buildDeck as leastCountDeck, ROUND_COUNTS, DEFAULT_ROUNDS, CAUGHT } from '../leastcount/rules.js';
 import { STACKS, DEFAULT_STACK, BLINDS, DEFAULT_BLINDS, blindsKey } from '../poker/rules.js';
 import { SCORING, DEFAULT_SCORING } from '../judgement/rules.js';
 import { WORD_COUNTS } from '../wordle/rules.js';
@@ -16,16 +16,18 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-// Each game's name in the top bar, the start screen and the game list. Just the name.
+// Each game's name in the top bar, the start screen and the game list. Graphical
+// marks stay (suit dots, the Wordle tiles, the 8-ball); words and numbers do not.
+const suitLogo = () => SUIT_ORDER.map((key) => `<i class="${key}">${suitLook(key).symbol}&#xFE0E;</i>`).join('');
 const BRANDS = {
-  deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
-  callbridge: '<span class="logo callbridge">CALL BRIDGE</span>',
+  deal: '<span class="logo">MONOPOLY</span>',
+  callbridge: () => `<span class="logo callbridge">CALL BRIDGE</span><span class="deal suits">${suitLogo()}</span>`,
   judgement: '<span class="logo judgement">JUDGEMENT</span>',
   leastcount: '<span class="logo leastcount">LEAST COUNT</span>',
   poker: '<span class="logo poker">POKER</span>',
-  pool: '<span class="logo pool">POOL</span>',
+  pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
   bingo: '<span class="logo bingo">BINGO</span>',
-  wordle: '<span class="logo wordle">WORDLE</span>',
+  wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
   sudoku: '<span class="logo sudoku">SUDOKU</span>',
 };
 
@@ -36,6 +38,40 @@ function el(tag, cls, html) {
   if (cls) e.className = cls;
   if (html != null) e.innerHTML = html;
   return e;
+}
+
+// A little crossed-off grid for Bingo's tile on the home screen.
+function miniBingo() {
+  const grid = el('span', 'tile-bingo');
+  const nums = [7, 19, 3, 24, 11, 15, 1, 22, 9, 5, 20, 13, 25, 2, 17, 4, 23, 8, 14, 21, 12, 6, 18, 10, 16];
+  const crossed = new Set([0, 6, 12, 18, 24, 3, 21]);
+  grid.innerHTML = nums.map((n, i) => `<i class="${crossed.has(i) ? 'x' : ''}${i % 6 === 0 ? ' gold' : ''}">${n}</i>`).join('');
+  return grid;
+}
+
+// A rack of balls for Pool's tile on the home screen.
+function miniPool() {
+  const rack = el('span', 'tile-pool');
+  const rows = [[1], [9, 2], [3, 8, 10], [11, 4, 12, 5], [13, 6, 14, 7, 15]];
+  rack.innerHTML = rows.map((row) => `<b>${row.map((n) => `<i class="pb${n >= 9 ? ' st' : ''}" style="--b: var(--ball${n >= 9 ? n - 8 : n})">${n}</i>`).join('')}</b>`).join('');
+  return rack;
+}
+
+// Three marked guesses for Wordle's tile on the home screen.
+function miniWordle() {
+  const board = el('span', 'tile-wordle');
+  const rows = [['crane', 'bybbg'], ['route', 'gbbbg'], ['ridge', 'ggggg']];
+  board.innerHTML = rows.map(([word, mark]) => `<b>${[...word].map((c, i) => `<i class="${mark[i]}">${c}</i>`).join('')}</b>`).join('');
+  return board;
+}
+
+// A box of a puzzle for Sudoku's tile on the home screen: some numbers given, some
+// put in (m), some still to find (e).
+function miniSudoku() {
+  const box = el('span', 'tile-sudoku');
+  const cells = [['5', ''], ['3', 'm'], ['', 'e'], ['6', ''], ['', 'e'], ['9', 'm'], ['', 'e'], ['8', ''], ['1', 'm']];
+  box.innerHTML = cells.map(([d, cls]) => `<i class="${cls}">${d || '·'}</i>`).join('');
+  return box;
 }
 
 // Set once "Don't show this again" is ticked on the fantasy deck's guide.
@@ -648,8 +684,20 @@ export class Hud {
       this.closeAll();
       const body = el('div', 'home');
       body.appendChild(el('p', 'tagline', 'Pick a game. Each one plays against the computer or online with friends.'));
+      const deal = buildDeck();
+      const playing = playingDeck();
+      const looks = {
+        deal: ['Boardwalk', 'Deal Breaker', '$5M'].map((name) => deal.find((c) => c.name === name)),
+        callbridge: ['spades-14', 'hearts-13', 'diamonds-12'].map((key) => playing.find((c) => c.key === key)),
+        judgement: ['clubs-7', 'diamonds-11', 'hearts-14'].map((key) => playing.find((c) => c.key === key)),
+        leastcount: ['hearts-14', 'spades-2', 'joker-red'].map((key) => leastCountDeck().find((c) => c.key === key)),
+        poker: ['spades-14', 'hearts-14', 'diamonds-13'].map((key) => playing.find((c) => c.key === key)),
+      };
       for (const [kind, info] of Object.entries(GAMES)) {
         const tile = el('button', `game-tile${kind === current ? ' last' : ''}`);
+        const fan = tile.appendChild(el('span', 'tile-fan'));
+        if (looks[kind]) for (const card of looks[kind]) fan.appendChild(thumb(card, { flipped: false }));
+        else fan.appendChild({ wordle: miniWordle, pool: miniPool, sudoku: miniSudoku }[kind]?.() ?? miniBingo());
         tile.appendChild(el('span', 'start-logo', brand(kind)));
         tile.appendChild(el('span', 'tile-text', esc(info.tagline)));
         // Wordle and Sudoku can be played alone too.

@@ -885,11 +885,11 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .game-tile {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
-  grid-template-areas: 'logo' 'text' 'meta';
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'fan logo' 'fan text' 'fan meta';
   align-items: center;
-  gap: 2px;
-  padding: 12px 16px;
+  gap: 4px 16px;
+  padding: 14px 16px;
   text-align: left;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
@@ -1227,7 +1227,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
   .seg button { padding: 6px 11px; }
   button.big { padding: 11px 22px; font-size: 1.05rem; }
   .room-code { font-size: 1.6rem; }
-  .game-tile { gap: 2px; padding: 10px 14px; }
+  .game-tile { gap: 3px 12px; padding: 12px; }
+  .tile-fan { width: 84px; height: 80px; }
+  .tile-fan .thumb { left: 20px; width: 44px; }
   .tile-text { font-size: 0.84rem; }
   .suit-btn .sym { font-size: 1.7rem; }
   .score-table { font-size: 0.84rem; }
