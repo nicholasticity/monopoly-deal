@@ -486,7 +486,7 @@ const SUIT_INK = { spades: '#1b1b24', hearts: SUIT_RED, clubs: '#13803a', diamon
 const FANTASY_INK = { spades: '#5f3dc4', hearts: '#e8590c', clubs: '#2f9e44', diamonds: '#1864ab' };
 const fantasy = () => deckStyle() === 'fantasy';
 const colours = () => deckStyle() === 'colours';
-const suitColor = (suit) => (colours() ? DECK_STYLES.colours.suits[suit].ink : (fantasy() ? FANTASY_INK : SUIT_INK)[suit]);
+const suitColor = (suit) => (colours() ? DECK_STYLES.colours.suits[suit].rank : (fantasy() ? FANTASY_INK : SUIT_INK)[suit]);
 
 // A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
 // same everywhere (font glyphs vary). color: other than the suit's own.
@@ -1098,14 +1098,15 @@ function drawJoker(ctx, card) {
   ctx.fillText(word, TEX_W / 2, 470);
 }
 
-// The colours deck: the suit is the card's colour. No pip, no suit glyph — the rank
-// (2–10, then D, C, B, A) is printed in that colour on a pale wash of the same hue.
+// The colours deck: the suit is the card's colour. No pip, no suit glyph — a solid
+// face (deep red, green and blue; a rich yellow that stays yellow) with the rank
+// (2–10, then D, C, B, A) in a light colour, or dark on yellow.
 function drawColourFace(ctx, card) {
-  const { ink, wash } = DECK_STYLES.colours.suits[card.suit];
+  const { face, rank, edge } = DECK_STYLES.colours.suits[card.suit];
   const text = rankText(card.rank);
-  base(ctx, wash);
-  frame(ctx, ink, 14, 10);
-  ctx.fillStyle = ink;
+  base(ctx, face);
+  frame(ctx, edge, 16, 8);
+  ctx.fillStyle = rank;
   ctx.textAlign = 'center';
   for (const turn of [0, Math.PI]) {
     ctx.save();

@@ -11,15 +11,16 @@ test('the colours deck keeps rank order and names suits by colour', () => {
     assert.equal(rankText(12), 'C');
     assert.equal(rankText(13), 'B');
     assert.equal(rankText(14), 'A');
-    assert.equal(suitLook('spades').one, 'Black');
+    assert.equal(suitLook('spades').one, 'Yellow');
     assert.equal(suitLook('hearts').one, 'Red');
     assert.equal(suitLook('clubs').one, 'Green');
     assert.equal(suitLook('diamonds').one, 'Blue');
     assert.equal(restyle('Q♥'), 'C Red');
     assert.equal(restyle('called ♥ Hearts as trumps.'), 'called Reds as trumps.');
+    assert.equal(restyle('called ♠ Spades as trumps.'), 'called Yellows as trumps.');
     assert.equal(restyle('You win 40 with Ace high.'), 'You win 40 with A high.');
     assert.equal(restyle('a pair of Kings'), 'a pair of Bs');
-    assert.equal(restyle('Flop: A♠ K♥ 10♦.'), 'Flop: A Black B Red 10 Blue.');
+    assert.equal(restyle('Flop: A♠ K♥ 10♦.'), 'Flop: A Yellow B Red 10 Blue.');
   } finally {
     setDeckStyle('classic');
   }

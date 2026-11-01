@@ -28,16 +28,16 @@ export const DECK_STYLES = {
   },
   // Suits are a colour and nothing else. Ranks keep the same order, with letters
   // for the face cards: D (jack), C (queen), B (king), A (ace, still highest).
-  // ink/wash are the card face (dark ink on a pale ground). mark is the same suit
-  // on a dark ground, where near-black would disappear: the black suit reads white.
+  // face is the solid card; rank is the lettering (dark on yellow, where white
+  // would vanish); edge is the inner line; mark is the dot on a dark ground.
   colours: {
     name: 'Colours',
     swatch: true,
     suits: {
-      spades: { name: 'Blacks', one: 'Black', symbol: '●', ink: '#141414', wash: '#f2f2f3', mark: '#f4f4f5' },
-      hearts: { name: 'Reds', one: 'Red', symbol: '●', ink: '#E10600', wash: '#ffe9e8', mark: '#ff3b30' },
-      clubs: { name: 'Greens', one: 'Green', symbol: '●', ink: '#128A22', wash: '#e5f8ea', mark: '#3ddc6a' },
-      diamonds: { name: 'Blues', one: 'Blue', symbol: '●', ink: '#0D6EFD', wash: '#e6f0ff', mark: '#4da3ff' },
+      spades: { name: 'Yellows', one: 'Yellow', symbol: '●', face: '#F5C200', rank: '#1A1400', edge: '#E8BE3A', mark: '#FFE14A' },
+      hearts: { name: 'Reds', one: 'Red', symbol: '●', face: '#9E1832', rank: '#FFF8F6', edge: 'rgba(255,255,255,0.5)', mark: '#FF4D57' },
+      clubs: { name: 'Greens', one: 'Green', symbol: '●', face: '#0E7A3A', rank: '#F6FFF8', edge: 'rgba(255,255,255,0.48)', mark: '#3DDC6A' },
+      diamonds: { name: 'Blues', one: 'Blue', symbol: '●', face: '#1248C4', rank: '#F5F8FF', edge: 'rgba(255,255,255,0.5)', mark: '#4DA3FF' },
     },
     ranks: { 11: ['D', 'D'], 12: ['C', 'C'], 13: ['B', 'B'], 14: ['A', 'A'] },
     words: { Jack: 'D', Jacks: 'Ds', Queen: 'C', Queens: 'Cs', King: 'B', Kings: 'Bs', Ace: 'A', Aces: 'As' },

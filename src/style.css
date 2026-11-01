@@ -923,10 +923,9 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .deal.suits i.hearts, .deck-fantasy .suit.hearts { color: #ff922b; }
 .deck-fantasy .deal.suits i.clubs, .deck-fantasy .suit.clubs { color: #69db7c; }
 .deck-fantasy .deal.suits i.diamonds, .deck-fantasy .suit.diamonds { color: #74c0fc; }
-/* The colours deck (deck-style.js): black, red, green, blue. Light enough for the dark table;
-   the black suit is white here, as on the classic deck, so the dot still shows. */
-.deck-colours .deal.suits i.spades, .deck-colours .suit.spades { color: #f4f4f5; }
-.deck-colours .deal.suits i.hearts, .deck-colours .suit.hearts { color: #ff3b30; }
+/* The colours deck (deck-style.js): yellow, red, green, blue. Bright enough for the dark table. */
+.deck-colours .deal.suits i.spades, .deck-colours .suit.spades { color: #ffe14a; }
+.deck-colours .deal.suits i.hearts, .deck-colours .suit.hearts { color: #ff4d57; }
 .deck-colours .deal.suits i.clubs, .deck-colours .suit.clubs { color: #3ddc6a; }
 .deck-colours .deal.suits i.diamonds, .deck-colours .suit.diamonds { color: #4da3ff; }
 #opt-deck { flex-wrap: wrap; justify-content: flex-end; }
@@ -987,8 +986,8 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .trump-mark.hearts { color: rgba(255, 146, 43, 0.12); }
 .deck-fantasy .trump-mark.clubs { color: rgba(105, 219, 124, 0.1); }
 .deck-fantasy .trump-mark.diamonds { color: rgba(116, 192, 252, 0.13); }
-.deck-colours .trump-mark.spades { color: rgba(244, 244, 245, 0.16); }
-.deck-colours .trump-mark.hearts { color: rgba(255, 59, 48, 0.16); }
+.deck-colours .trump-mark.spades { color: rgba(255, 225, 74, 0.18); }
+.deck-colours .trump-mark.hearts { color: rgba(255, 77, 87, 0.16); }
 .deck-colours .trump-mark.clubs { color: rgba(61, 220, 106, 0.14); }
 .deck-colours .trump-mark.diamonds { color: rgba(77, 163, 255, 0.16); }
 .trump-mark.word { font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -1048,10 +1047,12 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .suit-btn.hearts { color: #e8590c; }
 .deck-fantasy .suit-btn.clubs { color: #2f9e44; }
 .deck-fantasy .suit-btn.diamonds { color: #1864ab; }
-.deck-colours .suit-btn.spades { color: #141414; }
-.deck-colours .suit-btn.hearts { color: #E10600; }
-.deck-colours .suit-btn.clubs { color: #128A22; }
-.deck-colours .suit-btn.diamonds { color: #0D6EFD; }
+/* Yellow text on the cream button would disappear, so the name stays dark and the dot carries the colour. */
+.deck-colours .suit-btn.spades { color: #1a1400; }
+.deck-colours .suit-btn.spades .sym { color: #f5c200; }
+.deck-colours .suit-btn.hearts { color: #C8102E; }
+.deck-colours .suit-btn.clubs { color: #0E7A3A; }
+.deck-colours .suit-btn.diamonds { color: #1554D6; }
 .suit-btn:hover { background: #fff; border-color: var(--gold); }
 .suit-btn .sym { font-size: 2rem; line-height: 1; }
 .suit-btn .nm { font-size: 0.85rem; font-weight: 800; }
