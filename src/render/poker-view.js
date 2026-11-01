@@ -6,6 +6,7 @@ import { TrickView } from './trick-view.js';
 import { RATIO, MOVE_MS, div, setBox, offsetIn, clamp, r1, esc, AVATARS } from './view.js';
 import { POKER_BACK } from './textures.js';
 import { legalActions, sizing, chipText } from '../poker/rules.js';
+import { restyle } from './deck-style.js';
 
 const BETTING = new Set(['preflop', 'flop', 'turn', 'river']);
 const STREET = { blinds: 'Blinds', deal: 'Dealing', preflop: 'Pre-flop', flop: 'Flop', turn: 'Turn', river: 'River', showdown: 'Showdown' };
@@ -464,7 +465,7 @@ export class PokerView extends TrickView {
     setBox(this.potEl, { x: board.x - potW / 2, y: board.y - ch / 2 - potH - 2, w: potW, h: potH });
 
     const bar = panels[0];
-    const result = settled && state.result?.text ? state.result.text : '';
+    const result = settled && state.result?.text ? restyle(state.result.text) : '';
     if (this.holding && state.phase !== 'showdown') {
       this.holding = false;
       this.handlers.next = null;

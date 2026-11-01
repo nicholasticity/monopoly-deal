@@ -16,22 +16,18 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-// Each game's name in the top bar and on its start screen. Call Bridge's has the four
-// suits of the deck style in place of DEAL, in their text forms, not emoji.
-const suitLogo = () => SUIT_ORDER.map((key) => `<i class="${key}">${suitLook(key).symbol}&#xFE0E;</i>`).join('');
+// Each game's name in the top bar, the start screen and the game list. The picker's
+// card fan or mini icon is the logo; nothing else sits beside the name.
 const BRANDS = {
-  deal: '<span class="logo">MONOPOLY</span><span class="deal">DEAL</span>',
-  callbridge: () => `<span class="logo callbridge">CALL BRIDGE</span><span class="deal suits">${suitLogo()}</span>`,
-  // Judgement: hands from 7 cards down to 1 and back.
-  judgement: '<span class="logo judgement">JUDGEMENT</span><span class="deal judgement-mark">7·1·7</span>',
-  // The aim is a hand worth nothing. "0 pts" reads as that, in the same gold type as
-  // Judgement's 7·1·7; a bare gold coin of 0 looked like an empty count badge.
-  leastcount: '<span class="logo leastcount">LEAST COUNT</span><span class="deal lc-mark" title="The aim: a hand worth 0">0<span class="lc-unit">pts</span></span>',
-  poker: '<span class="logo poker">POKER</span><span class="deal poker-mark">HOLD’EM</span>',
-  pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
-  bingo: '<span class="logo bingo">BINGO</span><span class="deal bingo-mark">1–25</span>',
-  wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
-  sudoku: '<span class="logo sudoku">SUDOKU</span><span class="deal sudoku-mark">9×9</span>',
+  deal: '<span class="logo">MONOPOLY</span>',
+  callbridge: '<span class="logo callbridge">CALL BRIDGE</span>',
+  judgement: '<span class="logo judgement">JUDGEMENT</span>',
+  leastcount: '<span class="logo leastcount">LEAST COUNT</span>',
+  poker: '<span class="logo poker">POKER</span>',
+  pool: '<span class="logo pool">POOL</span>',
+  bingo: '<span class="logo bingo">BINGO</span>',
+  wordle: '<span class="logo wordle">WORDLE</span>',
+  sudoku: '<span class="logo sudoku">SUDOKU</span>',
 };
 
 const brand = (kind) => (typeof BRANDS[kind] === 'function' ? BRANDS[kind]() : BRANDS[kind]);
@@ -912,6 +908,7 @@ export class Hud {
     const body = el('div', 'rules');
     body.innerHTML = { callbridge: CALLBRIDGE_RULES, judgement: JUDGEMENT_RULES, bingo: BINGO_RULES, wordle: WORDLE_RULES, pool: POOL_RULES, sudoku: SUDOKU_RULES, leastcount: LEASTCOUNT_RULES, poker: POKER_RULES }[this.game] ?? DEAL_RULES;
     if (this.game === 'poker') body.querySelector('.pk-ranks-slot')?.replaceWith(handRankings());
+    if (deckStyle() === 'colours' && PLAYING_CARD_GAMES.has(this.game)) body.prepend(colourOrderNote(this.game));
     // The fantasy deck's guide stays here after "Don't show this again".
     if ((TRICK_GAMES.has(this.game) || this.game === 'poker') && deckStyle() === 'fantasy') {
       body.appendChild(el('p', null, '<b>The fantasy deck</b>'));
@@ -1008,6 +1005,17 @@ const LEASTCOUNT_RULES = `
       </ul>
       <p class="muted">Tip: the fewer cards the others hold, the riskier a Show. Your hand's worth shows in your bar, and the round counter in the top bar opens the scores.</p>`;
 
+// One line on the Colours deck, in the games whose rules talk about rank order.
+function colourOrderNote(game) {
+  const suits = 'Suits are colours only: <b>yellow</b>, <b>red</b>, <b>green</b> and <b>blue</b>, with no symbols.';
+  const text = game === 'leastcount'
+    ? `<b>Colours deck:</b> the face cards read <b>D, C, B, A</b> (jack, queen, king, ace). Points are unchanged: <b>A 1</b>, 2–10 as marked, <b>D 11, C 12, B 13</b>. ${suits}`
+    : game === 'judgement'
+      ? `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). Trump turns go yellow, blue, green, red, then no trumps. ${suits}`
+      : `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). ${suits}`;
+  return el('p', null, text);
+}
+
 // Five-card examples, strongest first. The pictures are this screen's deck.
 const HAND_RANKS = [
   { name: 'Royal flush', blurb: 'Ace, king, queen, jack and ten, all one suit.', cards: [[14, 'spades'], [13, 'spades'], [12, 'spades'], [11, 'spades'], [10, 'spades']] },
@@ -1032,8 +1040,9 @@ function handRankings() {
     const cards = el('div', 'pk-rank-cards');
     for (const [rank, suit] of row.cards) cards.appendChild(thumb(byKey.get(`${suit}-${rank}`)));
     const copy = el('div', 'pk-rank-copy');
+    const blurb = deckStyle() === 'colours' && row.name === 'Royal flush' ? 'A, B, C, D and 10, all one colour.' : row.blurb;
     copy.appendChild(el('b', null, esc(row.name)));
-    copy.appendChild(el('span', 'muted', esc(row.blurb)));
+    copy.appendChild(el('span', 'muted', esc(blurb)));
     item.appendChild(cards);
     item.appendChild(copy);
     wrap.appendChild(item);

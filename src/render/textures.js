@@ -1,6 +1,6 @@
 // Draws card faces onto 2D canvases. Cached per card key (and deck style).
 import { COLORS, COLOR_ORDER, ACTIONS } from '../game/cards.js';
-import { deckStyle, rankText, rankName } from './deck-style.js';
+import { DECK_STYLES, deckStyle, rankText, rankName } from './deck-style.js';
 
 export const TEX_W = 400;
 export const TEX_H = 560;
@@ -485,7 +485,8 @@ const SUIT_INK = { spades: '#1b1b24', hearts: SUIT_RED, clubs: '#13803a', diamon
 // The fantasy deck: violet moons, orange suns, green clovers and blue stars.
 const FANTASY_INK = { spades: '#5f3dc4', hearts: '#e8590c', clubs: '#2f9e44', diamonds: '#1864ab' };
 const fantasy = () => deckStyle() === 'fantasy';
-const suitColor = (suit) => (fantasy() ? FANTASY_INK : SUIT_INK)[suit];
+const colours = () => deckStyle() === 'colours';
+const suitColor = (suit) => (colours() ? DECK_STYLES.colours.suits[suit].rank : (fantasy() ? FANTASY_INK : SUIT_INK)[suit]);
 
 // A suit symbol centred on (x, y), size tall, drawn as a path so it looks the
 // same everywhere (font glyphs vary). color: other than the suit's own.
@@ -1097,7 +1098,84 @@ function drawJoker(ctx, card) {
   ctx.fillText(word, TEX_W / 2, 470);
 }
 
+// The colours deck: the suit is the card's colour. No pip, no suit glyph — a solid
+// face (deep red, green and blue; a rich yellow that stays yellow) with the rank
+// (2–10, then D, C, B, A) in a light colour, or dark on yellow. The letter cards
+// carry one huge centred initial, with the small corner index kept clear of it.
+function drawColourFace(ctx, card) {
+  const { face, rank, edge } = DECK_STYLES.colours.suits[card.suit];
+  const text = rankText(card.rank);
+  const court = card.rank > 10;
+  base(ctx, face);
+  let sheen = null;
+  if (court) {
+    sheen = ctx.createLinearGradient(0, 0, TEX_W * 0.2, TEX_H * 0.55);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.2)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
+  }
+  frame(ctx, edge, 16, 8);
+  ctx.fillStyle = rank;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (court) {
+    fitFont(ctx, text, 348, 430, '900');
+    ctx.fillText(text, TEX_W / 2, TEX_H / 2 + 10);
+    frame(ctx, edge, 32, 3);
+    // Repaint the corner in the same face and sheen, so the small index sits clear
+    // of the large letter and the highlight doesn't show a patch.
+    for (const turn of [0, Math.PI]) {
+      ctx.save();
+      ctx.translate(TEX_W / 2, TEX_H / 2);
+      ctx.rotate(turn);
+      ctx.translate(-TEX_W / 2, -TEX_H / 2);
+      rr(ctx, 40, 40, 88, 96, 18);
+      ctx.clip();
+      ctx.fillStyle = face;
+      ctx.fillRect(40, 40, 88, 96);
+      ctx.fillStyle = sheen;
+      ctx.fillRect(0, 0, TEX_W, TEX_H);
+      ctx.fillStyle = rank;
+      fitFont(ctx, text, 72, 64, '800');
+      ctx.fillText(text, 84, 88);
+      ctx.restore();
+    }
+    return;
+  }
+  for (const turn of [0, Math.PI]) {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(turn);
+    ctx.translate(-TEX_W / 2, -TEX_H / 2);
+    fitFont(ctx, text, 108, text.length > 1 ? 64 : 78, '800');
+    ctx.fillText(text, 72, 78);
+    ctx.restore();
+  }
+  fitFont(ctx, text, 300, text.length > 1 ? 188 : 248, '800');
+  ctx.fillText(text, TEX_W / 2, TEX_H / 2 + 6);
+}
+
+// Four colour dots and the game's name. The dots are the suits; they are not symbols.
+function drawColourBack(ctx, card) {
+  base(ctx, '#1c2836');
+  frame(ctx, '#f2b632', 18, 6);
+  const suits = ['spades', 'hearts', 'clubs', 'diamonds'];
+  suits.forEach((suit, i) => {
+    ctx.beginPath();
+    ctx.arc(TEX_W / 2 + (i - 1.5) * 52, TEX_H / 2 - 36, 16, 0, Math.PI * 2);
+    ctx.fillStyle = DECK_STYLES.colours.suits[suit].mark;
+    ctx.fill();
+  });
+  ctx.fillStyle = '#f4f1e8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fitFont(ctx, card.title, 250, 40, '900');
+  ctx.fillText(card.title, TEX_W / 2, TEX_H / 2 + 28);
+}
+
 function drawPlaying(ctx, card) {
+  if (colours() && !card.joker) return drawColourFace(ctx, card);
   base(ctx, '#fffdf8');
   rr(ctx, 10, 10, TEX_W - 20, TEX_H - 20, TEX_RADIUS - 8);
   ctx.lineWidth = 3;
@@ -1120,6 +1198,7 @@ function drawPlaying(ctx, card) {
 
 function drawPlayingBack(ctx, card) {
   if (fantasy()) return drawFantasyBack(ctx, card);
+  if (colours()) return drawColourBack(ctx, card);
   base(ctx, '#1d3461');
   rr(ctx, 18, 18, TEX_W - 36, TEX_H - 36, 20);
   ctx.lineWidth = 6;
