@@ -1100,25 +1100,58 @@ function drawJoker(ctx, card) {
 
 // The colours deck: the suit is the card's colour. No pip, no suit glyph — a solid
 // face (deep red, green and blue; a rich yellow that stays yellow) with the rank
-// (2–10, then D, C, B, A) in a light colour, or dark on yellow.
+// (2–10, then D, C, B, A) in a light colour, or dark on yellow. The letter cards
+// carry one huge centred initial, with the small corner index kept clear of it.
 function drawColourFace(ctx, card) {
   const { face, rank, edge } = DECK_STYLES.colours.suits[card.suit];
   const text = rankText(card.rank);
+  const court = card.rank > 10;
   base(ctx, face);
+  let sheen = null;
+  if (court) {
+    sheen = ctx.createLinearGradient(0, 0, TEX_W * 0.2, TEX_H * 0.55);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.2)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
+  }
   frame(ctx, edge, 16, 8);
   ctx.fillStyle = rank;
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (court) {
+    fitFont(ctx, text, 348, 430, '900');
+    ctx.fillText(text, TEX_W / 2, TEX_H / 2 + 10);
+    frame(ctx, edge, 32, 3);
+    // Repaint the corner in the same face and sheen, so the small index sits clear
+    // of the large letter and the highlight doesn't show a patch.
+    for (const turn of [0, Math.PI]) {
+      ctx.save();
+      ctx.translate(TEX_W / 2, TEX_H / 2);
+      ctx.rotate(turn);
+      ctx.translate(-TEX_W / 2, -TEX_H / 2);
+      rr(ctx, 40, 40, 88, 96, 18);
+      ctx.clip();
+      ctx.fillStyle = face;
+      ctx.fillRect(40, 40, 88, 96);
+      ctx.fillStyle = sheen;
+      ctx.fillRect(0, 0, TEX_W, TEX_H);
+      ctx.fillStyle = rank;
+      fitFont(ctx, text, 72, 64, '800');
+      ctx.fillText(text, 84, 88);
+      ctx.restore();
+    }
+    return;
+  }
   for (const turn of [0, Math.PI]) {
     ctx.save();
     ctx.translate(TEX_W / 2, TEX_H / 2);
     ctx.rotate(turn);
     ctx.translate(-TEX_W / 2, -TEX_H / 2);
-    ctx.textBaseline = 'middle';
     fitFont(ctx, text, 108, text.length > 1 ? 64 : 78, '800');
     ctx.fillText(text, 72, 78);
     ctx.restore();
   }
-  ctx.textBaseline = 'middle';
   fitFont(ctx, text, 300, text.length > 1 ? 188 : 248, '800');
   ctx.fillText(text, TEX_W / 2, TEX_H / 2 + 6);
 }
