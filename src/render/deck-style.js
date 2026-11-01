@@ -28,15 +28,16 @@ export const DECK_STYLES = {
   },
   // Suits are a colour and nothing else. Ranks keep the same order, with letters
   // for the face cards: D (jack), C (queen), B (king), A (ace, still highest).
-  // ink/wash are the card face; the lighter UI colours live in style.css.
+  // ink/wash are the card face (dark ink on a pale ground). mark is the same suit
+  // on a dark ground, where near-black would disappear: the black suit reads white.
   colours: {
     name: 'Colours',
     swatch: true,
     suits: {
-      spades: { name: 'Blues', one: 'Blue', symbol: '●', ink: '#0072B2', wash: '#e4f2fb' },
-      hearts: { name: 'Reds', one: 'Red', symbol: '●', ink: '#C44E00', wash: '#fdeee6' },
-      clubs: { name: 'Greens', one: 'Green', symbol: '●', ink: '#007A5A', wash: '#e5f6f0' },
-      diamonds: { name: 'Ambers', one: 'Amber', symbol: '●', ink: '#A66B00', wash: '#fff4dc' },
+      spades: { name: 'Blacks', one: 'Black', symbol: '●', ink: '#141414', wash: '#f2f2f3', mark: '#f4f4f5' },
+      hearts: { name: 'Reds', one: 'Red', symbol: '●', ink: '#E10600', wash: '#ffe9e8', mark: '#ff3b30' },
+      clubs: { name: 'Greens', one: 'Green', symbol: '●', ink: '#128A22', wash: '#e5f8ea', mark: '#3ddc6a' },
+      diamonds: { name: 'Blues', one: 'Blue', symbol: '●', ink: '#0D6EFD', wash: '#e6f0ff', mark: '#4da3ff' },
     },
     ranks: { 11: ['D', 'D'], 12: ['C', 'C'], 13: ['B', 'B'], 14: ['A', 'A'] },
     words: { Jack: 'D', Jacks: 'Ds', Queen: 'C', Queens: 'Cs', King: 'B', Kings: 'Bs', Ace: 'A', Aces: 'As' },

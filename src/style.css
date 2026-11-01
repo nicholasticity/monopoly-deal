@@ -923,11 +923,12 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .deal.suits i.hearts, .deck-fantasy .suit.hearts { color: #ff922b; }
 .deck-fantasy .deal.suits i.clubs, .deck-fantasy .suit.clubs { color: #69db7c; }
 .deck-fantasy .deal.suits i.diamonds, .deck-fantasy .suit.diamonds { color: #74c0fc; }
-/* The colours deck (deck-style.js): blue, vermillion, green, amber. Light enough for the dark table. */
-.deck-colours .deal.suits i.spades, .deck-colours .suit.spades { color: #5eb0ff; }
-.deck-colours .deal.suits i.hearts, .deck-colours .suit.hearts { color: #ff8a4c; }
-.deck-colours .deal.suits i.clubs, .deck-colours .suit.clubs { color: #3dcca0; }
-.deck-colours .deal.suits i.diamonds, .deck-colours .suit.diamonds { color: #ffc14d; }
+/* The colours deck (deck-style.js): black, red, green, blue. Light enough for the dark table;
+   the black suit is white here, as on the classic deck, so the dot still shows. */
+.deck-colours .deal.suits i.spades, .deck-colours .suit.spades { color: #f4f4f5; }
+.deck-colours .deal.suits i.hearts, .deck-colours .suit.hearts { color: #ff3b30; }
+.deck-colours .deal.suits i.clubs, .deck-colours .suit.clubs { color: #3ddc6a; }
+.deck-colours .deal.suits i.diamonds, .deck-colours .suit.diamonds { color: #4da3ff; }
 #opt-deck { flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- The trick-taking table (Call Bridge and Judgement) ---------- */
@@ -986,10 +987,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .trump-mark.hearts { color: rgba(255, 146, 43, 0.12); }
 .deck-fantasy .trump-mark.clubs { color: rgba(105, 219, 124, 0.1); }
 .deck-fantasy .trump-mark.diamonds { color: rgba(116, 192, 252, 0.13); }
-.deck-colours .trump-mark.spades { color: rgba(94, 176, 255, 0.16); }
-.deck-colours .trump-mark.hearts { color: rgba(255, 138, 76, 0.16); }
-.deck-colours .trump-mark.clubs { color: rgba(61, 204, 160, 0.14); }
-.deck-colours .trump-mark.diamonds { color: rgba(255, 193, 77, 0.16); }
+.deck-colours .trump-mark.spades { color: rgba(244, 244, 245, 0.16); }
+.deck-colours .trump-mark.hearts { color: rgba(255, 59, 48, 0.16); }
+.deck-colours .trump-mark.clubs { color: rgba(61, 220, 106, 0.14); }
+.deck-colours .trump-mark.diamonds { color: rgba(77, 163, 255, 0.16); }
 .trump-mark.word { font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 
 /* Trumps and the round in the top bar; it opens the scores. */
@@ -1047,10 +1048,10 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 .deck-fantasy .suit-btn.hearts { color: #e8590c; }
 .deck-fantasy .suit-btn.clubs { color: #2f9e44; }
 .deck-fantasy .suit-btn.diamonds { color: #1864ab; }
-.deck-colours .suit-btn.spades { color: #0072B2; }
-.deck-colours .suit-btn.hearts { color: #C44E00; }
-.deck-colours .suit-btn.clubs { color: #007A5A; }
-.deck-colours .suit-btn.diamonds { color: #A66B00; }
+.deck-colours .suit-btn.spades { color: #141414; }
+.deck-colours .suit-btn.hearts { color: #E10600; }
+.deck-colours .suit-btn.clubs { color: #128A22; }
+.deck-colours .suit-btn.diamonds { color: #0D6EFD; }
 .suit-btn:hover { background: #fff; border-color: var(--gold); }
 .suit-btn .sym { font-size: 2rem; line-height: 1; }
 .suit-btn .nm { font-size: 0.85rem; font-weight: 800; }

@@ -1011,11 +1011,11 @@ const LEASTCOUNT_RULES = `
 
 // One line on the Colours deck, in the games whose rules talk about rank order.
 function colourOrderNote(game) {
-  const suits = 'Suits are colours only: <b>blue</b>, <b>red</b>, <b>green</b> and <b>amber</b>, with no symbols.';
+  const suits = 'Suits are colours only: <b>black</b>, <b>red</b>, <b>green</b> and <b>blue</b>, with no symbols.';
   const text = game === 'leastcount'
     ? `<b>Colours deck:</b> the face cards read <b>D, C, B, A</b> (jack, queen, king, ace). Points are unchanged: <b>A 1</b>, 2–10 as marked, <b>D 11, C 12, B 13</b>. ${suits}`
     : game === 'judgement'
-      ? `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). Trump turns go blue, amber, green, red, then no trumps. ${suits}`
+      ? `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). Trump turns go black, blue, green, red, then no trumps. ${suits}`
       : `<b>Colours deck:</b> ranks run <b>2–10, D, C, B, A</b>, with A highest (D for jack, C for queen, B for king). ${suits}`;
   return el('p', null, text);
 }

@@ -1130,7 +1130,7 @@ function drawColourBack(ctx, card) {
   suits.forEach((suit, i) => {
     ctx.beginPath();
     ctx.arc(TEX_W / 2 + (i - 1.5) * 52, TEX_H / 2 - 36, 16, 0, Math.PI * 2);
-    ctx.fillStyle = DECK_STYLES.colours.suits[suit].ink;
+    ctx.fillStyle = DECK_STYLES.colours.suits[suit].mark;
     ctx.fill();
   });
   ctx.fillStyle = '#f4f1e8';
