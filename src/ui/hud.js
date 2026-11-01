@@ -16,18 +16,17 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // Phones and other tall screens; must match the portrait rules in style.css.
 const PORTRAIT = matchMedia('(max-aspect-ratio: 1/1), (max-width: 640px)');
-// Each game's name in the top bar, the start screen and the game list. Graphical
-// marks stay (suit dots, the Wordle tiles, the 8-ball); words and numbers do not.
-const suitLogo = () => SUIT_ORDER.map((key) => `<i class="${key}">${suitLook(key).symbol}&#xFE0E;</i>`).join('');
+// Each game's name in the top bar, the start screen and the game list. The picker's
+// card fan or mini icon is the logo; nothing else sits beside the name.
 const BRANDS = {
   deal: '<span class="logo">MONOPOLY</span>',
-  callbridge: () => `<span class="logo callbridge">CALL BRIDGE</span><span class="deal suits">${suitLogo()}</span>`,
+  callbridge: '<span class="logo callbridge">CALL BRIDGE</span>',
   judgement: '<span class="logo judgement">JUDGEMENT</span>',
   leastcount: '<span class="logo leastcount">LEAST COUNT</span>',
   poker: '<span class="logo poker">POKER</span>',
-  pool: '<span class="logo pool">POOL</span><span class="deal pool-mark"><i>8</i></span>',
+  pool: '<span class="logo pool">POOL</span>',
   bingo: '<span class="logo bingo">BINGO</span>',
-  wordle: '<span class="logo wordle">WORDLE</span><span class="deal wordle-mark"><i class="g"></i><i class="y"></i><i></i></span>',
+  wordle: '<span class="logo wordle">WORDLE</span>',
   sudoku: '<span class="logo sudoku">SUDOKU</span>',
 };
 
